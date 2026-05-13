@@ -1,0 +1,17 @@
+name: Auto-merge Dependabot
+
+# Pairs with .github/dependabot.yml. Requires branch protection on `main` to
+# include the relevant required status checks — otherwise auto-merge fires
+# before CI finishes.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    uses: ArchonVII/github-workflows/.github/workflows/auto-merge-dependabot.yml@v1

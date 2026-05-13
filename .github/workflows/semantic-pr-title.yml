@@ -1,0 +1,12 @@
+name: Semantic PR Title
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  validate:
+    uses: ArchonVII/github-workflows/.github/workflows/semantic-pr-title.yml@v1

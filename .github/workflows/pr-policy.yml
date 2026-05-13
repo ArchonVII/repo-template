@@ -1,0 +1,13 @@
+name: PR Policy
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  pull-requests: read
+  contents: read
+
+jobs:
+  policy:
+    uses: ArchonVII/github-workflows/.github/workflows/pr-policy.yml@v1
