@@ -67,6 +67,19 @@ Before marking a PR ready for review:
 - If the change is user-visible, smoke-test it. Record what you exercised.
 - Tick a `- [x]` box **only after** the command actually passed.
 
+## Local delivery guards
+
+If this repo adds a local close-scan, pre-push, or CI-delivery guard, keep the
+guard strict for pushes that would update the remote branch: verification and
+any close-scan completion marker must bind to the exact final `HEAD` after the
+last commit.
+
+The guard should still allow true no-op finalization pushes, where local `HEAD`
+already matches the upstream branch and no remote update or CI-triggering
+delivery action would occur. This keeps Copilot/Codex automatic cleanup pushes
+from failing after the branch is already synced, without creating a bypass for
+real changes.
+
 ## CHANGELOG
 
 This repo uses **<Mode 1: direct edit / Mode 2: `.changelog/unreleased/` fragments>** — pick one and delete the other in initial setup.
