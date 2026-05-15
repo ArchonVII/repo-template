@@ -13,7 +13,7 @@ Cross-tool contract for AI agents (Claude, Codex, Copilot, Gemini, etc.) working
 
 1. **Issue first.** Create a GitHub issue with explicit `Acceptance Criteria` before branching. Use the `Task` issue form.
 2. **One issue → one branch → one PR.** Branch name: `agent/<tool>/<issue>-<slug>` (e.g. `agent/claude/42-oauth-flow`). Quick fixes without an issue use `agent/<tool>/<YYYY-MM-DD>-<slug>`.
-3. **Never commit to `main`.** Branch protection enforces this.
+3. **Never commit to `main`.** Branch protection enforces this. Repo-facing docs, planning notes, prompts, ADRs, and shared markdown use the same branch/PR path when they are committed to the repo.
 4. **Conventional Commits** for messages: `<type>(<scope>): <description>` where `<type>` is one of `feat fix refactor test docs style chore perf ci build revert`.
 5. **PR body must include** `## Verification` and `### Verification Notes` sections, at least one checked checkbox (`- [x]`), and link an issue with `Closes #N`. Doc-only PRs (every file matches `*.md`, `*.txt`, an image extension, or `.changelog/**`) skip the ceremony.
 
@@ -80,11 +80,20 @@ delivery action would occur. This keeps Copilot/Codex automatic cleanup pushes
 from failing after the branch is already synced, without creating a bypass for
 real changes.
 
+## Closeout
+
+- Preparing a PR for review and shipping it are different states.
+- Use `close:review` for verify -> push -> PR body -> ready-for-review handoff.
+- Use `close:ship` only when the user explicitly says `/close`, `ship it`,
+  `land it`, `merge to main`, or equivalent delivery language.
+- If this repo adds a local close-scan guard, run it before `git push`,
+  `gh pr ready`, and `gh pr merge`.
+
 ## CHANGELOG
 
 This repo uses **<Mode 1: direct edit / Mode 2: `.changelog/unreleased/` fragments>** — pick one and delete the other in initial setup.
 
-- **Mode 1:** Edit `CHANGELOG.md` under `## [Unreleased]`.
+- **Mode 1:** Edit `CHANGELOG.md` under `## [Unreleased]` on the PR branch.
 - **Mode 2:** Add a file at `.changelog/unreleased/<issue>-<slug>.md`. See that directory's README.
 
 For PRs that don't warrant a CHANGELOG entry (refactor, tests, chore), apply the `no-changelog` label.
