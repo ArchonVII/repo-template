@@ -23,6 +23,42 @@ Active development. Last updated: <YYYY-MM-DD>.
 
 See [LICENSE](LICENSE).
 
+## Git hooks
+
+This template ships a `.githooks/` baseline (issue
+[ArchonVII/repo-template#16](https://github.com/ArchonVII/repo-template/issues/16),
+finding F18 in `docs/phase2/findings.md`):
+
+- **`commit-msg`** — requires a conventional-commit prefix (`feat`,
+  `fix`, `docs`, `chore`, `refactor`, `test`, `ci`, `build`, `perf`,
+  `revert`, `style`) and a tracked issue reference (`(#NNN)` or
+  `task/<id>`). Exempt: `chore(scratch):` / `docs(scratch):` messages
+  and commits scoped entirely to `docs/scratch/**`.
+- **`pre-commit`** — rejects direct commits to `main` / `master`.
+  Exempt during in-progress rebase / merge / cherry-pick.
+
+Install after cloning:
+
+```bash
+./.githooks/scripts/install-githooks.sh
+```
+
+The script sets `core.hooksPath = .githooks` for this clone and is
+idempotent. Re-run after pulling new hook changes is harmless.
+
+Overrides (each leaves an audit trail via the env-var name itself):
+
+```bash
+# Commit on main anyway (logged to .agent/bypass.log):
+ALLOW_MAIN_COMMIT=1 git commit ...
+
+# Skip the issue-ref requirement:
+ALLOW_NO_ISSUE_REF=1 git commit ...
+```
+
+The conventional-commit prefix is non-bypassable — reformat the message
+instead.
+
 ---
 
 ## Repo bootstrap checklist (delete this section after setup)
@@ -41,6 +77,7 @@ See [LICENSE](LICENSE).
   ```
   This applies the standard label set + branch protection.
 - [ ] Configure branch protection's "Required status checks" once you know which workflows you kept.
+- [ ] Run `./.githooks/scripts/install-githooks.sh` in every clone so the commit-msg + pre-commit baselines fire (see **Git hooks** above).
 - [ ] Delete this checklist.
 
 See [`ArchonVII/.github/STARTER.md`](https://github.com/ArchonVII/.github/blob/main/STARTER.md) for the full document-policy guide.
