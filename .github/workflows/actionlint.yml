@@ -1,0 +1,23 @@
+name: Actionlint
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".githooks/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - ".githooks/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: actionlint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  actionlint:
+    uses: ArchonVII/github-workflows/.github/workflows/actionlint.yml@v1
