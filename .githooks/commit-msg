@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+#
+# commit-msg — Repo-template baseline (F18, ArchonVII/repo-template#16).
+#
+# Enforces two policies on the commit message:
+#
+#   1. Conventional-commit prefix from a fixed allow-list.
+#   2. Reference to a tracked issue or task — `(#NNN)` or `task/<id>` —
+#      unless the commit is scoped to throwaway scratch work
+#      (`chore(scratch):` / `docs(scratch):` prefix, OR every staged
+#      path lives under `docs/scratch/**`).
+#
+# Bypass for the issue-ref rule (logged in commit metadata via the env
+# var name itself — reviewers can grep for it):
+#
+#   ALLOW_NO_ISSUE_REF=1 git commit ...
+#
+# The conventional-commit prefix is non-bypassable here on purpose.
+# Reformat the message instead.
+#
+# Authority: Layer 5 in docs/phase2/hook-authority.md.
+
+set -euo pipefail
+
+msg_file="${1:?commit-msg hook expects the message file as argument 1}"
+
+# Strip comment lines (git includes the diff/template comments) before
+# inspecting the first non-empty line.
+first_line="$(grep -vE '^\s*#' "$msg_file" | sed -n '/[^[:space:]]/{p;q;}')"
+
+if [[ -z "${first_line}" ]]; then
+    echo "[commit-msg] Empty commit message; aborting." >&2
+    exit 1
+fi
+
+# --- Conventional commit prefix check ----------------------------------
+# Allowed types per repo policy. Scopes and breaking-change `!` are
+# optional. Matches:  feat: x | fix(api): x | chore(scratch)!: x
+cc_re='^(feat|fix|docs|chore|refactor|test|ci|build|perf|revert|style)(\([^)]+\))?!?: .+'
+if ! [[ "${first_line}" =~ ${cc_re} ]]; then
+    cat >&2 <<EOF
+[commit-msg] Conventional-commit prefix required.
+
+Got:    ${first_line}
+Expect: <type>(<scope>)?: <description>
+
+Allowed types: feat, fix, docs, chore, refactor, test, ci, build, perf,
+               revert, style.
+
+Examples:
+  feat(hooks): add commit-msg baseline (#16)
+  fix: handle empty diff in close-scan
+  chore(scratch): noodling on idea X
+
+This rule is not bypassable. Reformat the message and try again.
+EOF
+    exit 1
+fi
+
+# --- Scratch-scope exemptions ------------------------------------------
+# A commit is "scratch" if either:
+#   (a) the message prefix is chore(scratch): or docs(scratch):, OR
+#   (b) every staged path lives under docs/scratch/.
+is_scratch=0
+if [[ "${first_line}" =~ ^(chore|docs)\(scratch\) ]]; then
+    is_scratch=1
+else
+    # `--cached` lists staged paths. Empty output (e.g. amend with no
+    # staged changes) shouldn't be treated as scratch — fall through to
+    # the issue-ref check.
+    staged="$(git diff --cached --name-only --diff-filter=ACMRTD 2>/dev/null || true)"
+    if [[ -n "${staged}" ]]; then
+        # Treat as scratch only when *every* path is under docs/scratch/.
+        non_scratch="$(printf '%s\n' "${staged}" | grep -vE '^docs/scratch/' || true)"
+        if [[ -z "${non_scratch}" ]]; then
+            is_scratch=1
+        fi
+    fi
+fi
+
+if [[ "${is_scratch}" -eq 1 ]]; then
+    exit 0
+fi
+
+# --- Issue reference check ---------------------------------------------
+# Accept (#NNN) anywhere, or a task/<id> reference (alnum / dash / dot /
+# underscore / slash after the prefix). Searches the whole message body,
+# not just the subject — trailers count.
+body="$(grep -vE '^\s*#' "$msg_file" | tr '\n' ' ')"
+if [[ "${body}" =~ \#[0-9]+ ]] || [[ "${body}" =~ task/[A-Za-z0-9._/-]+ ]]; then
+    exit 0
+fi
+
+if [[ "${ALLOW_NO_ISSUE_REF:-0}" == "1" ]]; then
+    echo "[commit-msg] ALLOW_NO_ISSUE_REF=1 — bypassing issue-ref requirement." >&2
+    exit 0
+fi
+
+cat >&2 <<EOF
+[commit-msg] Commit message must reference a tracked issue or task.
+
+Subject: ${first_line}
+
+Acceptable references (anywhere in the message body or trailers):
+  - GitHub issue:  (#123)
+  - Task id:       task/<id>
+
+Scratch-scope exemptions:
+  - Message prefixed chore(scratch): or docs(scratch):
+  - All staged paths under docs/scratch/
+
+Bypass (leaves an audit trail via the env-var name):
+  ALLOW_NO_ISSUE_REF=1 git commit ...
+
+See .githooks/commit-msg (F18, repo-template#16) for the rule source.
+EOF
+exit 1

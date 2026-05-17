@@ -1,0 +1,6 @@
+# Force LF for shell scripts so the .githooks/ baseline runs correctly
+# regardless of the cloning OS. Bash hooks fail with CRLF on Git Bash
+# ("bad interpreter: /usr/bin/env\r: No such file or directory") and on
+# CI Linux runners.
+*.sh        text eol=lf
+.githooks/* text eol=lf
