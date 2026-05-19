@@ -64,6 +64,8 @@ Set this up by adding the caller workflow from [`github-workflows/examples/anoma
 
 Before marking a PR ready for review:
 
+- Treat `repo-required-gate / decision` as the stable branch-protection check. Do not make path-filtered leaf workflows required.
+- Use `.agent/check-map.yml` to record repo-specific path-to-check expectations. If the repo stack changes, update both `.agent/check-map.yml` and `.github/workflows/repo-required-gate.yml` in the same PR.
 - Run the repo's lint, typecheck, and test commands. Record exact commands in `### Verification Notes`.
 - If the change is user-visible, smoke-test it. Record what you exercised.
 - Tick a `- [x]` box **only after** the command actually passed.
