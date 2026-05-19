@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+#
+# pre-commit — Repo-template baseline (F18, ArchonVII/repo-template#16).
+#
+# Single purpose: block direct commits to `main` / `master`.
+#
+# Does NOT replicate pigafetta's main-checkout-guard allow-list of
+# read-only Bash commands (F-pig-1). That hook gates on the *command*;
+# this one gates on the *branch*. The branch check is unambiguous and
+# has no echo/find/printf bypass.
+#
+# Bypass (logged to .agent/bypass.log so it leaves an audit trail):
+#
+#   ALLOW_MAIN_COMMIT=1 git commit ...
+#
+# Rebase / merge / cherry-pick states are exempt — we don't want to
+# break a `git rebase main` or `git pull --rebase` on main during
+# legitimate maintenance.
+#
+# Authority: Layer 5 in docs/phase2/hook-authority.md.
+
+set -euo pipefail
+
+# --- Detect in-progress git operations and skip the branch check -------
+# During rebase/merge/cherry-pick, HEAD may transiently be on main even
+# though the user isn't authoring a fresh commit there.
+git_dir="$(git rev-parse --git-dir)"
+for marker in MERGE_HEAD REBASE_HEAD CHERRY_PICK_HEAD; do
+    if [[ -f "${git_dir}/${marker}" ]]; then
+        exit 0
+    fi
+done
+# git-rebase also uses these directory markers depending on mode.
+if [[ -d "${git_dir}/rebase-merge" ]] || [[ -d "${git_dir}/rebase-apply" ]]; then
+    exit 0
+fi
+
+# --- Branch check ------------------------------------------------------
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)"
+
+# Detached HEAD is fine — typically a checkout of a tag or SHA, not a
+# direct main commit.
+if [[ "${branch}" == "HEAD" ]]; then
+    exit 0
+fi
+
+if [[ "${branch}" != "main" && "${branch}" != "master" ]]; then
+    exit 0
+fi
+
+if [[ "${ALLOW_MAIN_COMMIT:-0}" != "1" ]]; then
+    cat >&2 <<EOF
+[pre-commit] Direct commits to '${branch}' are blocked.
+
+Create a feature branch and open a PR instead:
+  git switch -c <type>/<short-description>
+
+If you really need to commit here (e.g. Release-Admiral fixup, F11),
+bypass with an audit trail:
+  ALLOW_MAIN_COMMIT=1 git commit ...
+
+See .githooks/pre-commit (F18, repo-template#16) for the rule source.
+EOF
+    exit 1
+fi
+
+# --- Bypass: log the override to .agent/bypass.log ---------------------
+# .agent/ is the convention named by F9/F11/F12/F16/F17. We create it
+# on demand so the hook doesn't fail in repos that haven't set it up.
+repo_root="$(git rev-parse --show-toplevel)"
+agent_dir="${repo_root}/.agent"
+mkdir -p "${agent_dir}"
+log_file="${agent_dir}/bypass.log"
+
+# Best-effort metadata — none of these are fatal if missing.
+ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+who="$(git config user.email 2>/dev/null || echo unknown)"
+head_sha="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+
+# Commit message file is $1 only for commit-msg; pre-commit doesn't get
+# it. Best we can do is peek at staged diff stats for context.
+diff_stat="$(git diff --cached --shortstat 2>/dev/null || echo '(no stat)')"
+
+printf '%s\tALLOW_MAIN_COMMIT\t%s\t%s\t%s\t%s\n' \
+    "${ts}" "${who}" "${branch}" "${head_sha}" "${diff_stat}" \
+    >> "${log_file}"
+
+echo "[pre-commit] ALLOW_MAIN_COMMIT=1 — bypass logged to .agent/bypass.log" >&2
+exit 0
