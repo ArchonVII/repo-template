@@ -1,0 +1,21 @@
+name: Repo Required Gate
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+  merge_group:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: repo-required-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  repo-required-gate:
+    uses: ArchonVII/github-workflows/.github/workflows/repo-required-gate.yml@v1
+    with:
+      stack: minimal

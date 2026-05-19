@@ -1,0 +1,69 @@
+version: 1
+
+required_gate:
+  check_name: repo-required-gate / decision
+  workflow: .github/workflows/repo-required-gate.yml
+
+defaults:
+  stack: minimal
+  runner: github-hosted
+  optimize_for: lower-spend
+
+paths:
+  code:
+    requires:
+      - language-ci
+    patterns:
+      - src/**
+      - lib/**
+      - bin/**
+      - scripts/**
+      - test/**
+      - tests/**
+      - "**/*.js"
+      - "**/*.mjs"
+      - "**/*.cjs"
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.py"
+  workflows:
+    requires:
+      - workflow-validation
+    patterns:
+      - .github/workflows/**
+      - .githooks/**
+  policy:
+    requires:
+      - policy-validation
+    patterns:
+      - AGENTS.md
+      - CLAUDE.md
+      - GEMINI.md
+      - .agent/**
+      - .github/**
+  dependencies:
+    requires:
+      - dependency-review
+      - language-ci
+    patterns:
+      - package.json
+      - package-lock.json
+      - pnpm-lock.yaml
+      - yarn.lock
+      - pyproject.toml
+      - requirements.txt
+      - requirements-dev.txt
+      - uv.lock
+      - poetry.lock
+  release:
+    requires:
+      - policy-validation
+    patterns:
+      - CHANGELOG.md
+      - .changelog/**
+  docs:
+    requires: []
+    patterns:
+      - docs/**
+      - README.md
+      - "**/*.md"
