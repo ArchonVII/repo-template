@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Initial repo scaffold.
+- Owner Maintenance Lane hook support for add-only safe docs/assets/changelog
+  commits on `main`.
 
 <!--
   Mode 2 alternative: delete the manual sections above and use

@@ -6,9 +6,11 @@
 #
 #   1. Conventional-commit prefix from a fixed allow-list.
 #   2. Reference to a tracked issue or task — `(#NNN)` or `task/<id>` —
-#      unless the commit is scoped to throwaway scratch work
+#      unless the commit is scoped to throwaway scratch work or the
+#      Owner Maintenance Lane
 #      (`chore(scratch):` / `docs(scratch):` prefix, OR every staged
-#      path lives under `docs/scratch/**`).
+#      path lives under `docs/scratch/**`; Owner Maintenance requires
+#      `docs(owner):` / `chore(owner):` plus add-only safe maintenance paths).
 #
 # Bypass for the issue-ref rule (logged in commit metadata via the env
 # var name itself — reviewers can grep for it):
@@ -23,6 +25,9 @@
 set -euo pipefail
 
 msg_file="${1:?commit-msg hook expects the message file as argument 1}"
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=.githooks/scripts/owner-maintenance.sh
+source "${hook_dir}/scripts/owner-maintenance.sh"
 
 # Strip comment lines (git includes the diff/template comments) before
 # inspecting the first non-empty line.
@@ -82,6 +87,29 @@ if [[ "${is_scratch}" -eq 1 ]]; then
     exit 0
 fi
 
+# --- Owner Maintenance Lane exemption ----------------------------------
+# This lane is intentionally narrow: lightweight direct-main maintenance with
+# add-only safe files and an explicit docs(owner): / chore(owner): subject.
+if owner_maintenance_subject "${first_line}"; then
+    if owner_maintenance_staged_paths_safe; then
+        exit 0
+    fi
+
+    cat >&2 <<EOF
+[commit-msg] docs(owner): / chore(owner): is only valid for Owner Maintenance Lane commits.
+
+Owner Maintenance Lane requires every staged path to be add-only and safe:
+  - docs/research/**
+  - docs/notes/**
+  - docs/assets/**
+  - image files
+  - .changelog/**
+
+Unsafe paths, modifications, deletes, renames, and copies require an issue/PR lane.
+EOF
+    exit 1
+fi
+
 # --- Issue reference check ---------------------------------------------
 # Accept (#NNN) anywhere, or a task/<id> reference (alnum / dash / dot /
 # underscore / slash after the prefix). Searches the whole message body,
@@ -108,6 +136,10 @@ Acceptable references (anywhere in the message body or trailers):
 Scratch-scope exemptions:
   - Message prefixed chore(scratch): or docs(scratch):
   - All staged paths under docs/scratch/
+
+Owner Maintenance exemption:
+  - Message prefixed docs(owner): or chore(owner):
+  - All staged paths are add-only safe maintenance files
 
 Bypass (leaves an audit trail via the env-var name):
   ALLOW_NO_ISSUE_REF=1 git commit ...
