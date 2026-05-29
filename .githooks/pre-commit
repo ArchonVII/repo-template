@@ -2,7 +2,8 @@
 #
 # pre-commit — Repo-template baseline (F18, ArchonVII/repo-template#16).
 #
-# Single purpose: block direct commits to `main` / `master`.
+# Single purpose: block direct commits to `main` / `master`, except for the
+# narrow Owner Maintenance Lane.
 #
 # Does NOT replicate pigafetta's main-checkout-guard allow-list of
 # read-only Bash commands (F-pig-1). That hook gates on the *command*;
@@ -20,6 +21,10 @@
 # Authority: Layer 5 in docs/phase2/hook-authority.md.
 
 set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=.githooks/scripts/owner-maintenance.sh
+source "${hook_dir}/scripts/owner-maintenance.sh"
 
 # --- Detect in-progress git operations and skip the branch check -------
 # During rebase/merge/cherry-pick, HEAD may transiently be on main even
@@ -48,12 +53,22 @@ if [[ "${branch}" != "main" && "${branch}" != "master" ]]; then
     exit 0
 fi
 
+if owner_maintenance_staged_paths_safe; then
+    echo "[pre-commit] Owner Maintenance Lane — add-only safe maintenance paths allowed on ${branch}." >&2
+    exit 0
+fi
+
 if [[ "${ALLOW_MAIN_COMMIT:-0}" != "1" ]]; then
     cat >&2 <<EOF
 [pre-commit] Direct commits to '${branch}' are blocked.
 
 Create a feature branch and open a PR instead:
   git switch -c <type>/<short-description>
+
+Owner Maintenance Lane direct commits are allowed only when every staged path
+is add-only and safe (docs/research, docs/notes, docs/assets, image files, or
+.changelog). Unsafe files, modifications, deletes, renames, and copies require
+the normal issue -> branch -> PR lifecycle.
 
 If you really need to commit here (e.g. Release-Admiral fixup, F11),
 bypass with an audit trail:

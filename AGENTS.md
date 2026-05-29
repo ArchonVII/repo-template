@@ -18,6 +18,20 @@ Cross-tool contract for AI agents (Claude, Codex, Copilot, Gemini, etc.) working
 5. **PR body must include** `## Verification` and `### Verification Notes` sections, at least one checked checkbox (`- [x]`), and link an issue with `Closes #N`. Doc-only PRs (every file matches `*.md`, `*.txt`, an image extension, or `.changelog/**`) skip the ceremony.
 6. **Repo update log.** Every PR that changes code, config, behavior, protected docs, tracked workflows, or repository policy must append one entry to `docs/repo-update-log.md` before review. Include the date, issue/PR, branch, changed paths, verification, and whether follow-up propagation is needed. Doc-only typo fixes may skip the log only when the PR body says why.
 
+## Owner Maintenance Lane
+
+When the working tree contains only add-only safe maintenance files, agents must not invoke Issue-Admiral, Project-Captain, Project-Lieutenant, Release-Admiral, claim records, handoff blocks, or full CI. Either report `owner maintenance present, no action required` or, if explicitly asked to commit, commit directly on `main` with `docs(owner): ...` or `chore(owner): ...`.
+
+Safe owner-maintenance paths are:
+
+- `docs/research/**`
+- `docs/notes/**`
+- `docs/assets/**`
+- image files (`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`)
+- `.changelog/**`
+
+The lane is add-only. If any unsafe file is staged or any file is modified, deleted, renamed, or copied, stop and report. Unsafe paths include `README.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/**`, `.githooks/**`, `.claude/**`, `.agent/schema/**`, `package*.json`, `src/**`, `scripts/**`, `docs/process/**`, and `docs/architecture/**`.
+
 ## Anomaly triage
 
 While working on a PR, you'll often notice off-task bugs, stale files, or tech debt that **don't belong in the current change** but shouldn't be lost. The convention: write a structured entry to `.archon/anomalies-thispr.md` on the PR branch. A reusable workflow (`anomaly-triage.yml` from [`ArchonVII/github-workflows`](https://github.com/ArchonVII/github-workflows)) reads that file on every PR event and routes each entry — related entries become sticky PR review comments, unrelated entries become new GitHub issues. Re-runs are idempotent (each entry carries a fingerprint).

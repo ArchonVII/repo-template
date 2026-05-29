@@ -33,9 +33,14 @@ finding F18 in `docs/phase2/findings.md`):
   `fix`, `docs`, `chore`, `refactor`, `test`, `ci`, `build`, `perf`,
   `revert`, `style`) and a tracked issue reference (`(#NNN)` or
   `task/<id>`). Exempt: `chore(scratch):` / `docs(scratch):` messages
-  and commits scoped entirely to `docs/scratch/**`.
+  and commits scoped entirely to `docs/scratch/**`; `docs(owner):` /
+  `chore(owner):` messages are exempt only when every staged path is
+  add-only Owner Maintenance Lane content.
 - **`pre-commit`** — rejects direct commits to `main` / `master`.
-  Exempt during in-progress rebase / merge / cherry-pick.
+  Exempt during in-progress rebase / merge / cherry-pick. Also allows
+  Owner Maintenance Lane commits when every staged path is add-only and
+  safe (`docs/research/**`, `docs/notes/**`, `docs/assets/**`, image
+  files, or `.changelog/**`).
 
 Install after cloning:
 
@@ -58,6 +63,13 @@ ALLOW_NO_ISSUE_REF=1 git commit ...
 
 The conventional-commit prefix is non-bypassable — reformat the message
 instead.
+
+Verify hook behavior after edits with:
+
+```bash
+bash .githooks/scripts/test-owner-maintenance.sh
+bash -n .githooks/commit-msg .githooks/pre-commit .githooks/scripts/*.sh
+```
 
 ---
 

@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-05-28 - Owner Maintenance Lane hooks
+
+- **Issue/PR:** #21 / #22
+- **Branch:** agent/codex/21-owner-maintenance-lane
+- **Changed paths:** AGENTS.md, README.md, CHANGELOG.md, .githooks/commit-msg, .githooks/pre-commit, .githooks/scripts/owner-maintenance.sh, .githooks/scripts/test-owner-maintenance.sh
+- **What changed:** Documented the Owner Maintenance Lane and taught the hook baseline to allow direct-main add-only safe maintenance commits with `docs(owner):` / `chore(owner):` messages while continuing to block unsafe main changes.
+- **Verification:** `bash .githooks/scripts/test-owner-maintenance.sh` passed; `bash -n .githooks/commit-msg .githooks/pre-commit .githooks/scripts/*.sh` passed; `git diff origin/main...HEAD --check` passed.
+- **Propagation:** pending archon-setup snapshots
+
 ## 2026-05-19 - Required gate baseline
 
 - **Issue/PR:** #15 / #pr
