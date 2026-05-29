@@ -17,7 +17,7 @@ This log records agent-visible repository changes that should be easy to audit l
 
 ## 2026-05-28 - Owner Maintenance Lane hooks
 
-- **Issue/PR:** #21 / #pr
+- **Issue/PR:** #21 / #22
 - **Branch:** agent/codex/21-owner-maintenance-lane
 - **Changed paths:** AGENTS.md, README.md, CHANGELOG.md, .githooks/commit-msg, .githooks/pre-commit, .githooks/scripts/owner-maintenance.sh, .githooks/scripts/test-owner-maintenance.sh
 - **What changed:** Documented the Owner Maintenance Lane and taught the hook baseline to allow direct-main add-only safe maintenance commits with `docs(owner):` / `chore(owner):` messages while continuing to block unsafe main changes.
