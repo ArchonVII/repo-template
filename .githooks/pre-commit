@@ -5,10 +5,8 @@
 # Single purpose: block direct commits to `main` / `master`, except for the
 # narrow Owner Maintenance Lane.
 #
-# Does NOT replicate pigafetta's main-checkout-guard allow-list of
-# read-only Bash commands (F-pig-1). That hook gates on the *command*;
-# this one gates on the *branch*. The branch check is unambiguous and
-# has no echo/find/printf bypass.
+# This hook gates on the *branch*, not on individual commands. The branch
+# check is unambiguous and has no echo/find/printf bypass.
 #
 # Bypass (logged to .agent/bypass.log so it leaves an audit trail):
 #

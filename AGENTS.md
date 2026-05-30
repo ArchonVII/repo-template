@@ -127,8 +127,14 @@ If the same approach fails twice, stop. Switch tactics, ask the user, or documen
 
 ## Coordination
 
-If multiple agents may touch this repo concurrently, document the rules here:
+This repo is **coordination-isolated**. It coordinates only itself.
 
-- File claims / locking mechanism
-- High-contention files that require sequencing
-- Worktree conventions
+- Do not read from or write to machine-global coordination boards.
+- Do not assume sibling repositories exist.
+- Do not reference another repo unless this repo explicitly documents that dependency.
+
+When coordination is needed, use this repo's local coordination area: `.agent/coordination/`
+(see `.agent/coordination/README.md` for the convention). Active boards, claims, locks, or
+handoffs belong there — or in another repo-local location this repo documents. The active
+board template lives at `.agent/coordination/board.md` and is opt-in; delete it if this
+repo does not do active multi-agent coordination.
