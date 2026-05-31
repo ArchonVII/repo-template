@@ -15,7 +15,7 @@ Cross-tool contract for AI agents (Claude, Codex, Copilot, Gemini, etc.) working
 2. **One issue → one branch (in a linked worktree) → one PR.** Branch name: `agent/<tool>/<issue>-<slug>` (e.g. `agent/claude/42-oauth-flow`); quick fixes without an issue use `agent/<tool>/<YYYY-MM-DD>-<slug>`. Create the branch with `git worktree add`, not `git switch -c` in the primary checkout — see "Checkout role / worktrees".
 3. **Never commit to `main`.** Branch protection enforces this. Repo-facing docs, planning notes, prompts, ADRs, and shared markdown use the same branch/PR path when they are committed to the repo.
 4. **Conventional Commits** for messages: `<type>(<scope>): <description>` where `<type>` is one of `feat fix refactor test docs style chore perf ci build revert`.
-5. **PR body must include** `## Verification` and `### Verification Notes` sections, at least one checked checkbox (`- [x]`), and link an issue with `Closes #N`. Doc-only PRs (every file matches `*.md`, `*.txt`, an image extension, or `.changelog/**`) skip the ceremony.
+5. **PR metadata must pass the shared contract before ready-for-review.** Non-doc PRs must use this exact body order: `## Summary`, `## Verification`, `### Verification Notes`, `## Docs / Changelog`, and an issue link (`Closes #N`, `Fixes #N`, or `Refs #N`). The PR title must use Conventional Commits. Each checked verification box must be backed by concrete command/check/manual evidence, and placeholders such as TODO/TBD/N/A must be gone. Doc-only PRs (every file matches `*.md`, `*.txt`, an image extension, or `.changelog/**`) skip the body ceremony but still need a valid title and branch.
 6. **Repo update log.** Every PR that changes code, config, behavior, protected docs, tracked workflows, or repository policy must append one entry to `docs/repo-update-log.md` before review. Include the date, issue/PR, branch, changed paths, verification, and whether follow-up propagation is needed. Doc-only typo fixes may skip the log only when the PR body says why.
 
 ## Checkout role / worktrees
@@ -102,6 +102,16 @@ Before marking a PR ready for review:
 - Run the repo's lint, typecheck, and test commands. Record exact commands in `### Verification Notes`.
 - If the change is user-visible, smoke-test it. Record what you exercised.
 - Tick a `- [x]` box **only after** the command actually passed.
+- Do **not** run `gh pr ready` directly. Run the blessed wrapper so malformed PRs cannot trigger paid or expensive ready-for-review checks:
+
+  ```powershell
+  npm run agent:close-preflight -- --repo OWNER/REPO --pr <number>
+  npm run agent:pr-ready -- --repo OWNER/REPO --pr <number>
+  ```
+
+  If the npm wrapper scripts are missing, add the repo's portable wrapper
+  setup first. Do not substitute direct `gh pr ready` or machine-local
+  command paths.
 
 ## Local delivery guards
 
@@ -123,7 +133,7 @@ real changes.
 - Use `close:ship` only when the user explicitly says `/close`, `ship it`,
   `land it`, `merge to main`, or equivalent delivery language.
 - If this repo adds a local close-scan guard, run it before `git push`,
-  `gh pr ready`, and `gh pr merge`.
+  `npm run agent:pr-ready`, and `gh pr merge`.
 
 ## CHANGELOG
 

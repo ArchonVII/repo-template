@@ -4,30 +4,24 @@
   repo-template has no language-runtime CI surface — verification commands
   here target the actionlint workflow and git-hook shell parsing.
 
-  Verification section dogfoods the F2/F10 fenced-evidence format consumed
-  by the shared pr-policy reusable workflow (warning-only in Phase 1, will
-  hard-fail in Phase 2+). See ArchonVII/github-workflows#10 (amendment
-  dated 2026-05-19) and #12.
+  Non-draft PRs are validated by the shared PR contract. Replace every
+  placeholder before marking the PR ready for review.
 -->
 
 ## Summary
 
-<!-- What changed and why? -->
-
-## Linked Issue
-
-Closes #
-
-## Scope
-
-- In scope:
-- Out of scope:
-
-## Changelog
-
-<!-- Fragment: .changelog/unreleased/<issue>-<slug>.md, CHANGELOG.md direct edit, no-changelog label, or N/A with reason. -->
+TODO: What changed and why?
 
 ## Verification
+
+- [ ] TODO: Replace with an exact command, CI check, or manual smoke test.
+
+  ```evidence
+  command: TODO
+  location: local
+  result: TODO
+  timestamp: TODO
+  ```
 
 ### Verification Notes
 
@@ -35,32 +29,15 @@ Each checked box below must be backed by exactly one fenced `evidence` block. Th
 
 Required fields: `command`, `location` (one of `local` / `ci` / `manual`), `result`, `timestamp`. Optional: `check` (used when `location: ci` and the check-run name differs from the command).
 
-- [ ] Workflows lint clean
+TODO: Summarize the exact verification evidence and any manual review.
 
-  ```evidence
-  command: actionlint .github/workflows/*.yml
-  location: local
-  result: no issues
-  timestamp: 2026-05-20T18:32:00Z
-  ```
+## Docs / Changelog
 
-- [ ] Hook scripts parse
+TODO: Record the changelog fragment, direct CHANGELOG edit, docs update, or no-changelog label.
 
-  ```evidence
-  command: bash -n .githooks/*
-  location: local
-  result: no syntax errors
-  timestamp: 2026-05-20T18:35:00Z
-  ```
+## Linked Issue
 
-- [ ] Visual / manual review
-
-  ```evidence
-  command: read full diff in GitHub UI
-  location: manual
-  result: no concerns
-  timestamp: 2026-05-20T18:41:00Z
-  ```
+TODO: Closes #___
 
 ## Risks
 
