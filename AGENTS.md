@@ -109,12 +109,9 @@ Before marking a PR ready for review:
   npm run agent:pr-ready -- --repo OWNER/REPO --pr <number>
   ```
 
-  If this repo has not copied the local npm scripts yet, use the workflow-library implementation directly from the standard ArchonVII checkout:
-
-  ```powershell
-  node C:\GitHub\github-workflows\scripts\agent-close-preflight.mjs --repo OWNER/REPO --pr <number>
-  node C:\GitHub\github-workflows\scripts\agent-pr-ready.mjs --repo OWNER/REPO --pr <number>
-  ```
+  If the npm wrapper scripts are missing, add the repo's portable wrapper
+  setup first. Do not substitute direct `gh pr ready` or machine-local
+  command paths.
 
 ## Local delivery guards
 

@@ -17,11 +17,11 @@ This log records agent-visible repository changes that should be easy to audit l
 
 ## 2026-05-31 - Strict PR contract ready preflight
 
-- **Issue/PR:** #29 / #pr
+- **Issue/PR:** #29 / #30
 - **Branch:** agent/codex/29-strict-pr-contract
 - **Changed paths:** AGENTS.md, .github/PULL_REQUEST_TEMPLATE.md, docs/repo-update-log.md
-- **What changed:** Updated the template's cross-tool agent contract to forbid direct `gh pr ready` and require the shared strict PR metadata contract before ready-for-review. Reordered the default PR template to match the canonical Summary / Verification / Verification Notes / Docs-Changelog / issue-link structure.
-- **Verification:** `git diff --check` passed.
+- **What changed:** Updated the template's cross-tool agent contract to forbid direct `gh pr ready` and require the shared strict PR metadata contract before ready-for-review. Reordered the default PR template to match the canonical Summary / Verification / Verification Notes / Docs / Changelog / issue-link structure.
+- **Verification:** `git diff --check`, `git diff origin/main...HEAD --check`, `bash .githooks/scripts/test-owner-maintenance.sh`, `bash .githooks/scripts/test-checkout-role.sh`, `bash -n .githooks/pre-commit .githooks/commit-msg .githooks/scripts/*.sh`, and `C:\Tools\actionlint\actionlint.exe .github\workflows\actionlint.yml .github\workflows\repo-required-gate.yml` passed.
 - **Propagation:** pending archon-setup snapshots
 
 ## 2026-05-30 - F19 primary-checkout worktree guard
