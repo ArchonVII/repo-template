@@ -28,7 +28,7 @@ if checkout_is_primary; then
 else
     role="linked worktree"
     if [[ "${branch}" == "${default_branch}" ]]; then
-        feature_commits="blocked (default branch in a worktree is unusual)"
+        feature_commits="blocked (owner-maintenance safe paths only; default branch in a worktree is unusual)"
     else
         feature_commits="allowed"
     fi
