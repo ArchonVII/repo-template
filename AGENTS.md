@@ -12,11 +12,30 @@ Cross-tool contract for AI agents (Claude, Codex, Copilot, Gemini, etc.) working
 ## Workflow
 
 1. **Issue first.** Create a GitHub issue with explicit `Acceptance Criteria` before branching. Use the `Task` issue form.
-2. **One issue → one branch → one PR.** Branch name: `agent/<tool>/<issue>-<slug>` (e.g. `agent/claude/42-oauth-flow`). Quick fixes without an issue use `agent/<tool>/<YYYY-MM-DD>-<slug>`.
+2. **One issue → one branch (in a linked worktree) → one PR.** Branch name: `agent/<tool>/<issue>-<slug>` (e.g. `agent/claude/42-oauth-flow`); quick fixes without an issue use `agent/<tool>/<YYYY-MM-DD>-<slug>`. Create the branch with `git worktree add`, not `git switch -c` in the primary checkout — see "Checkout role / worktrees".
 3. **Never commit to `main`.** Branch protection enforces this. Repo-facing docs, planning notes, prompts, ADRs, and shared markdown use the same branch/PR path when they are committed to the repo.
 4. **Conventional Commits** for messages: `<type>(<scope>): <description>` where `<type>` is one of `feat fix refactor test docs style chore perf ci build revert`.
 5. **PR body must include** `## Verification` and `### Verification Notes` sections, at least one checked checkbox (`- [x]`), and link an issue with `Closes #N`. Doc-only PRs (every file matches `*.md`, `*.txt`, an image extension, or `.changelog/**`) skip the ceremony.
 6. **Repo update log.** Every PR that changes code, config, behavior, protected docs, tracked workflows, or repository policy must append one entry to `docs/repo-update-log.md` before review. Include the date, issue/PR, branch, changed paths, verification, and whether follow-up propagation is needed. Doc-only typo fixes may skip the log only when the PR body says why.
+
+## Checkout role / worktrees
+
+This repo uses the **checkout-role** model, enforced by `.githooks/pre-commit`:
+
+- The **primary checkout** stays on the default branch. It is the stable owner/admin
+  lane and accepts only owner-maintenance commits (see below). It is **not** where
+  feature work is committed.
+- **Feature work happens in a linked worktree.** Create one per issue:
+
+  ```
+  git worktree add ../<repo>-<issue>-<slug> -b agent/<tool>/<issue>-<slug>
+  ```
+
+  Commit, push, and open the PR from that folder. Remove it when the PR merges:
+  `git worktree remove ../<repo>-<issue>-<slug>`.
+- **Do not run `git switch -c` in the primary checkout.** A feature-branch commit
+  there is blocked and redirected to `git worktree add`.
+- Unsure where you are? Run `bash .githooks/scripts/checkout-doctor.sh`.
 
 ## Owner Maintenance Lane
 
