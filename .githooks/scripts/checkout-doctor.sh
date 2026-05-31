@@ -14,7 +14,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=.githooks/scripts/checkout-role.sh
 source "${script_dir}/checkout-role.sh"
 
-branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)"
+branch="$(git symbolic-ref --short -q HEAD || echo HEAD)"
 default_branch="$(checkout_default_branch)"
 hooks_path="$(git config --get core.hooksPath 2>/dev/null || echo '(unset)')"
 

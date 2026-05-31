@@ -41,7 +41,12 @@ if [[ -d "${git_dir}/rebase-merge" ]] || [[ -d "${git_dir}/rebase-apply" ]]; the
 fi
 
 # --- Branch check ------------------------------------------------------
-branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)"
+# git symbolic-ref resolves the branch name even on an unborn branch (a fresh
+# repo's first commit), where `git rev-parse --abbrev-ref HEAD` prints "HEAD" to
+# stdout AND exits non-zero — which would otherwise double to "HEAD\nHEAD" and
+# trip the worktree guard. -q yields empty + rc1 on a genuinely detached HEAD,
+# so the `|| echo HEAD` fallback still fires for the detached case below.
+branch="$(git symbolic-ref --short -q HEAD || echo HEAD)"
 
 # Detached HEAD is fine — typically a checkout of a tag or SHA, not a
 # direct main commit.

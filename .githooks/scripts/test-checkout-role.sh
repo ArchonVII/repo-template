@@ -82,4 +82,16 @@ new_primary_repo "${tmp}/r5"
 printf 'x\n' > "${tmp}/r5/src.txt"; git_q "${tmp}/r5" add src.txt
 expect_block "primary+default+unsafe" "${tmp}/r5"
 
+# Unborn branch (fresh repo, first commit) on the default branch with an
+# owner-safe path -> allowed. Before the symbolic-ref fix, the unborn branch
+# resolved to a doubled "HEAD" string and the worktree guard wrongly blocked
+# the very first commit. This is the regression guard for that.
+rm -rf "${tmp}/r6"; mkdir -p "${tmp}/r6"
+git_q "${tmp}/r6" init -b main
+git_q "${tmp}/r6" config user.name "Hook Test"
+git_q "${tmp}/r6" config user.email "hook-test@example.invalid"
+mkdir -p "${tmp}/r6/docs/research"; printf 'n\n' > "${tmp}/r6/docs/research/note.md"
+git_q "${tmp}/r6" add docs/research/note.md
+expect_pass "unborn-default-owner-safe" "${tmp}/r6"
+
 echo "checkout-role + pre-commit tests passed"
