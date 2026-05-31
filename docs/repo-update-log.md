@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-05-30 - F19 primary-checkout worktree guard
+
+- **Issue/PR:** #25 / #pr
+- **Branch:** agent/claude/25-primary-checkout-worktree-guard
+- **Changed paths:** docs/adr/001-primary-checkout-worktree-policy.md, .githooks/pre-commit, .githooks/scripts/checkout-role.sh, .githooks/scripts/checkout-doctor.sh, .githooks/scripts/test-checkout-role.sh, AGENTS.md, docs/repo-update-log.md
+- **What changed:** The primary checkout now accepts only default-branch owner-maintenance commits; feature-branch commits in the primary checkout are blocked and redirected to `git worktree add` (bypass `ALLOW_PRIMARY_FEATURE_COMMIT=1`, audit-logged to `.agent/bypass.log`). F18's `git switch -c` guidance is replaced with worktree guidance. Adds the `checkout-role.sh` helper, a `checkout-doctor.sh` diagnostic, and the AGENTS.md "Checkout role / worktrees" contract. Note: `checkout_is_primary` requires git >= 2.31 (`--path-format`) and fails open (skips the block) on older git.
+- **Verification:** `bash .githooks/scripts/test-checkout-role.sh` passed; `bash .githooks/scripts/test-owner-maintenance.sh` passed (regression); `bash -n .githooks/pre-commit .githooks/scripts/*.sh` clean.
+- **Propagation:** pending archon-setup snapshots (Phase 2; the catalog follow-up also repoints the dangling docs/phase2 refs)
+
 ## 2026-05-28 - Owner Maintenance Lane hooks
 
 - **Issue/PR:** #21 / #22
