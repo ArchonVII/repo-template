@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-05-31 - Strict PR contract ready preflight
+
+- **Issue/PR:** #29 / #pr
+- **Branch:** agent/codex/29-strict-pr-contract
+- **Changed paths:** AGENTS.md, .github/PULL_REQUEST_TEMPLATE.md, docs/repo-update-log.md
+- **What changed:** Updated the template's cross-tool agent contract to forbid direct `gh pr ready` and require the shared strict PR metadata contract before ready-for-review. Reordered the default PR template to match the canonical Summary / Verification / Verification Notes / Docs-Changelog / issue-link structure.
+- **Verification:** `git diff --check` passed.
+- **Propagation:** pending archon-setup snapshots
+
 ## 2026-05-30 - F19 primary-checkout worktree guard
 
 - **Issue/PR:** #25 / #pr
