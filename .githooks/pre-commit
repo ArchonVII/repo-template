@@ -58,10 +58,15 @@ if checkout_is_primary && [[ "${branch}" != "${default_branch}" ]]; then
     if [[ "${ALLOW_PRIMARY_FEATURE_COMMIT:-0}" == "1" ]]; then
         repo_root="$(git rev-parse --show-toplevel)"
         mkdir -p "${repo_root}/.agent"
-        printf '%s\tALLOW_PRIMARY_FEATURE_COMMIT\t%s\t%s\n' \
-            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            "$(git config user.email 2>/dev/null || echo unknown)" \
-            "${branch}" >> "${repo_root}/.agent/bypass.log"
+        # Best-effort forensic metadata — same field set as the ALLOW_MAIN_COMMIT
+        # bypass so a single parser reads both lines. None of these are fatal.
+        ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        who="$(git config user.email 2>/dev/null || echo unknown)"
+        head_sha="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+        diff_stat="$(git diff --cached --shortstat 2>/dev/null || echo '(no stat)')"
+        printf '%s\tALLOW_PRIMARY_FEATURE_COMMIT\t%s\t%s\t%s\t%s\n' \
+            "${ts}" "${who}" "${branch}" "${head_sha}" "${diff_stat}" \
+            >> "${repo_root}/.agent/bypass.log"
         echo "[pre-commit] ALLOW_PRIMARY_FEATURE_COMMIT=1 — bypass logged to .agent/bypass.log" >&2
     else
         cat >&2 <<EOF

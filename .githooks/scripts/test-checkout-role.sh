@@ -60,8 +60,10 @@ git_q "${tmp}/r2" switch -c feat/in-primary
 printf 'x\n' > "${tmp}/r2/src.txt"; git_q "${tmp}/r2" add src.txt
 expect_block "primary+feature" "${tmp}/r2"
 
-# Same, with the documented bypass -> allowed.
+# Same, with the documented bypass -> allowed, and the audit log must record it.
 expect_pass "primary+feature+bypass" "${tmp}/r2" "ALLOW_PRIMARY_FEATURE_COMMIT=1"
+grep -q "ALLOW_PRIMARY_FEATURE_COMMIT" "${tmp}/r2/.agent/bypass.log" \
+    || { echo "FAIL: bypass did not write .agent/bypass.log" >&2; exit 1; }
 
 # Linked worktree on a feature branch -> allowed.
 new_primary_repo "${tmp}/r3"
