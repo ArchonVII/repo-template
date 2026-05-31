@@ -11,6 +11,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Initial repo scaffold.
 - Owner Maintenance Lane hook support for add-only safe docs/assets/changelog
   commits on `main`.
+- Worktree guard (F19): the primary checkout stays on the default branch;
+  feature commits there are blocked and redirected to `git worktree add`.
+  Adds `checkout-role.sh`, `checkout-doctor.sh`, and the AGENTS.md
+  "Checkout role / worktrees" contract.
 
 <!--
   Mode 2 alternative: delete the manual sections above and use
