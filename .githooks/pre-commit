@@ -23,6 +23,8 @@ set -euo pipefail
 hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=.githooks/scripts/owner-maintenance.sh
 source "${hook_dir}/scripts/owner-maintenance.sh"
+# shellcheck source=.githooks/scripts/checkout-role.sh
+source "${hook_dir}/scripts/checkout-role.sh"
 
 # --- Detect in-progress git operations and skip the branch check -------
 # During rebase/merge/cherry-pick, HEAD may transiently be on main even
@@ -47,6 +49,41 @@ if [[ "${branch}" == "HEAD" ]]; then
     exit 0
 fi
 
+# --- Worktree guard (ADR-001) ------------------------------------------
+# The primary checkout is the stable lane: it stays on the default branch.
+# Feature work belongs in a linked worktree. A feature-branch commit in the
+# primary checkout is the failure mode this guard exists to stop.
+default_branch="$(checkout_default_branch)"
+if checkout_is_primary && [[ "${branch}" != "${default_branch}" ]]; then
+    if [[ "${ALLOW_PRIMARY_FEATURE_COMMIT:-0}" == "1" ]]; then
+        repo_root="$(git rev-parse --show-toplevel)"
+        mkdir -p "${repo_root}/.agent"
+        printf '%s\tALLOW_PRIMARY_FEATURE_COMMIT\t%s\t%s\n' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            "$(git config user.email 2>/dev/null || echo unknown)" \
+            "${branch}" >> "${repo_root}/.agent/bypass.log"
+        echo "[pre-commit] ALLOW_PRIMARY_FEATURE_COMMIT=1 — bypass logged to .agent/bypass.log" >&2
+    else
+        cat >&2 <<EOF
+[pre-commit] Feature commits are blocked in the primary checkout.
+
+You are on '${branch}' in the primary checkout. The primary checkout stays on
+'${default_branch}'; feature work happens in a linked worktree.
+
+Create one and commit from there instead:
+  git worktree add ../<repo>-<issue>-<slug> -b ${branch}
+
+(If '${branch}' already exists, drop the '-b'.) See AGENTS.md, section
+"Checkout role / worktrees".
+
+Override with an audit trail only if you truly mean to:
+  ALLOW_PRIMARY_FEATURE_COMMIT=1 git commit ...
+EOF
+        exit 1
+    fi
+fi
+
+# Non-default branches in a linked worktree are the normal feature path.
 if [[ "${branch}" != "main" && "${branch}" != "master" ]]; then
     exit 0
 fi
@@ -60,8 +97,9 @@ if [[ "${ALLOW_MAIN_COMMIT:-0}" != "1" ]]; then
     cat >&2 <<EOF
 [pre-commit] Direct commits to '${branch}' are blocked.
 
-Create a feature branch and open a PR instead:
-  git switch -c <type>/<short-description>
+Create a linked worktree and open a PR from there instead:
+  git worktree add ../<repo>-<issue>-<slug> -b <type>/<short-description>
+Keep the primary checkout on '${branch}'. See AGENTS.md "Checkout role / worktrees".
 
 Owner Maintenance Lane direct commits are allowed only when every staged path
 is add-only and safe (docs/research, docs/notes, docs/assets, image files, or
