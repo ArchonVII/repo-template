@@ -28,7 +28,7 @@ This repo uses the **checkout-role** model, enforced by `.githooks/pre-commit`:
 - **Feature work happens in a linked worktree.** Create one per issue:
 
   ```
-  git worktree add ../<repo>-<issue>-<slug> -b agent/<tool>/<issue>-<slug>
+  git worktree add -b agent/<tool>/<issue>-<slug> ../<repo>-<issue>-<slug>
   ```
 
   Commit, push, and open the PR from that folder. Remove it when the PR merges:

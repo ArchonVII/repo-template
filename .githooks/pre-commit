@@ -76,7 +76,7 @@ You are on '${branch}' in the primary checkout. The primary checkout stays on
 '${default_branch}'; feature work happens in a linked worktree.
 
 Create one and commit from there instead:
-  git worktree add ../<repo>-<issue>-<slug> -b ${branch}
+  git worktree add -b ${branch} ../<repo>-<issue>-<slug>
 
 (If '${branch}' already exists, drop the '-b'.) See AGENTS.md, section
 "Checkout role / worktrees".
@@ -103,7 +103,7 @@ if [[ "${ALLOW_MAIN_COMMIT:-0}" != "1" ]]; then
 [pre-commit] Direct commits to '${branch}' are blocked.
 
 Create a linked worktree and open a PR from there instead:
-  git worktree add ../<repo>-<issue>-<slug> -b <type>/<short-description>
+  git worktree add -b <type>/<short-description> ../<repo>-<issue>-<slug>
 Keep the primary checkout on '${branch}'. See AGENTS.md "Checkout role / worktrees".
 
 Owner Maintenance Lane direct commits are allowed only when every staged path
