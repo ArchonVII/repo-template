@@ -18,4 +18,4 @@ jobs:
   repo-required-gate:
     uses: ArchonVII/github-workflows/.github/workflows/repo-required-gate.yml@v1
     with:
-      stack: minimal
+      stack: node

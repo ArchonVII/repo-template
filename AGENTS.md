@@ -37,6 +37,21 @@ This repo uses the **checkout-role** model, enforced by `.githooks/pre-commit`:
   there is blocked and redirected to `git worktree add`.
 - Unsure where you are? Run `bash .githooks/scripts/checkout-doctor.sh`.
 
+### Agent lifecycle commands
+
+Repo-owned helpers (zero-dep, `node`):
+
+- `npm run agent:start-task -- <issue> [--agent <name>] [--slug <slug>]` — fetch the
+  default branch, create `agent/<tool>/<issue>-<slug>` in a sibling worktree, and write
+  `.agent/current-task.json` (gitignored). Refuses if the checkout is dirty or off the
+  default branch, or if the issue already has a branch.
+- `npm run agent:status` — branch, default branch, upstream, PR, issue, dirty state,
+  worktree path, claims (if installed), and the next recommended action.
+- `npm run agent:prune` — remove only merged + clean agent worktrees/branches; never
+  touches dirty work or the primary/current checkout. Idempotent.
+
+Optional capabilities (claims #14, close-scan #28) are reported as "not installed" when absent.
+
 ## Owner Maintenance Lane
 
 When the working tree contains only add-only safe maintenance files, agents must not invoke Issue-Admiral, Project-Captain, Project-Lieutenant, Release-Admiral, claim records, handoff blocks, or full CI. Either report `owner maintenance present, no action required` or, if explicitly asked to commit, commit directly on `main` with `docs(owner): ...` or `chore(owner): ...`.
