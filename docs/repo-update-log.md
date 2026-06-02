@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-01 - Agent lifecycle command surface
+
+- **Issue/PR:** #27 / (pending)
+- **Branch:** agent/claude/27-agent-lifecycle-commands
+- **Changed paths:** package.json, package-lock.json, scripts/agent/lib.mjs, scripts/agent/start-task.mjs, scripts/agent/status.mjs, scripts/agent/prune.mjs, test/agent/lib.test.mjs, .github/workflows/repo-required-gate.yml, AGENTS.md, .gitignore, .changelog/unreleased/27-agent-lifecycle-commands.md
+- **What changed:** Added repo-owned agent lifecycle commands (`agent:start-task`, `agent:status`, `agent:prune`) as a zero-dependency baseline (repo-template's first `package.json`), with pure tested logic in `scripts/agent/lib.mjs` (19 `node --test` cases) and thin git/gh shims. Switched the required gate from the `minimal` to the `node` stack so `language-ci` runs `npm ci` + `npm test`. Documented the commands in AGENTS.md.
+- **Verification:** `npm ci` (0 deps) + `npm test` (19/19) pass; `node --check` on all three shims; `agent:start-task` happy-path + guard smokes verified end-to-end; `agent:prune` removal/dirty-skip safety verified end-to-end (removed merged+clean, skipped merged+dirty, kept unmerged).
+- **Propagation:** pending archon-setup#64 (downstream snapshot/install/audit of the lifecycle baseline)
+
 ## 2026-05-31 - Strict PR contract ready preflight
 
 - **Issue/PR:** #29 / #30
