@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-02 - Strict PR ready wrapper scripts
+
+- **Issue/PR:** #36 / (pending)
+- **Branch:** agent/codex/36-strict-pr-ready-wrappers
+- **Changed paths:** package.json, scripts/pr-contract.mjs, scripts/agent-close-preflight.mjs, scripts/agent-pr-ready.mjs, test/pr-contract.test.mjs, README.md, .changelog/unreleased/36-strict-pr-ready-wrappers.md, docs/repo-update-log.md
+- **What changed:** Added repo-owned `agent:close-preflight`, `agent:pr-ready`, and `pr:contract` commands using the shared ArchonVII PR contract implementation, plus node:test coverage and README guidance.
+- **Verification:** `node --check scripts/pr-contract.mjs; node --check scripts/agent-close-preflight.mjs; node --check scripts/agent-pr-ready.mjs` passed; `npm test` passed (24/24); `npm run pr:contract -- --repo ArchonVII/repo-template --pr 35` correctly rejected a generic verification item in draft PR #35; `npm run agent:pr-ready -- --repo ArchonVII/repo-template --pr 35 --dry-run` correctly refused promotion for the same contract violation; `git diff --check` passed.
+- **Propagation:** pending archon-setup snapshot refresh after merge
+
 ## 2026-06-01 - Agent lifecycle command surface
 
 - **Issue/PR:** #27 / (pending)
