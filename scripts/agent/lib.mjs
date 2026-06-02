@@ -70,3 +70,28 @@ export function classifyPruneCandidates({ worktrees, primaryPath, currentPath, d
   }
   return { remove, skipDirty, keep };
 }
+
+export function inferNextAction({ onDefaultBranch, dirty, hasPr, ahead = 0 }) {
+  if (onDefaultBranch) return 'run `npm run agent:start-task -- <issue>` to begin a task';
+  if (dirty) return 'commit your changes';
+  if (!hasPr && ahead > 0) return 'push and open a PR (jma-git-pr-lifecycle)';
+  if (hasPr) return 'address review / mark PR ready';
+  return 'no action — branch is in sync';
+}
+export function detectClaimsInstalled({ claimsFileExists }) {
+  return Boolean(claimsFileExists);
+}
+export function formatStatusReport(s) {
+  const prText = s.pr ? `#${s.pr.number} ${s.pr.state} ${s.pr.url}` : 'none';
+  return [
+    `Branch:         ${s.branch}`,
+    `Default branch: ${s.defaultBranch}`,
+    `Upstream:       ${s.upstream ?? 'none'}`,
+    `PR:             ${prText}`,
+    `Issue:          ${s.issue ? `#${s.issue}` : 'none'}`,
+    `Dirty:          ${s.dirty ? `yes (${s.dirtyCount} path${s.dirtyCount === 1 ? '' : 's'})` : 'clean'}`,
+    `Worktree:       ${s.worktreePath}`,
+    `Claims:         ${s.claimsInstalled ? 'installed' : 'not installed'}`,
+    `Next:           ${s.nextAction}`,
+  ].join('\n');
+}

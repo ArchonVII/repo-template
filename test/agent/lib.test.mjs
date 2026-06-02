@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { sanitizeSlug, buildBranchName, parseIssueFromBranch } from '../../scripts/agent/lib.mjs';
 import { parseGitStatusPorcelain, assertCheckoutIsSafe } from '../../scripts/agent/lib.mjs';
 import { parseWorktreeList, classifyPruneCandidates } from '../../scripts/agent/lib.mjs';
+import { inferNextAction, formatStatusReport, detectClaimsInstalled } from '../../scripts/agent/lib.mjs';
 
 test('sanitizeSlug lowercases, hyphenates, trims, caps at 6 words', () => {
   assert.equal(sanitizeSlug('Add OAuth Flow!'), 'add-oauth-flow');
@@ -75,4 +76,27 @@ test('classifyPruneCandidates keeps unmerged clean worktrees (work in progress)'
   });
   assert.equal(result.remove.length, 0);
   assert.equal(result.keep.length, 2);
+});
+
+test('inferNextAction prioritises dirty > open-PR > push > start-task', () => {
+  assert.match(inferNextAction({ onDefaultBranch: true }), /start-task/);
+  assert.match(inferNextAction({ onDefaultBranch: false, dirty: true }), /commit/i);
+  assert.match(inferNextAction({ onDefaultBranch: false, dirty: false, hasPr: false, ahead: 2 }), /open.*pr|push/i);
+  assert.match(inferNextAction({ onDefaultBranch: false, dirty: false, hasPr: true, ahead: 0 }), /review|merge|ready/i);
+});
+test('formatStatusReport renders every required field (#27 AC)', () => {
+  const out = formatStatusReport({
+    branch: 'agent/codex/27-x', defaultBranch: 'main', upstream: 'origin/agent/codex/27-x',
+    pr: { number: 5, url: 'http://x/5', state: 'OPEN' }, issue: '27', dirty: true, dirtyCount: 3,
+    worktreePath: '/repo-27-x', claimsInstalled: false, nextAction: 'commit your changes',
+  });
+  for (const needle of ['Branch:', 'Default branch:', 'Upstream:', 'PR:', 'Issue:', 'Dirty:', 'Worktree:', 'Claims:', 'Next:']) {
+    assert.match(out, new RegExp(needle));
+  }
+  assert.match(out, /#27/);
+  assert.match(out, /not installed/i);
+});
+test('detectClaimsInstalled is true only when the claims file exists', () => {
+  assert.equal(detectClaimsInstalled({ claimsFileExists: true }), true);
+  assert.equal(detectClaimsInstalled({ claimsFileExists: false }), false);
 });
