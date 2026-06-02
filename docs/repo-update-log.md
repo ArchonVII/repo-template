@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-02 - Branch retirement policy
+
+- **Issue/PR:** #31 / #pr
+- **Branch:** agent/codex/31-branch-retirement-policy
+- **Changed paths:** AGENTS.md, docs/repo-update-log.md
+- **What changed:** Clarified that each workflow phase gets one active branch/worktree/PR, and that a branch with a merged or closed PR is retired. Follow-up phases for the same issue now start from the default branch in a new phase-specific lane.
+- **Verification:** `git diff --check` and `git diff origin/main...HEAD --check` passed.
+- **Propagation:** pending archon-setup snapshots
+
 ## 2026-05-31 - Strict PR contract ready preflight
 
 - **Issue/PR:** #29 / #30
