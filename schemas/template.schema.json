@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ArchonVII/repo-template/schemas/template.schema.json",
+  "title": "Template Metadata",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "id",
+    "version",
+    "audience",
+    "status",
+    "owner",
+    "last_updated",
+    "output_type",
+    "quality_gate"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]+(\\.[a-z0-9_-]+)+$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "audience": {
+      "type": "string",
+      "enum": ["user", "internal", "developer", "reviewer", "agent"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "active", "deprecated", "retired"]
+    },
+    "owner": {
+      "type": "string"
+    },
+    "last_updated": {
+      "type": "string",
+      "format": "date"
+    },
+    "use_when": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "avoid_when": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "required_inputs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "optional_inputs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "output_type": {
+      "type": "string",
+      "enum": ["message", "report", "prompt", "github_artifact", "handoff", "partial"]
+    },
+    "style_compatible": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "sections": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["required", "optional", "suppressed"]
+      }
+    },
+    "quality_gate": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    }
+  }
+}

@@ -24,6 +24,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Verification:** `node --check scripts/pr-contract.mjs; node --check scripts/agent-close-preflight.mjs; node --check scripts/agent-pr-ready.mjs` passed; `npm test` passed (24/24); `npm run pr:contract -- --repo ArchonVII/repo-template --pr 35` correctly rejected a generic verification item in draft PR #35; `npm run agent:pr-ready -- --repo ArchonVII/repo-template --pr 35 --dry-run` correctly refused promotion for the same contract violation; `git diff --check` passed.
 - **Propagation:** pending archon-setup snapshot refresh after merge
 
+## 2026-06-02 - Centralized template system baseline
+
+- **Issue/PR:** #34 / (pending)
+- **Branch:** agent/codex/34-centralized-template-system
+- **Changed paths:** README.md, templates/**, styles/**, schemas/**, examples/**, .changelog/unreleased/34-centralized-template-system.md, docs/repo-update-log.md
+- **What changed:** Added the first centralized template-system baseline for reusable agent messages, prompt workflows, findings reports, GitHub artifacts, operations intake, shared partials, style skins, schemas, and filled examples. Root README now points to the template library.
+- **Verification:** `node -e "JSON.parse(...)"` for both schema files passed; metadata sweep passed for 30 `templates/**` and `styles/**` Markdown files; `git diff --check` passed; `npm test` passed (19/19).
+- **Propagation:** pending archon-setup snapshot refresh after merge
+
 ## 2026-06-01 - Agent lifecycle command surface
 
 - **Issue/PR:** #27 / (pending)
