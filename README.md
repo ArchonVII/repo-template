@@ -64,6 +64,27 @@ ALLOW_NO_ISSUE_REF=1 git commit ...
 The conventional-commit prefix is non-bypassable — reformat the message
 instead.
 
+## Agent PR readiness wrappers
+
+This template ships repo-owned wrappers for the strict ArchonVII PR
+ready-for-review contract:
+
+```bash
+npm run agent:close-preflight -- --repo OWNER/REPO --pr <number>
+npm run agent:pr-ready -- --repo OWNER/REPO --pr <number>
+```
+
+Agents must use these wrappers before promoting a draft PR. Do not run
+`gh pr ready` directly. The wrappers validate the PR title, body, branch, and
+changed files before allowing promotion.
+
+Useful local checks:
+
+```bash
+npm run pr:contract -- --repo OWNER/REPO --pr <number>
+npm run agent:pr-ready -- --repo OWNER/REPO --pr <number> --dry-run
+```
+
 Verify hook behavior after edits with:
 
 ```bash
