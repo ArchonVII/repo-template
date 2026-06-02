@@ -1,0 +1,13 @@
+{
+  "name": "repo-template",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test",
+    "agent:status": "node scripts/agent/status.mjs",
+    "agent:prune": "node scripts/agent/prune.mjs",
+    "agent:start-task": "node scripts/agent/start-task.mjs"
+  }
+}
