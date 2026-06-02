@@ -25,6 +25,8 @@ This repo includes a reusable template-system baseline for agent communication,
 prompt workflows, reports, GitHub artifacts, and operational handoffs.
 
 - Template structures live in [`templates/`](templates/README.md).
+- The current template inventory and future-template roadmap live in
+  [`docs/template-library-inventory.md`](docs/template-library-inventory.md).
 - Presentation styles live in [`styles/`](styles/plain.md).
 - Validation schemas live in [`schemas/`](schemas/template.schema.json).
 - Filled examples live in [`examples/`](examples/agent-final-response.example.md).
