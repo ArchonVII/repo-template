@@ -22,3 +22,20 @@ export function parseIssueFromBranch(branch) {
   const match = /^agent\/[^/]+\/(\d+)-/.exec(String(branch));
   return match ? match[1] : null;
 }
+
+export function parseGitStatusPorcelain(raw) {
+  if (!raw) return [];
+  return raw
+    .split('\0')
+    .filter(Boolean)
+    .map((record) => ({ status: record.slice(0, 2), path: record.slice(3) }));
+}
+export function assertCheckoutIsSafe({ statusEntries, currentBranch, defaultBranch }) {
+  if (statusEntries.length > 0) {
+    const sample = statusEntries.slice(0, 3).map((e) => e.path).join(', ');
+    throw new Error(`Working tree is dirty. Commit or stash before starting a task. Dirty: ${sample}`);
+  }
+  if (currentBranch && currentBranch !== defaultBranch) {
+    throw new Error(`start-task must run from the default branch (${defaultBranch}); current: ${currentBranch}`);
+  }
+}
