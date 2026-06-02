@@ -19,6 +19,19 @@ A paragraph or two of context. What problem does it solve? What's the shape of t
 
 Active development. Last updated: <YYYY-MM-DD>.
 
+## Template library
+
+This repo includes a reusable template-system baseline for agent communication,
+prompt workflows, reports, GitHub artifacts, and operational handoffs.
+
+- Template structures live in [`templates/`](templates/README.md).
+- Presentation styles live in [`styles/`](styles/plain.md).
+- Validation schemas live in [`schemas/`](schemas/template.schema.json).
+- Filled examples live in [`examples/`](examples/agent-final-response.example.md).
+
+Keep content structure separate from style. A template should work in plain
+Markdown first; visual skins such as BBS 1998 are applied afterward.
+
 ## License
 
 See [LICENSE](LICENSE).

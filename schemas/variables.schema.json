@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ArchonVII/repo-template/schemas/variables.schema.json",
+  "title": "Template Variables",
+  "type": "object",
+  "additionalProperties": {
+    "type": ["string", "array", "object", "number", "boolean", "null"]
+  },
+  "properties": {
+    "status": {
+      "type": "string",
+      "description": "Current state of the work or artifact."
+    },
+    "confidence": {
+      "type": "string",
+      "description": "Confidence level and, when useful, the reason for it."
+    },
+    "evidence_items": {
+      "type": ["string", "array"],
+      "description": "Sources, command results, references, or observations."
+    },
+    "assumptions": {
+      "type": ["string", "array"],
+      "description": "Assumptions that affected the output."
+    },
+    "next_actions": {
+      "type": ["string", "array"],
+      "description": "Owner-bound actions with expected results."
+    }
+  }
+}
