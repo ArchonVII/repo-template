@@ -16,6 +16,9 @@ export function sanitizeSlug(value) {
   return slug || null;
 }
 export function buildBranchName(agent, issue, slug) {
+  if (!agent || !issue || !slug) {
+    throw new Error(`buildBranchName: all arguments required (got agent=${agent}, issue=${issue}, slug=${slug})`);
+  }
   return `agent/${agent}/${issue}-${slug}`;
 }
 export function parseIssueFromBranch(branch) {
@@ -35,8 +38,8 @@ export function assertCheckoutIsSafe({ statusEntries, currentBranch, defaultBran
     const sample = statusEntries.slice(0, 3).map((e) => e.path).join(', ');
     throw new Error(`Working tree is dirty. Commit or stash before starting a task. Dirty: ${sample}`);
   }
-  if (currentBranch && currentBranch !== defaultBranch) {
-    throw new Error(`start-task must run from the default branch (${defaultBranch}); current: ${currentBranch}`);
+  if (!currentBranch || currentBranch !== defaultBranch) {
+    throw new Error(`start-task must run from the default branch (${defaultBranch}); current: ${currentBranch || '(detached HEAD)'}`);
   }
 }
 

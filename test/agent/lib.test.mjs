@@ -1,9 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeSlug, buildBranchName, parseIssueFromBranch } from '../../scripts/agent/lib.mjs';
-import { parseGitStatusPorcelain, assertCheckoutIsSafe } from '../../scripts/agent/lib.mjs';
-import { parseWorktreeList, classifyPruneCandidates } from '../../scripts/agent/lib.mjs';
-import { inferNextAction, formatStatusReport, detectClaimsInstalled } from '../../scripts/agent/lib.mjs';
+import { sanitizeSlug, buildBranchName, parseIssueFromBranch, parseGitStatusPorcelain, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, inferNextAction, formatStatusReport, detectClaimsInstalled } from '../../scripts/agent/lib.mjs';
 
 test('sanitizeSlug lowercases, hyphenates, trims, caps at 6 words', () => {
   assert.equal(sanitizeSlug('Add OAuth Flow!'), 'add-oauth-flow');
@@ -16,6 +13,9 @@ test('sanitizeSlug returns null when nothing usable', () => {
 });
 test('buildBranchName composes agent/<tool>/<issue>-<slug>', () => {
   assert.equal(buildBranchName('claude', '42', 'oauth-flow'), 'agent/claude/42-oauth-flow');
+});
+test('buildBranchName throws when slug is null (from sanitizeSlug sentinel)', () => {
+  assert.throws(() => buildBranchName('claude', '42', null), /required/i);
 });
 test('parseIssueFromBranch extracts the issue number or null', () => {
   assert.equal(parseIssueFromBranch('agent/codex/27-agent-lifecycle'), '27');
@@ -39,6 +39,9 @@ test('assertCheckoutIsSafe throws when not on the default branch', () => {
 });
 test('assertCheckoutIsSafe passes when clean and on default branch', () => {
   assert.doesNotThrow(() => assertCheckoutIsSafe({ statusEntries: [], currentBranch: 'main', defaultBranch: 'main' }));
+});
+test('assertCheckoutIsSafe throws on detached HEAD (empty currentBranch)', () => {
+  assert.throws(() => assertCheckoutIsSafe({ statusEntries: [], currentBranch: '', defaultBranch: 'main' }), /default branch/i);
 });
 
 const PORCELAIN = [
@@ -78,7 +81,23 @@ test('classifyPruneCandidates keeps unmerged clean worktrees (work in progress)'
   assert.equal(result.keep.length, 2);
 });
 
-test('inferNextAction prioritises dirty > open-PR > push > start-task', () => {
+test('parseWorktreeList handles a detached-HEAD entry (no branch line) as branch:null', () => {
+  const raw = ['worktree /repo', 'HEAD aaa', 'branch refs/heads/main', '', 'worktree /repo-det', 'HEAD bbb', 'detached', ''].join('\n');
+  const list = parseWorktreeList(raw);
+  assert.equal(list.length, 2);
+  assert.deepEqual(list[1], { path: '/repo-det', branch: null });
+});
+
+test('classifyPruneCandidates never removes a detached-HEAD worktree (null branch is protected)', () => {
+  const raw = ['worktree /repo', 'HEAD aaa', 'branch refs/heads/main', '', 'worktree /repo-det', 'HEAD bbb', 'detached', ''].join('\n');
+  const result = classifyPruneCandidates({
+    worktrees: parseWorktreeList(raw), primaryPath: '/repo', currentPath: '/repo', defaultBranch: 'main',
+    mergedBranches: new Set(), dirtyPaths: new Set(),
+  });
+  assert.ok(result.remove.every((w) => w.path !== '/repo-det'));
+});
+
+test('inferNextAction: onDefaultBranch takes precedence, else dirty > push > review', () => {
   assert.match(inferNextAction({ onDefaultBranch: true }), /start-task/);
   assert.match(inferNextAction({ onDefaultBranch: false, dirty: true }), /commit/i);
   assert.match(inferNextAction({ onDefaultBranch: false, dirty: false, hasPr: false, ahead: 2 }), /open.*pr|push/i);
