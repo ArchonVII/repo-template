@@ -39,3 +39,34 @@ export function assertCheckoutIsSafe({ statusEntries, currentBranch, defaultBran
     throw new Error(`start-task must run from the default branch (${defaultBranch}); current: ${currentBranch}`);
   }
 }
+
+export function parseWorktreeList(porcelain) {
+  const list = [];
+  let current = null;
+  for (const line of String(porcelain).split('\n')) {
+    if (line.startsWith('worktree ')) current = { path: line.slice('worktree '.length).trim(), branch: null };
+    else if (line.startsWith('branch ')) {
+      if (current) current.branch = line.slice('branch refs/heads/'.length).trim();
+    } else if (line === '' && current) { list.push(current); current = null; }
+  }
+  if (current) list.push(current);
+  return list;
+}
+
+// Prune safety contract (#27 AC): remove ONLY worktrees that are
+//   (a) not the primary checkout, (b) not the current checkout,
+//   (c) not the default branch, (d) on an agent/* branch already merged
+//       into the default branch, AND (e) clean (no uncommitted changes).
+// Anything dirty is skipped and reported. Anything unmerged is kept.
+export function classifyPruneCandidates({ worktrees, primaryPath, currentPath, defaultBranch, mergedBranches, dirtyPaths }) {
+  const remove = [], skipDirty = [], keep = [];
+  for (const wt of worktrees) {
+    // Protected worktrees are never touched and are not tracked in keep/remove/skipDirty
+    const isProtected = wt.path === primaryPath || wt.path === currentPath || wt.branch === defaultBranch || !wt.branch?.startsWith('agent/');
+    if (isProtected) continue;
+    if (dirtyPaths.has(wt.path)) { skipDirty.push(wt); continue; }
+    if (mergedBranches.has(wt.branch)) { remove.push(wt); continue; }
+    keep.push(wt);
+  }
+  return { remove, skipDirty, keep };
+}
