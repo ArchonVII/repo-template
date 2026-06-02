@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-02 - Template library inventory
+
+- **Issue/PR:** #38 / (pending)
+- **Branch:** agent/codex/38-template-inventory-usage-doc
+- **Changed paths:** README.md, docs/template-library-inventory.md, .changelog/unreleased/38-template-inventory-usage-doc.md, docs/repo-update-log.md
+- **What changed:** Added a durable inventory of current template-system files, their repository paths, current use order, and candidate future templates. Root README now links to the inventory from the Template library section.
+- **Verification:** `git diff --check` passed with line-ending warnings only; inventory path check validated 35 current paths; README link check found `docs/template-library-inventory.md`; `npm test` passed (24/24).
+- **Propagation:** pending archon-setup snapshot refresh after merge
+
 ## 2026-06-02 - Strict PR ready wrapper scripts
 
 - **Issue/PR:** #36 / (pending)
