@@ -31,8 +31,8 @@ This repo uses the **checkout-role** model, enforced by `.githooks/pre-commit`:
   git worktree add -b agent/<tool>/<issue>-<slug> ../<repo>-<issue>-<slug>
   ```
 
-  Commit, push, and open the PR from that folder. Remove it when the PR merges:
-  `git worktree remove ../<repo>-<issue>-<slug>`.
+  Commit, push, and open the PR from that folder. After the PR merges, retire the
+  worktree with **`npm run agent:prune`** (see below) — not bare `git worktree remove`.
 - **Do not run `git switch -c` in the primary checkout.** A feature-branch commit
   there is blocked and redirected to `git worktree add`.
 - Unsure where you are? Run `bash .githooks/scripts/checkout-doctor.sh`.
@@ -47,8 +47,13 @@ Repo-owned helpers (zero-dep, `node`):
   default branch, or if the issue already has a branch.
 - `npm run agent:status` — branch, default branch, upstream, PR, issue, dirty state,
   worktree path, claims (if installed), and the next recommended action.
-- `npm run agent:prune` — remove only merged + clean agent worktrees/branches; never
-  touches dirty work or the primary/current checkout. Idempotent.
+- `npm run agent:prune` — **the way to retire finished worktrees.** Removes every merged +
+  clean agent worktree/branch in one sweep; never touches dirty work, locked worktrees, or
+  the primary/current checkout. Survives Windows `git worktree remove` failures: when a
+  worktree still holds ignored build residue (`node_modules/`, `dist/`) or long paths, bare
+  `git worktree remove` aborts with "Directory not empty" and strands a half-removed lane,
+  whereas `agent:prune` finishes the delete and skips any single un-removable lane instead
+  of aborting the batch. Idempotent.
 
 Optional capabilities (claims #14, close-scan #28) are reported as "not installed" when absent.
 
