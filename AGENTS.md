@@ -68,7 +68,16 @@ Safe owner-maintenance paths are:
 - image files (`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`)
 - `.changelog/**`
 
-The lane is add-only. If any unsafe file is staged or any file is modified, deleted, renamed, or copied, stop and report. Unsafe paths include `README.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/**`, `.githooks/**`, `.claude/**`, `.agent/schema/**`, `package*.json`, `src/**`, `scripts/**`, `docs/process/**`, and `docs/architecture/**`.
+The lane is otherwise add-only. If any unsafe file is staged, or any non-ledger file is modified, deleted, renamed, or copied, stop and report. Unsafe paths include `README.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/**`, `.githooks/**`, `.claude/**` (except the named append-log ledgers below), `.agent/schema/**`, `package*.json`, `src/**`, `scripts/**`, `docs/process/**`, and `docs/architecture/**`.
+
+### Append-log ledgers
+
+A narrow, named set of agent-local note files may be **added or modified** directly on `main` — standing conventions write to them constantly, so a full issue → PR lane for each one-line update is friction with no safety benefit:
+
+- `.claude/noticed.md` — per-repo observation log (the `Observations` convention)
+- `.claude/napkin.md` — per-repo curated runbook (the napkin skill, curated each session)
+
+These need no `(owner)` scope — any Conventional Commit subject works (e.g. `chore(noticed): flush observations`), and the issue-ref requirement is waived when every staged path is a ledger. Renames, copies, and deletes of a ledger still require the normal branch/PR lane. The allowlist lives in `.githooks/scripts/owner-maintenance.sh` (`owner_maintenance_is_append_log`); extend it only for a file a documented convention mandates frequent low-ceremony writes to.
 
 ## Anomaly triage
 
