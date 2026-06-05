@@ -7,6 +7,31 @@ owner_maintenance_subject() {
     [[ "${subject}" =~ ^(docs|chore)\(owner\)!?:[[:space:]].+ ]]
 }
 
+# Append-log ledgers: agent-local note files that standing agent conventions
+# tell every session to write to frequently, so a full issue->PR lane (or an
+# audited bypass) for each one-line update is friction with no safety benefit.
+# These named files may be Added OR Modified directly on main under the Owner
+# Maintenance Lane. The allowlist is explicit and narrow on purpose — add a path
+# only when a documented convention mandates frequent low-ceremony writes to it.
+#
+#   .claude/noticed.md — per-repo observation log (CLAUDE.md "Observations":
+#                        "append one-liner to .claude/noticed.md")
+#   .claude/napkin.md  — per-repo curated runbook (napkin skill, curated each
+#                        session)
+#
+# Source: ArchonVII owner conventions; repo-template#50 (page-gm incident
+# gm-20260605-113318 — flushing .claude/noticed.md required a double bypass:
+# ALLOW_MAIN_COMMIT=1 + ALLOW_NO_ISSUE_REF=1).
+owner_maintenance_is_append_log() {
+    local path="${1:-}"
+    case "${path}" in
+        .claude/noticed.md|.claude/napkin.md)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
 owner_maintenance_staged_paths_safe() {
     local staged
     staged="$(git diff --cached --name-status --diff-filter=ACMRTD 2>/dev/null || true)"
@@ -16,7 +41,21 @@ owner_maintenance_staged_paths_safe() {
     while IFS=$'\t' read -r status path rest; do
         [[ -n "${status}" ]] || continue
 
-        # Owner Maintenance Lane is add-only. Renames, copies, deletes, and
+        # Append-log ledgers may be added OR modified directly on main. Renames,
+        # copies, and deletes still require the normal branch/PR lifecycle, so a
+        # ledger can't be relocated or removed without review.
+        if owner_maintenance_is_append_log "${path}"; then
+            case "${status}" in
+                A|M)
+                    continue
+                    ;;
+                *)
+                    return 1
+                    ;;
+            esac
+        fi
+
+        # Everything else in the lane is add-only. Renames, copies, deletes, and
         # modifications require the normal branch/PR lifecycle.
         if [[ "${status}" != "A" ]]; then
             return 1

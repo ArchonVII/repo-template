@@ -6,11 +6,14 @@
 #
 #   1. Conventional-commit prefix from a fixed allow-list.
 #   2. Reference to a tracked issue or task — `(#NNN)` or `task/<id>` —
-#      unless the commit is scoped to throwaway scratch work or the
-#      Owner Maintenance Lane
-#      (`chore(scratch):` / `docs(scratch):` prefix, OR every staged
-#      path lives under `docs/scratch/**`; Owner Maintenance requires
-#      `docs(owner):` / `chore(owner):` plus add-only safe maintenance paths).
+#      unless the commit is scoped to throwaway scratch work, an append-log
+#      ledger, or the Owner Maintenance Lane:
+#        - scratch: `chore(scratch):` / `docs(scratch):` prefix, OR every
+#          staged path lives under `docs/scratch/**`;
+#        - append-log ledger: every staged path is a named ledger
+#          (`.claude/noticed.md`, `.claude/napkin.md`) — any subject;
+#        - Owner Maintenance: `docs(owner):` / `chore(owner):` plus add-only
+#          safe maintenance paths.
 #
 # Bypass for the issue-ref rule (logged in commit metadata via the env
 # var name itself — reviewers can grep for it):
@@ -87,6 +90,27 @@ if [[ "${is_scratch}" -eq 1 ]]; then
     exit 0
 fi
 
+# --- Append-log ledger exemption ---------------------------------------
+# Agent-local note ledgers (see owner_maintenance_is_append_log in
+# owner-maintenance.sh) are written to frequently by standing conventions.
+# When *every* staged path is such a ledger, skip the issue-ref requirement —
+# the path allowlist is the safety boundary, exactly like the docs/scratch/**
+# lane above. Any conventional-commit subject is fine; no (owner) scope needed.
+ledger_staged="$(git diff --cached --name-only --diff-filter=ACMRTD 2>/dev/null || true)"
+if [[ -n "${ledger_staged}" ]]; then
+    all_ledger=1
+    while IFS= read -r ledger_path; do
+        [[ -n "${ledger_path}" ]] || continue
+        if ! owner_maintenance_is_append_log "${ledger_path}"; then
+            all_ledger=0
+            break
+        fi
+    done <<< "${ledger_staged}"
+    if [[ "${all_ledger}" -eq 1 ]]; then
+        exit 0
+    fi
+fi
+
 # --- Owner Maintenance Lane exemption ----------------------------------
 # This lane is intentionally narrow: lightweight direct-main maintenance with
 # add-only safe files and an explicit docs(owner): / chore(owner): subject.
@@ -136,6 +160,10 @@ Acceptable references (anywhere in the message body or trailers):
 Scratch-scope exemptions:
   - Message prefixed chore(scratch): or docs(scratch):
   - All staged paths under docs/scratch/
+
+Append-log ledger exemption (any conventional-commit subject):
+  - All staged paths are append-log ledgers (.claude/noticed.md,
+    .claude/napkin.md) — added or modified
 
 Owner Maintenance exemption:
   - Message prefixed docs(owner): or chore(owner):

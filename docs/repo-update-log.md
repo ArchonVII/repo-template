@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-05 - Owner Maintenance Lane append-log ledgers
+
+- **Issue/PR:** #50 / (pending)
+- **Branch:** agent/claude/50-owner-append-log-ledgers
+- **Changed paths:** .githooks/scripts/owner-maintenance.sh, .githooks/scripts/test-owner-maintenance.sh, .githooks/commit-msg, .githooks/pre-commit, AGENTS.md, .changelog/unreleased/50-owner-append-log-ledgers.md, docs/repo-update-log.md
+- **What changed:** Added a narrow, named append-log ledger allowlist (`.claude/noticed.md`, `.claude/napkin.md`) that may be added OR modified directly on `main` under the Owner Maintenance Lane, with the issue-ref requirement waived when every staged path is a ledger. All other paths keep the strict add-only + unsafe-set rules; ledger renames/copies/deletes still require a PR. Also corrected stale `docs/research|notes|assets` help text to `docs/**` (aligning with #46).
+- **Verification:** `bash .githooks/scripts/test-owner-maintenance.sh` passed (incl. 7 new ledger cases); `npm test` passed (84/84); `bash -n .githooks/commit-msg .githooks/pre-commit .githooks/scripts/*.sh` passed.
+- **Propagation:** pending — consumer repos (jma-history et al.) pick up the new lane on the next archon-ecosystem-sync / archon-setup snapshot refresh; tracked by repo-template#50.
+
 ## 2026-06-04 - Doc Sweep-Up capability (Phase 2)
 
 - **Issue/PR:** #48 / (pending)
