@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-05 - Owner maintenance docs safe paths
+
+- **Issue/PR:** #46 / (pending)
+- **Branch:** agent/codex/46-owner-docs-safe-paths
+- **Changed paths:** AGENTS.md, README.md, CHANGELOG.md, .githooks/scripts/owner-maintenance.sh, .githooks/scripts/test-owner-maintenance.sh, docs/repo-update-log.md
+- **What changed:** Broadened the Owner Maintenance Lane safe set so add-only `docs/**` files are safe by default, while explicit unsafe docs paths such as `docs/process/**` and `docs/architecture/**` still require normal PR lanes.
+- **Verification:** `bash .githooks/scripts/test-owner-maintenance.sh` passed; `bash -n .githooks/commit-msg .githooks/pre-commit .githooks/scripts/*.sh` passed; `git diff --check` passed with line-ending warnings only.
+- **Propagation:** pending archon-setup snapshot refresh after merge
+
 ## 2026-06-04 - Reference precision contract clause
 
 - **Issue/PR:** #44 / (pending)

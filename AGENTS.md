@@ -63,9 +63,7 @@ When the working tree contains only add-only safe maintenance files, agents must
 
 Safe owner-maintenance paths are:
 
-- `docs/research/**`
-- `docs/notes/**`
-- `docs/assets/**`
+- `docs/**`
 - image files (`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`)
 - `.changelog/**`
 
