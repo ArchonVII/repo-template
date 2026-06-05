@@ -54,8 +54,8 @@ finding F18 in `docs/phase2/findings.md`):
 - **`pre-commit`** — rejects direct commits to `main` / `master`.
   Exempt during in-progress rebase / merge / cherry-pick. Also allows
   Owner Maintenance Lane commits when every staged path is add-only and
-  safe (`docs/research/**`, `docs/notes/**`, `docs/assets/**`, image
-  files, or `.changelog/**`).
+  safe (`docs/**`, image files, or `.changelog/**`; explicit unsafe paths
+  such as `docs/process/**` and `docs/architecture/**` still require PRs).
 
 Install after cloning:
 

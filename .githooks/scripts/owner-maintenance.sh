@@ -46,7 +46,7 @@ owner_maintenance_path_safe() {
     esac
 
     case "${path}" in
-        docs/research/*|docs/notes/*|docs/assets/*|.changelog/*)
+        docs/*|.changelog/*)
             return 0
             ;;
         *.png|*.jpg|*.jpeg|*.gif|*.webp|*.svg)
