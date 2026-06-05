@@ -168,6 +168,12 @@ For PRs that don't warrant a CHANGELOG entry (refactor, tests, chore), apply the
 - Stage specific files: `git add <path> <path>`. Never `git add -A` or `git add .` — that's how `.env` files get committed.
 - Don't bypass hooks (`--no-verify`, `--no-gpg-sign`). If a hook fails, fix the underlying issue.
 
+## Reference precision
+
+In durable written artifacts — decision logs, ADRs, PR bodies, `docs/repo-update-log.md`, and verification notes — name git refs unambiguously. When a statement turns on the local-vs-remote distinction, write `origin/main` for the remote branch and "the local default branch" (or a specific local ref) for local state. Never write bare `main` when the local-vs-remote distinction is load-bearing: it reads as both and undermines the rule being recorded (e.g. "verify against `origin/main`").
+
+This generalizes: when a workflow rule turns on a distinction — ref, environment, scope, or time — use the fully-qualified term in the artifact, not the shorthand.
+
 ## When stuck
 
 If the same approach fails twice, stop. Switch tactics, ask the user, or document what you tried in the issue.

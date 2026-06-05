@@ -33,6 +33,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Verification:** `bash .githooks/scripts/test-owner-maintenance.sh` passed; `bash -n .githooks/commit-msg .githooks/pre-commit .githooks/scripts/*.sh` passed; `git diff --check` passed with line-ending warnings only.
 - **Propagation:** pending archon-setup snapshot refresh after merge
 
+## 2026-06-04 - Reference precision contract clause
+
+- **Issue/PR:** #44 / (pending)
+- **Branch:** agent/claude/44-reference-precision
+- **Changed paths:** AGENTS.md, docs/repo-update-log.md
+- **What changed:** Added a `## Reference precision` clause to the cross-tool agent contract requiring unambiguous git refs in durable artifacts (`origin/main` for the remote branch, "the local default branch" for local state; no bare `main` when the local-vs-remote distinction is load-bearing), generalized to other distinction-bearing terms. Prompted by a Copilot PR review flagging an ambiguous bare `main` in a decision-log entry.
+- **Verification:** docs-only contract change; `git diff --check` and `git diff origin/main...HEAD --check` clean; `npm test` (node:test) passes.
+- **Propagation:** pending archon-setup snapshot refresh (`archon-setup/src/snapshots/repo-template/AGENTS.md`) after merge
+
 ## 2026-06-02 - Template library inventory
 
 - **Issue/PR:** #38 / (pending)
