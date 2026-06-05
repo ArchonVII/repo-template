@@ -33,6 +33,7 @@ This repo uses the **checkout-role** model, enforced by `.githooks/pre-commit`:
 
   Commit, push, and open the PR from that folder. After the PR merges, retire the
   worktree with **`npm run agent:prune`** (see below) — not bare `git worktree remove`.
+
 - **Do not run `git switch -c` in the primary checkout.** A feature-branch commit
   there is blocked and redirected to `git worktree add`.
 - Unsure where you are? Run `bash .githooks/scripts/checkout-doctor.sh`.
@@ -168,6 +169,12 @@ For PRs that don't warrant a CHANGELOG entry (refactor, tests, chore), apply the
 - Stage specific files: `git add <path> <path>`. Never `git add -A` or `git add .` — that's how `.env` files get committed.
 - Don't bypass hooks (`--no-verify`, `--no-gpg-sign`). If a hook fails, fix the underlying issue.
 
+## Reference precision
+
+In durable written artifacts — decision logs, ADRs, PR bodies, `docs/repo-update-log.md`, and verification notes — name git refs unambiguously. When a statement turns on the local-vs-remote distinction, write `origin/main` for the remote branch and "the local default branch" (or a specific local ref) for local state. Never write bare `main` when the local-vs-remote distinction is load-bearing: it reads as both and undermines the rule being recorded (e.g. "verify against `origin/main`").
+
+This generalizes: when a workflow rule turns on a distinction — ref, environment, scope, or time — use the fully-qualified term in the artifact, not the shorthand.
+
 ## When stuck
 
 If the same approach fails twice, stop. Switch tactics, ask the user, or document what you tried in the issue.
@@ -185,3 +192,22 @@ When coordination is needed, use this repo's local coordination area: `.agent/co
 handoffs belong there — or in another repo-local location this repo documents. The active
 board template lives at `.agent/coordination/board.md` and is opt-in; delete it if this
 repo does not do active multi-agent coordination.
+
+## Doc Sweep-Up
+
+Agents recover and preserve docs across sessions. Run `scripts/doc-sweep/` at session
+boundaries; full spec: `docs/agent-process/doc-sweep.md`.
+
+- **sweep-on-open:** at session start, run `node scripts/doc-sweep/sweep.mjs --repo <repo>` to
+  surface add-only docs that prior/dead sessions stranded; commit the provably-safe ones
+  (`--apply`), leave+log the rest.
+- **flush-on-close:** before ending a session, commit your own pending add-only docs (after the
+  secret scan) so they are never stranded.
+- **Allow-list only:** new add-only docs under `docs/**` (except `docs/process/**`,
+  `docs/architecture/**`), `.changelog/**`, `.html-artifacts/**`, and image assets. Never sweep
+  code, CI, hooks, `.claude/`, `AGENTS.md`/`CLAUDE.md`/`README.md`, or `package*.json`.
+- **Liveness:** auto-commit only docs stranded on the primary default branch (stale >12h) OR a
+  worktree doc whose coordination claim is EXPIRED. Active claim → never touch. No claim, fresh
+  (<12h), detached HEAD, gitignored, symlink, or any ambiguity → leave + log, never force.
+- **Safety:** the sweep takes a lock and files its own claim; selective file-by-file staging
+  only; deterministic secret scan before any commit; never push recovery branches.
