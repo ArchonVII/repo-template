@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-05 - Owner maintenance docs safe paths
+
+- **Issue/PR:** #46 / (pending)
+- **Branch:** agent/codex/46-owner-docs-safe-paths
+- **Changed paths:** AGENTS.md, README.md, CHANGELOG.md, .githooks/scripts/owner-maintenance.sh, .githooks/scripts/test-owner-maintenance.sh, docs/repo-update-log.md
+- **What changed:** Broadened the Owner Maintenance Lane safe set so add-only `docs/**` files are safe by default, while explicit unsafe docs paths such as `docs/process/**` and `docs/architecture/**` still require normal PR lanes.
+- **Verification:** `bash .githooks/scripts/test-owner-maintenance.sh` passed; `bash -n .githooks/commit-msg .githooks/pre-commit .githooks/scripts/*.sh` passed; `git diff --check` passed with line-ending warnings only.
+- **Propagation:** pending archon-setup snapshot refresh after merge
+
 ## 2026-06-02 - Branch retirement policy
 
 - **Issue/PR:** #31 / #pr
@@ -23,6 +32,42 @@ This log records agent-visible repository changes that should be easy to audit l
 - **What changed:** Clarified that each workflow phase gets one active branch/worktree/PR, and that a branch with a merged or closed PR is retired. Follow-up phases for the same issue now start from the default branch in a new phase-specific lane.
 - **Verification:** `git diff --check` and `git diff origin/main...HEAD --check` passed.
 - **Propagation:** pending archon-setup snapshots
+
+## 2026-06-02 - Template library inventory
+
+- **Issue/PR:** #38 / (pending)
+- **Branch:** agent/codex/38-template-inventory-usage-doc
+- **Changed paths:** README.md, docs/template-library-inventory.md, .changelog/unreleased/38-template-inventory-usage-doc.md, docs/repo-update-log.md
+- **What changed:** Added a durable inventory of current template-system files, their repository paths, current use order, and candidate future templates. Root README now links to the inventory from the Template library section.
+- **Verification:** `git diff --check` passed with line-ending warnings only; inventory path check validated 35 current paths; README link check found `docs/template-library-inventory.md`; `npm test` passed (24/24).
+- **Propagation:** pending archon-setup snapshot refresh after merge
+
+## 2026-06-02 - Strict PR ready wrapper scripts
+
+- **Issue/PR:** #36 / (pending)
+- **Branch:** agent/codex/36-strict-pr-ready-wrappers
+- **Changed paths:** package.json, scripts/pr-contract.mjs, scripts/agent-close-preflight.mjs, scripts/agent-pr-ready.mjs, test/pr-contract.test.mjs, README.md, .changelog/unreleased/36-strict-pr-ready-wrappers.md, docs/repo-update-log.md
+- **What changed:** Added repo-owned `agent:close-preflight`, `agent:pr-ready`, and `pr:contract` commands using the shared ArchonVII PR contract implementation, plus node:test coverage and README guidance.
+- **Verification:** `node --check scripts/pr-contract.mjs; node --check scripts/agent-close-preflight.mjs; node --check scripts/agent-pr-ready.mjs` passed; `npm test` passed (24/24); `npm run pr:contract -- --repo ArchonVII/repo-template --pr 35` correctly rejected a generic verification item in draft PR #35; `npm run agent:pr-ready -- --repo ArchonVII/repo-template --pr 35 --dry-run` correctly refused promotion for the same contract violation; `git diff --check` passed.
+- **Propagation:** pending archon-setup snapshot refresh after merge
+
+## 2026-06-02 - Centralized template system baseline
+
+- **Issue/PR:** #34 / (pending)
+- **Branch:** agent/codex/34-centralized-template-system
+- **Changed paths:** README.md, templates/**, styles/**, schemas/**, examples/**, .changelog/unreleased/34-centralized-template-system.md, docs/repo-update-log.md
+- **What changed:** Added the first centralized template-system baseline for reusable agent messages, prompt workflows, findings reports, GitHub artifacts, operations intake, shared partials, style skins, schemas, and filled examples. Root README now points to the template library.
+- **Verification:** `node -e "JSON.parse(...)"` for both schema files passed; metadata sweep passed for 30 `templates/**` and `styles/**` Markdown files; `git diff --check` passed; `npm test` passed (19/19).
+- **Propagation:** pending archon-setup snapshot refresh after merge
+
+## 2026-06-01 - Agent lifecycle command surface
+
+- **Issue/PR:** #27 / (pending)
+- **Branch:** agent/claude/27-agent-lifecycle-commands
+- **Changed paths:** package.json, package-lock.json, scripts/agent/lib.mjs, scripts/agent/start-task.mjs, scripts/agent/status.mjs, scripts/agent/prune.mjs, test/agent/lib.test.mjs, .github/workflows/repo-required-gate.yml, AGENTS.md, .gitignore, .changelog/unreleased/27-agent-lifecycle-commands.md
+- **What changed:** Added repo-owned agent lifecycle commands (`agent:start-task`, `agent:status`, `agent:prune`) as a zero-dependency baseline (repo-template's first `package.json`), with pure tested logic in `scripts/agent/lib.mjs` (19 `node --test` cases) and thin git/gh shims. Switched the required gate from the `minimal` to the `node` stack so `language-ci` runs `npm ci` + `npm test`. Documented the commands in AGENTS.md.
+- **Verification:** `npm ci` (0 deps) + `npm test` (19/19) pass; `node --check` on all three shims; `agent:start-task` happy-path + guard smokes verified end-to-end; `agent:prune` removal/dirty-skip safety verified end-to-end (removed merged+clean, skipped merged+dirty, kept unmerged).
+- **Propagation:** pending archon-setup#64 (downstream snapshot/install/audit of the lifecycle baseline)
 
 ## 2026-05-31 - Strict PR contract ready preflight
 

@@ -19,6 +19,21 @@ A paragraph or two of context. What problem does it solve? What's the shape of t
 
 Active development. Last updated: <YYYY-MM-DD>.
 
+## Template library
+
+This repo includes a reusable template-system baseline for agent communication,
+prompt workflows, reports, GitHub artifacts, and operational handoffs.
+
+- Template structures live in [`templates/`](templates/README.md).
+- The current template inventory and future-template roadmap live in
+  [`docs/template-library-inventory.md`](docs/template-library-inventory.md).
+- Presentation styles live in [`styles/`](styles/plain.md).
+- Validation schemas live in [`schemas/`](schemas/template.schema.json).
+- Filled examples live in [`examples/`](examples/agent-final-response.example.md).
+
+Keep content structure separate from style. A template should work in plain
+Markdown first; visual skins such as BBS 1998 are applied afterward.
+
 ## License
 
 See [LICENSE](LICENSE).
@@ -39,8 +54,8 @@ finding F18 in `docs/phase2/findings.md`):
 - **`pre-commit`** — rejects direct commits to `main` / `master`.
   Exempt during in-progress rebase / merge / cherry-pick. Also allows
   Owner Maintenance Lane commits when every staged path is add-only and
-  safe (`docs/research/**`, `docs/notes/**`, `docs/assets/**`, image
-  files, or `.changelog/**`).
+  safe (`docs/**`, image files, or `.changelog/**`; explicit unsafe paths
+  such as `docs/process/**` and `docs/architecture/**` still require PRs).
 
 Install after cloning:
 
@@ -63,6 +78,27 @@ ALLOW_NO_ISSUE_REF=1 git commit ...
 
 The conventional-commit prefix is non-bypassable — reformat the message
 instead.
+
+## Agent PR readiness wrappers
+
+This template ships repo-owned wrappers for the strict ArchonVII PR
+ready-for-review contract:
+
+```bash
+npm run agent:close-preflight -- --repo OWNER/REPO --pr <number>
+npm run agent:pr-ready -- --repo OWNER/REPO --pr <number>
+```
+
+Agents must use these wrappers before promoting a draft PR. Do not run
+`gh pr ready` directly. The wrappers validate the PR title, body, branch, and
+changed files before allowing promotion.
+
+Useful local checks:
+
+```bash
+npm run pr:contract -- --repo OWNER/REPO --pr <number>
+npm run agent:pr-ready -- --repo OWNER/REPO --pr <number> --dry-run
+```
 
 Verify hook behavior after edits with:
 
