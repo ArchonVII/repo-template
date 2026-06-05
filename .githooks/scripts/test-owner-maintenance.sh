@@ -66,6 +66,11 @@ expect_success "commit-msg-owner-docs" run_in_tmp "${commit_msg_hook}" "$(messag
 expect_success "pre-commit-owner-docs" run_in_tmp "${pre_commit_hook}"
 
 reset_tmp_repo
+stage_file "docs/archon/specs/capture-pane.md"
+expect_success "commit-msg-owner-generic-docs" run_in_tmp "${commit_msg_hook}" "$(message_file "docs(owner): add capture spec")"
+expect_success "pre-commit-owner-generic-docs" run_in_tmp "${pre_commit_hook}"
+
+reset_tmp_repo
 stage_file "docs/assets/screenshot.png" "png"
 expect_success "commit-msg-owner-chore" run_in_tmp "${commit_msg_hook}" "$(message_file "chore(owner): add screenshot")"
 expect_success "pre-commit-owner-image" run_in_tmp "${pre_commit_hook}"
@@ -82,6 +87,10 @@ expect_failure "pre-commit-owner-modify" run_in_tmp "${pre_commit_hook}"
 reset_tmp_repo
 stage_file "README.md" "unsafe"
 expect_failure "pre-commit-owner-unsafe" run_in_tmp "${pre_commit_hook}"
+
+reset_tmp_repo
+stage_file "docs/process/policy.md" "unsafe"
+expect_failure "pre-commit-owner-unsafe-docs-process" run_in_tmp "${pre_commit_hook}"
 
 reset_tmp_repo
 stage_file "docs/research/no-owner-scope.md"
