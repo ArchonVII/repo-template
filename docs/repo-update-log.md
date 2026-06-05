@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-04 - Doc Sweep-Up capability (Phase 2)
+
+- **Issue/PR:** #48 / (pending)
+- **Branch:** agent/claude/48-doc-sweep
+- **Changed paths:** AGENTS.md, scripts/doc-sweep/{lib,git,sweep}.mjs (+ matching `*.test.mjs`), docs/agent-process/doc-sweep.md, .changelog/unreleased/48-doc-sweep.md, docs/repo-update-log.md
+- **What changed:** Ported the Doc Sweep-Up capability into repo-template (its canonical home) from the `archon` pilot: a depless `node:test` runner, the full standard/design spec, and the `## Doc Sweep-Up` contract section.
+- **Verification:** `node --test "scripts/doc-sweep/*.test.mjs"` passed (60/60); full `npm test` passed (84/84); `git diff --cached --check` clean (line-ending warnings only).
+- **Propagation:** pending archon-setup snapshot refresh after merge
+
 ## 2026-06-05 - Owner maintenance docs safe paths
 
 - **Issue/PR:** #46 / (pending)

@@ -185,3 +185,22 @@ When coordination is needed, use this repo's local coordination area: `.agent/co
 handoffs belong there — or in another repo-local location this repo documents. The active
 board template lives at `.agent/coordination/board.md` and is opt-in; delete it if this
 repo does not do active multi-agent coordination.
+
+## Doc Sweep-Up
+
+Agents recover and preserve docs across sessions. Run `scripts/doc-sweep/` at session
+boundaries; full spec: `docs/agent-process/doc-sweep.md`.
+
+- **sweep-on-open:** at session start, run `node scripts/doc-sweep/sweep.mjs --repo <repo>` to
+  surface add-only docs that prior/dead sessions stranded; commit the provably-safe ones
+  (`--apply`), leave+log the rest.
+- **flush-on-close:** before ending a session, commit your own pending add-only docs (after the
+  secret scan) so they are never stranded.
+- **Allow-list only:** new add-only docs under `docs/**` (except `docs/process/**`,
+  `docs/architecture/**`), `.changelog/**`, `.html-artifacts/**`, and image assets. Never sweep
+  code, CI, hooks, `.claude/`, `AGENTS.md`/`CLAUDE.md`/`README.md`, or `package*.json`.
+- **Liveness:** auto-commit only docs stranded on the primary default branch (stale >12h) OR a
+  worktree doc whose coordination claim is EXPIRED. Active claim → never touch. No claim, fresh
+  (<12h), detached HEAD, gitignored, symlink, or any ambiguity → leave + log, never force.
+- **Safety:** the sweep takes a lock and files its own claim; selective file-by-file staging
+  only; deterministic secret scan before any commit; never push recovery branches.
