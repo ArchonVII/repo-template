@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-06 - Depless repos disable lockfile generation
+
+- **Issue/PR:** #52 / (pending)
+- **Branch:** agent/claude/52-depless-no-lockfile
+- **Changed paths:** .npmrc (added), package-lock.json (removed), docs/repo-update-log.md
+- **What changed:** Removed the committed, meaningless `package-lock.json` (it locked 0 packages because this template is depless) and added `.npmrc` with `package-lock=false` so npm never regenerates a stray lockfile here or in scaffolded repos. Repos that add real dependencies delete `.npmrc` to regain a committed lockfile.
+- **Verification:** `npm test` (`node --test`) green; confirmed no test/check asserts the lock exists (`.agent/check-map.yml` package-lock pattern is a generic path map, not a presence requirement; `scripts/doc-sweep/lib.test.mjs` reference is a fixture string).
+- **Propagation:** pending archon-setup (refresh-snapshots `copyFiles` must drop `package-lock.json`, add `.npmrc`, then re-snapshot) and depless sibling hudson-bend (`.npmrc`).
+
 ## 2026-06-05 - Owner Maintenance Lane append-log ledgers
 
 - **Issue/PR:** #50 / (pending)
@@ -127,7 +136,7 @@ This log records agent-visible repository changes that should be easy to audit l
 
 - **Issue/PR:** #15 / #pr
 - **Branch:** agent/codex/15-check-map-gate
-- **Changed paths:** .agent/check-map.yml, .github/workflows/repo-required-gate.yml, .github/workflows/*
+- **Changed paths:** .agent/check-map.yml, .github/workflows/repo-required-gate.yml, .github/workflows/\*
 - **What changed:** Replaced the template's multiple default PR governance workflows with one always-reporting required gate caller and a repo-local check map.
 - **Verification:** `actionlint .github/workflows/repo-required-gate.yml` passed; Python/PyYAML parsed `.github/workflows/repo-required-gate.yml` and `.agent/check-map.yml`.
 - **Propagation:** pending archon-setup snapshots
