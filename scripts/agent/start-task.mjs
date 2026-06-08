@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { sanitizeSlug, buildBranchName, parseGitStatusPorcelain, assertCheckoutIsSafe } from './lib.mjs';
+import { sanitizeSlug, buildBranchName, parseGitStatusPorcelain, assertCheckoutIsSafe, populatePrBodyTemplate } from './lib.mjs';
 
 const DEFAULT_AGENT = 'codex';
 const [, , issueArg, ...rest] = process.argv;
@@ -49,14 +49,16 @@ const metadata = {
 };
 fs.mkdirSync(path.join(worktreePath, '.agent'), { recursive: true });
 fs.writeFileSync(path.join(worktreePath, '.agent', 'current-task.json'), JSON.stringify(metadata, null, 2) + '\n');
+const prBodyPath = writeInitialPrBody({ worktreePath, issueNumber: issue.number });
 
 console.log(`Ready to implement #${issue.number}: ${issue.title}`);
 console.log(`Branch:   ${branchName}`);
 console.log(`Worktree: ${worktreePath}`);
+if (prBodyPath) console.log(`PR body:  ${prBodyPath}`);
 console.log('\nNext steps:');
 console.log(`  1. cd "${worktreePath}"`);
 console.log('  2. npm run agent:status');
-console.log('  3. implement, validate, then open a draft PR (jma-git-pr-lifecycle)');
+console.log('  3. keep .pr-body.md updated from the template, then open a draft PR (jma-git-pr-lifecycle)');
 
 // ---- I/O helpers ----
 function git(a, o = {}) { const out = execFileSync('git', a, { cwd: checkoutRoot, encoding: 'utf8' }); return o.trim === false ? out : out.trim(); }
@@ -69,6 +71,15 @@ function existingIssueBranches(issueNumber) {
   return git(['for-each-ref', '--format=%(refname:short)', 'refs/heads/agent'])
     .split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
     .filter((l) => new RegExp(`^agent/[^/]+/${issueNumber}-`).test(l));
+}
+function writeInitialPrBody({ worktreePath, issueNumber }) {
+  const templatePath = path.join(worktreePath, '.github', 'PULL_REQUEST_TEMPLATE.md');
+  if (!fs.existsSync(templatePath)) return null;
+
+  const prBodyPath = path.join(worktreePath, '.pr-body.md');
+  const template = fs.readFileSync(templatePath, 'utf8');
+  fs.writeFileSync(prBodyPath, populatePrBodyTemplate(template, { issue: issueNumber }), 'utf8');
+  return prBodyPath;
 }
 function parseArgs(argv) {
   const out = {};

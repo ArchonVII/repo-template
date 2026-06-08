@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-08 - Start-task prepopulates PR bodies
+
+- **Issue/PR:** #54 / (pending)
+- **Branch:** agent/codex/54-prepopulate-pr-body
+- **Changed paths:** AGENTS.md, scripts/agent/lib.mjs, scripts/agent/start-task.mjs, test/agent/lib.test.mjs, .changelog/unreleased/54-prepopulate-pr-body.md, docs/repo-update-log.md
+- **What changed:** `agent:start-task` now writes an ignored `.pr-body.md` from the committed `.github/PULL_REQUEST_TEMPLATE.md` in the new worktree and prepopulates `Closes #<issue>`, so agents start from the exact strict PR contract instead of reconstructing the PR body late from memory or notes.
+- **Verification:** `npm test` passed (88/88); `node --check scripts/agent/lib.mjs; node --check scripts/agent/start-task.mjs; node --check scripts/agent/status.mjs; node --check scripts/agent/prune.mjs` passed; `git diff --check` passed with CRLF warnings only; focused `populatePrBodyTemplate(.github/PULL_REQUEST_TEMPLATE.md, { issue: 54 })` smoke preserved `### Verification Notes` and filled `Closes #54`. `npm ci` is not applicable on the current depless template because #52 intentionally removed the lockfile and added `package-lock=false`.
+- **Propagation:** pending archon-setup snapshot refresh after merge
+
 ## 2026-06-06 - Depless repos disable lockfile generation
 
 - **Issue/PR:** #52 / (pending)
