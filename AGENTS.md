@@ -15,7 +15,7 @@ Cross-tool contract for AI agents (Claude, Codex, Copilot, Gemini, etc.) working
 2. **One issue → one active branch (in a linked worktree) → one PR per phase.** Branch name: `agent/<tool>/<issue>-<slug>` (e.g. `agent/claude/42-oauth-flow`); quick fixes without an issue use `agent/<tool>/<YYYY-MM-DD>-<slug>`. Create the branch with `git worktree add`, not `git switch -c` in the primary checkout — see "Checkout role / worktrees". A branch with a merged or closed PR is retired: do not commit, push, add docs/plans/handoffs, perform cleanup, or open another PR from it. Follow-up phases for the same issue must start from the default branch in a new phase-specific branch/worktree. Before reusing an existing issue branch, check `gh pr list --head <branch> --state all --json number,state,url,mergedAt`.
 3. **Never commit to `main`.** Branch protection enforces this. Repo-facing docs, planning notes, prompts, ADRs, and shared markdown use the same branch/PR path when they are committed to the repo.
 4. **Conventional Commits** for messages: `<type>(<scope>): <description>` where `<type>` is one of `feat fix refactor test docs style chore perf ci build revert`.
-5. **PR metadata must pass the shared contract before ready-for-review.** Non-doc PRs must use this exact body order: `## Summary`, `## Verification`, `### Verification Notes`, `## Docs / Changelog`, and an issue link (`Closes #N`, `Fixes #N`, or `Refs #N`). The PR title must use Conventional Commits. Each checked verification box must be backed by concrete command/check/manual evidence, and placeholders such as TODO/TBD/N/A must be gone. Doc-only PRs (every file matches `*.md`, `*.txt`, an image extension, or `.changelog/**`) skip the body ceremony but still need a valid title and branch.
+5. **PR metadata must pass the shared contract before ready-for-review.** Non-doc PRs must use this exact body order: `## Summary`, `## Verification`, `### Verification Notes`, `## Docs / Changelog`, and an issue link (`Closes #N`, `Fixes #N`, or `Refs #N`). The PR title must use Conventional Commits. Each checked verification box must be backed by concrete command/check/manual evidence, and placeholders such as TODO/TBD/N/A must be gone. Doc-only PRs (every file matches `*.md`, `*.txt`, an image extension, or `.changelog/**`) skip the body ceremony but still need a valid title and branch. When `agent:start-task` creates `.pr-body.md`, keep using that file for `gh pr create --body-file` / `gh pr edit --body-file`; if it is missing, regenerate it from the committed `.github/PULL_REQUEST_TEMPLATE.md`, not from notes or memory.
 6. **Repo update log.** Every PR that changes code, config, behavior, protected docs, tracked workflows, or repository policy must append one entry to `docs/repo-update-log.md` before review. Include the date, issue/PR, branch, changed paths, verification, and whether follow-up propagation is needed. Doc-only typo fixes may skip the log only when the PR body says why.
 
 ## Checkout role / worktrees
@@ -43,9 +43,11 @@ This repo uses the **checkout-role** model, enforced by `.githooks/pre-commit`:
 Repo-owned helpers (zero-dep, `node`):
 
 - `npm run agent:start-task -- <issue> [--agent <name>] [--slug <slug>]` — fetch the
-  default branch, create `agent/<tool>/<issue>-<slug>` in a sibling worktree, and write
-  `.agent/current-task.json` (gitignored). Refuses if the checkout is dirty or off the
-  default branch, or if the issue already has a branch.
+  default branch, create `agent/<tool>/<issue>-<slug>` in a sibling worktree, write
+  `.agent/current-task.json`, and, when `.github/PULL_REQUEST_TEMPLATE.md` exists,
+  prepopulate `.pr-body.md` from that committed template with `Closes #<issue>`.
+  Both files are gitignored. Refuses if the checkout is dirty or off the default
+  branch, or if the issue already has a branch.
 - `npm run agent:status` — branch, default branch, upstream, PR, issue, dirty state,
   worktree path, claims (if installed), and the next recommended action.
 - `npm run agent:prune` — **the way to retire finished worktrees.** Removes every merged +

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeSlug, buildBranchName, parseIssueFromBranch, parseGitStatusPorcelain, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, inferNextAction, formatStatusReport, detectClaimsInstalled } from '../../scripts/agent/lib.mjs';
+import { sanitizeSlug, buildBranchName, parseIssueFromBranch, populatePrBodyTemplate, parseGitStatusPorcelain, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, inferNextAction, formatStatusReport, detectClaimsInstalled } from '../../scripts/agent/lib.mjs';
 
 test('sanitizeSlug lowercases, hyphenates, trims, caps at 6 words', () => {
   assert.equal(sanitizeSlug('Add OAuth Flow!'), 'add-oauth-flow');
@@ -21,6 +21,23 @@ test('parseIssueFromBranch extracts the issue number or null', () => {
   assert.equal(parseIssueFromBranch('agent/codex/27-agent-lifecycle'), '27');
   assert.equal(parseIssueFromBranch('main'), null);
   assert.equal(parseIssueFromBranch('agent/claude/2026-06-01-quick-fix'), '2026');
+});
+
+test('populatePrBodyTemplate fills a TODO linked issue placeholder', () => {
+  const body = ['## Summary', '', 'TODO', '', '## Linked Issue', '', 'TODO: Closes #___', ''].join('\n');
+  assert.equal(populatePrBodyTemplate(body, { issue: 54 }), ['## Summary', '', 'TODO', '', '## Linked Issue', '', 'Closes #54', ''].join('\n'));
+});
+test('populatePrBodyTemplate fills a bare closes placeholder', () => {
+  const body = ['## Linked Issue', '', 'Closes #', ''].join('\n');
+  assert.equal(populatePrBodyTemplate(body, { issue: 54 }), ['## Linked Issue', '', 'Closes #54', ''].join('\n'));
+});
+test('populatePrBodyTemplate inserts under Linked Issue when blank', () => {
+  const body = ['## Summary', '', 'Work.', '', '## Linked Issue', '', '## Risks', '', '- low', ''].join('\n');
+  assert.equal(populatePrBodyTemplate(body, { issue: 54 }), ['## Summary', '', 'Work.', '', '## Linked Issue', '', 'Closes #54', '', '## Risks', '', '- low', ''].join('\n'));
+});
+test('populatePrBodyTemplate does not duplicate an existing issue link', () => {
+  const body = ['## Linked Issue', '', 'Refs #12', ''].join('\n');
+  assert.equal(populatePrBodyTemplate(body, { issue: 54 }), body);
 });
 
 test('parseGitStatusPorcelain splits NUL records into {status,path}', () => {
