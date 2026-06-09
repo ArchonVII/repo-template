@@ -84,7 +84,10 @@ export function parseWorktreeList(porcelain) {
   const list = [];
   let current = null;
   for (const line of String(porcelain).split('\n')) {
-    if (line.startsWith('worktree ')) current = { path: line.slice('worktree '.length).trim(), branch: null };
+    if (line.startsWith('worktree ')) current = { path: line.slice('worktree '.length).trim(), branch: null, head: null };
+    // `HEAD <oid>` is the worktree's local tip; prune compares it to a merged PR's
+    // headRefOid so a lane with commits beyond what was merged is never deleted.
+    else if (line.startsWith('HEAD ')) { if (current) current.head = line.slice('HEAD '.length).trim(); }
     else if (line.startsWith('branch ')) {
       if (current) current.branch = line.slice('branch refs/heads/'.length).trim();
     } else if (line === '' && current) { list.push(current); current = null; }
@@ -109,6 +112,32 @@ export function classifyPruneCandidates({ worktrees, primaryPath, currentPath, d
     keep.push(wt);
   }
   return { remove, skipDirty, keep };
+}
+
+// GitHub PR merge signal for squash- and rebase-merges, which `git branch --merged`
+// cannot see: those rewrite the lane's commits onto a NEW SHA on the default branch,
+// so the lane is never an ancestor of it. CONSERVATIVE by construction — returns
+// { merged: true } ONLY when ALL hold:
+//   - no OPEN PR exists for the branch (an open PR always wins → keep), AND
+//   - a MERGED PR exists whose base is the configured default branch, AND
+//   - that PR's recorded head SHA (headRefOid) equals the lane's local tip,
+//     proving the lane has no commits beyond what was merged.
+// Every other shape (no PR, closed-unmerged, merged into a non-default base, local
+// tip ahead of the merged head, or an unknown local tip) returns { merged: false }
+// with a `reason` so the caller keeps the lane and can explain why. Never infers a
+// merge from diffs/patch-ids — only from GitHub's own MERGED state.
+export function classifyPrMergeSignal({ prs, defaultBranch, localTip }) {
+  if (!Array.isArray(prs) || prs.length === 0) return { merged: false, reason: 'no-pr' };
+  if (prs.some((p) => p?.state === 'OPEN')) return { merged: false, reason: 'open-pr' };
+  const mergedIntoDefault = prs.filter((p) => p?.state === 'MERGED' && p?.baseRefName === defaultBranch);
+  if (mergedIntoDefault.length === 0) {
+    const mergedElsewhere = prs.some((p) => p?.state === 'MERGED');
+    return { merged: false, reason: mergedElsewhere ? 'merged-non-default-base' : 'closed-unmerged' };
+  }
+  if (!localTip) return { merged: false, reason: 'tip-unknown' };
+  const headMatch = mergedIntoDefault.some((p) => p?.headRefOid && p.headRefOid === localTip);
+  if (!headMatch) return { merged: false, reason: 'tip-ahead-of-merged' };
+  return { merged: true, reason: 'github-pr' };
 }
 
 export function inferNextAction({ onDefaultBranch, dirty, hasPr, ahead = 0 }) {
