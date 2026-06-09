@@ -65,11 +65,15 @@ This repo uses the **checkout-role** model, enforced by `.githooks/pre-commit`:
 Repo-owned helpers (zero-dep, `node`):
 
 - `npm run agent:start-task -- <issue> [--agent <name>] [--slug <slug>]` — fetch the
-  default branch, create `agent/<tool>/<issue>-<slug>` in a sibling worktree, write
-  `.agent/current-task.json`, and, when `.github/PULL_REQUEST_TEMPLATE.md` exists,
-  prepopulate `.pr-body.md` from that committed template with `Closes #<issue>`.
-  Both files are gitignored. Refuses if the checkout is dirty or off the default
-  branch, or if the issue already has a branch.
+  default branch, create `agent/<tool>/<issue>-<slug>` in a sibling worktree, and write
+  `.agent/current-task.json` (gitignored). Refuses if the checkout is dirty or off the
+  default branch, or if the issue already has a branch.
+- `npm run agent:pr-body -- [issue]` — print the committed `.github/PULL_REQUEST_TEMPLATE.md`
+  with `Closes #<issue>` filled in, to **stdout**. The issue defaults to `.agent/current-task.json`
+  then the branch name. Pipe it straight into a PR — `npm run agent:pr-body -- 58 | gh pr create --body-file -`
+  (or `gh pr edit <n> --body-file -`). Read the committed template directly rather than keeping a
+  scratch copy: the template is always present, CI auto-injects it on PR open, and no file is written
+  so the working tree stays clean for the close/preflight gates.
 - `npm run agent:status` — branch, default branch, upstream, PR, issue, dirty state,
   worktree path, claims (if installed), and the next recommended action.
 - `npm run agent:prune` — **the way to retire finished worktrees.** Removes every merged +
