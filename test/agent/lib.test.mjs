@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeSlug, buildBranchName, parseIssueFromBranch, populatePrBodyTemplate, parseGitStatusPorcelain, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, inferNextAction, formatStatusReport, detectClaimsInstalled, checkStartupReadiness, formatStartupMap } from '../../scripts/agent/lib.mjs';
+import { sanitizeSlug, buildBranchName, parseIssueFromBranch, populatePrBodyTemplate, parseGitStatusPorcelain, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, classifyPrMergeSignal, inferNextAction, formatStatusReport, detectClaimsInstalled, checkStartupReadiness, formatStartupMap } from '../../scripts/agent/lib.mjs';
 
 test('sanitizeSlug lowercases, hyphenates, trims, caps at 6 words', () => {
   assert.equal(sanitizeSlug('Add OAuth Flow!'), 'add-oauth-flow');
@@ -67,10 +67,10 @@ const PORCELAIN = [
   'worktree /repo-2-wip', 'HEAD ccc', 'branch refs/heads/agent/codex/2-wip', '',
 ].join('\n');
 
-test('parseWorktreeList yields {path,branch} per entry', () => {
+test('parseWorktreeList yields {path,branch,head} per entry', () => {
   const list = parseWorktreeList(PORCELAIN);
   assert.equal(list.length, 3);
-  assert.deepEqual(list[1], { path: '/repo-1-feat', branch: 'agent/codex/1-feat' });
+  assert.deepEqual(list[1], { path: '/repo-1-feat', branch: 'agent/codex/1-feat', head: 'bbb' });
 });
 test('classifyPruneCandidates removes only merged+clean non-current agent worktrees', () => {
   const result = classifyPruneCandidates({
@@ -102,7 +102,7 @@ test('parseWorktreeList handles a detached-HEAD entry (no branch line) as branch
   const raw = ['worktree /repo', 'HEAD aaa', 'branch refs/heads/main', '', 'worktree /repo-det', 'HEAD bbb', 'detached', ''].join('\n');
   const list = parseWorktreeList(raw);
   assert.equal(list.length, 2);
-  assert.deepEqual(list[1], { path: '/repo-det', branch: null });
+  assert.deepEqual(list[1], { path: '/repo-det', branch: null, head: 'bbb' });
 });
 
 test('classifyPruneCandidates never removes a detached-HEAD worktree (null branch is protected)', () => {
@@ -112,6 +112,32 @@ test('classifyPruneCandidates never removes a detached-HEAD worktree (null branc
     mergedBranches: new Set(), dirtyPaths: new Set(),
   });
   assert.ok(result.remove.every((w) => w.path !== '/repo-det'));
+});
+
+// classifyPrMergeSignal — the squash/rebase-merge signal (#60). A merged PR proves
+// a lane is done ONLY when it merged into the default branch AND the lane's local tip
+// equals the PR's merged head SHA; everything else is kept with an explanatory reason.
+const MERGED_PR = (over = {}) => ({ state: 'MERGED', baseRefName: 'main', headRefName: 'agent/claude/9-x', headRefOid: 'abc', ...over });
+test('classifyPrMergeSignal: squash/rebase-merged into default with matching tip → merged', () => {
+  assert.deepEqual(classifyPrMergeSignal({ prs: [MERGED_PR()], defaultBranch: 'main', localTip: 'abc' }), { merged: true, reason: 'github-pr' });
+});
+test('classifyPrMergeSignal: local tip ahead of merged head → keep (work added after merge)', () => {
+  assert.deepEqual(classifyPrMergeSignal({ prs: [MERGED_PR({ headRefOid: 'abc' })], defaultBranch: 'main', localTip: 'def' }), { merged: false, reason: 'tip-ahead-of-merged' });
+});
+test('classifyPrMergeSignal: an OPEN PR always wins even alongside a merged one → keep', () => {
+  assert.deepEqual(classifyPrMergeSignal({ prs: [MERGED_PR(), MERGED_PR({ state: 'OPEN' })], defaultBranch: 'main', localTip: 'abc' }), { merged: false, reason: 'open-pr' });
+});
+test('classifyPrMergeSignal: closed-unmerged PR → keep', () => {
+  assert.deepEqual(classifyPrMergeSignal({ prs: [MERGED_PR({ state: 'CLOSED' })], defaultBranch: 'main', localTip: 'abc' }), { merged: false, reason: 'closed-unmerged' });
+});
+test('classifyPrMergeSignal: merged into a non-default base → keep', () => {
+  assert.deepEqual(classifyPrMergeSignal({ prs: [MERGED_PR({ baseRefName: 'release/1.x' })], defaultBranch: 'main', localTip: 'abc' }), { merged: false, reason: 'merged-non-default-base' });
+});
+test('classifyPrMergeSignal: no PR for the branch → keep', () => {
+  assert.deepEqual(classifyPrMergeSignal({ prs: [], defaultBranch: 'main', localTip: 'abc' }), { merged: false, reason: 'no-pr' });
+});
+test('classifyPrMergeSignal: merged PR but unknown local tip → keep (never delete on uncertainty)', () => {
+  assert.deepEqual(classifyPrMergeSignal({ prs: [MERGED_PR()], defaultBranch: 'main', localTip: null }), { merged: false, reason: 'tip-unknown' });
 });
 
 test('inferNextAction: onDefaultBranch takes precedence, else dirty > push > review', () => {
