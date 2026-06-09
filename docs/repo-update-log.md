@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-09 - Drop scratch .pr-body.md; read committed PR template directly
+
+- **Issue/PR:** #58 / (pending)
+- **Branch:** agent/claude/58-drop-scratch-pr-body
+- **Changed paths:** scripts/agent/start-task.mjs, scripts/agent/pr-body.mjs, package.json, AGENTS.md, .gitignore, .changelog/unreleased/58-pr-body-stdout.md (replaces 54-prepopulate-pr-body.md), docs/repo-update-log.md
+- **What changed:** `agent:start-task` no longer writes an untracked `.pr-body.md` (which dirtied worktrees and tripped close/preflight clean-tree gates). New `agent:pr-body` prints the issue-filled committed PR template to stdout for `gh pr create/edit --body-file -`. Removed the now-dead `.pr-body.md` gitignore line. Reverses unshipped #54.
+- **Verification:** `npm test` (node --test) green; `node scripts/agent/pr-body.mjs 58` emits the filled template to stdout.
+- **Propagation:** pending — shared skill `jma-git-pr-lifecycle` (replace `.pr-body.md` copy step), then archon-setup snapshot refresh.
+
 ## 2026-06-09 - Versioned agent startup baseline
 
 - **Issue/PR:** #56 / (pending)

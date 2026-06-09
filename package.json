@@ -11,6 +11,7 @@
     "agent:pr-ready": "node scripts/agent-pr-ready.mjs",
     "agent:status": "node scripts/agent/status.mjs",
     "agent:prune": "node scripts/agent/prune.mjs",
-    "agent:start-task": "node scripts/agent/start-task.mjs"
+    "agent:start-task": "node scripts/agent/start-task.mjs",
+    "agent:pr-body": "node scripts/agent/pr-body.mjs"
   }
 }
