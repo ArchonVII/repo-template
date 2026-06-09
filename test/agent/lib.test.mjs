@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeSlug, buildBranchName, parseIssueFromBranch, populatePrBodyTemplate, parseGitStatusPorcelain, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, inferNextAction, formatStatusReport, detectClaimsInstalled } from '../../scripts/agent/lib.mjs';
+import { sanitizeSlug, buildBranchName, parseIssueFromBranch, populatePrBodyTemplate, parseGitStatusPorcelain, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, inferNextAction, formatStatusReport, detectClaimsInstalled, checkStartupReadiness, formatStartupMap } from '../../scripts/agent/lib.mjs';
 
 test('sanitizeSlug lowercases, hyphenates, trims, caps at 6 words', () => {
   assert.equal(sanitizeSlug('Add OAuth Flow!'), 'add-oauth-flow');
@@ -131,6 +131,32 @@ test('formatStatusReport renders every required field (#27 AC)', () => {
   }
   assert.match(out, /#27/);
   assert.match(out, /not installed/i);
+});
+test('formatStartupMap renders canonical startup paths and repair action', () => {
+  const baseline = {
+    version: '2026-06-08-agent-start-map',
+    required: ['AGENTS.md', 'docs/plans/README.md', '.agent/check-map.yml'],
+    expectedDirectories: ['docs/plans/', 'scripts/agent/'],
+    legacy: ['docs/superpowers/plans/'],
+  };
+  const out = formatStartupMap(baseline, { repoPath: '/repo', archonSetupCommand: 'node <path-to-archon-setup>/bin/onboard.mjs' });
+  assert.match(out, /Agent startup map:/);
+  assert.match(out, /Plans:\s+docs\/plans\//);
+  assert.match(out, /Agent scripts:\s+scripts\/agent\//);
+  assert.match(out, /Legacy plans:\s+docs\/superpowers\/plans\/ \(history only\)/);
+  assert.match(out, /node <path-to-archon-setup>\/bin\/onboard\.mjs \/repo --audit/);
+});
+test('checkStartupReadiness reports missing required files and directories', () => {
+  const baseline = {
+    required: ['AGENTS.md', 'docs/plans/README.md'],
+    expectedDirectories: ['docs/plans/', 'scripts/agent/'],
+    legacy: ['docs/superpowers/plans/'],
+  };
+  const exists = new Set(['AGENTS.md', 'docs/plans/']);
+  const result = checkStartupReadiness(baseline, { exists: (path) => exists.has(path) });
+  assert.equal(result.status, 'incomplete');
+  assert.deepEqual(result.missing, ['docs/plans/README.md', 'scripts/agent/']);
+  assert.deepEqual(result.present, ['AGENTS.md', 'docs/plans/']);
 });
 test('detectClaimsInstalled is true only when the claims file exists', () => {
   assert.equal(detectClaimsInstalled({ claimsFileExists: true }), true);

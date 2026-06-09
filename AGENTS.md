@@ -9,6 +9,28 @@ Cross-tool contract for AI agents (Claude, Codex, Copilot, Gemini, etc.) working
 - `README.md` — what this project is and how to run it
 - `ARCHITECTURE.md` — directory ownership and cross-boundary rules (add when the layout outgrows obviousness)
 
+<!-- BEGIN MANAGED AGENT START MAP -->
+## Agent Start Map
+
+Agents should not spend time rediscovering the process files. Start here:
+
+- Plans: `docs/plans/`
+- Agent process: `docs/agent-process/`
+- Repo update log: `docs/repo-update-log.md`
+- Check map: `.agent/check-map.yml`
+- Coordination: `.agent/coordination/README.md`
+- PR process: `.github/PULL_REQUEST_TEMPLATE.md`
+- Agent scripts: `scripts/agent/`
+- Doc sweep: `scripts/doc-sweep/`
+- Legacy plans: `docs/superpowers/plans/` is history only; do not add new implementation plans there.
+
+If these files are missing or unclear, stop searching and run:
+
+```text
+node <path-to-archon-setup>/bin/onboard.mjs <repo> --audit
+```
+<!-- END MANAGED AGENT START MAP -->
+
 ## Workflow
 
 1. **Issue first.** Create a GitHub issue with explicit `Acceptance Criteria` before branching. Use the `Task` issue form.

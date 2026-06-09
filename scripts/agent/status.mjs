@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { parseIssueFromBranch, parseGitStatusPorcelain, detectClaimsInstalled, inferNextAction, formatStatusReport } from './lib.mjs';
+import { parseIssueFromBranch, parseGitStatusPorcelain, detectClaimsInstalled, inferNextAction, formatStatusReport, checkStartupReadiness, formatStartupMap } from './lib.mjs';
 
 const checkoutRoot = git(['rev-parse', '--show-toplevel']);
 const commonDir = git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
@@ -23,9 +23,24 @@ console.log(formatStatusReport({
   worktreePath: checkoutRoot, claimsInstalled,
   nextAction: inferNextAction({ onDefaultBranch: branch === defaultBranch, dirty: statusEntries.length > 0, hasPr: Boolean(pr), ahead }),
 }));
+const startupBaseline = readStartupBaseline(checkoutRoot);
+if (startupBaseline) {
+  const readiness = checkStartupReadiness(startupBaseline, {
+    exists: (relPath) => fs.existsSync(path.join(checkoutRoot, relPath)),
+  });
+  console.log('\n' + formatStartupMap(startupBaseline, {
+    repoPath: checkoutRoot,
+    archonSetupCommand: 'node <path-to-archon-setup>/bin/onboard.mjs',
+    readiness,
+  }));
+}
 if (!ghAvailable()) console.log('\n(note: `gh` unavailable — PR/default-branch info degraded)');
 
 function git(a, o = {}) { const out = execFileSync('git', a, { cwd: process.cwd(), encoding: 'utf8' }); return o.trim === false ? out : out.trim(); }
 function gitOrNull(a) { try { return git(a); } catch { return null; } }
 function ghOrNull(a) { try { return execFileSync('gh', a, { cwd: process.cwd(), encoding: 'utf8' }).trim(); } catch { return null; } }
 function ghAvailable() { try { execFileSync('gh', ['--version'], { stdio: 'ignore' }); return true; } catch { return false; } }
+function readStartupBaseline(root) {
+  try { return JSON.parse(fs.readFileSync(path.join(root, '.agent', 'startup-baseline.json'), 'utf8')); }
+  catch { return null; }
+}
