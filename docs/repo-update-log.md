@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-09 - Versioned agent startup baseline
+
+- **Issue/PR:** #56 / (pending)
+- **Branch:** agent/codex/56-startup-baseline
+- **Changed paths:** AGENTS.md, .agent/startup-baseline.json, docs/plans/README.md, scripts/agent/lib.mjs, scripts/agent/status.mjs, test/agent/lib.test.mjs, test/startup-baseline.test.mjs, .changelog/unreleased/56-startup-baseline.md, docs/repo-update-log.md
+- **What changed:** Added a versioned, machine-readable startup baseline and surfaced the same canonical plans/process paths in `AGENTS.md` and `npm run agent:status`, so agents start from known repo process files instead of rediscovering them. The contract now names concrete agent lifecycle and doc-sweep files so setup audits can detect stale startup tooling instead of only seeing parent directories.
+- **Verification:** `node --test test/agent/lib.test.mjs` passed (25/25); `node --test test/startup-baseline.test.mjs` passed (3/3); `npm test` passed (93/93); `git diff --check` passed with CRLF warnings only; `node --check scripts/agent/lib.mjs; node --check scripts/agent/status.mjs` passed.
+- **Propagation:** pending archon-setup snapshot refresh and startup-readiness audit support, then Hudson Bend pilot rollout
+
 ## 2026-06-08 - Start-task prepopulates PR bodies
 
 - **Issue/PR:** #54 / (pending)

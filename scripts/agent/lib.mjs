@@ -121,6 +121,36 @@ export function inferNextAction({ onDefaultBranch, dirty, hasPr, ahead = 0 }) {
 export function detectClaimsInstalled({ claimsFileExists }) {
   return Boolean(claimsFileExists);
 }
+export function checkStartupReadiness(baseline, { exists }) {
+  const required = Array.isArray(baseline?.required) ? baseline.required : [];
+  const expectedDirectories = Array.isArray(baseline?.expectedDirectories) ? baseline.expectedDirectories : [];
+  const all = [...required, ...expectedDirectories];
+  const present = [];
+  const missing = [];
+  for (const relPath of all) {
+    if (exists(relPath)) present.push(relPath);
+    else missing.push(relPath);
+  }
+  return { status: missing.length ? 'incomplete' : 'complete', present, missing };
+}
+export function formatStartupMap(baseline, { repoPath = '<repo>', archonSetupCommand = 'node <path-to-archon-setup>/bin/onboard.mjs', readiness = null } = {}) {
+  const legacy = Array.isArray(baseline?.legacy) ? baseline.legacy : [];
+  const lines = [
+    'Agent startup map:',
+    '- Plans:          docs/plans/',
+    '- Agent process:  docs/agent-process/',
+    '- Repo update log: docs/repo-update-log.md',
+    '- Check map:      .agent/check-map.yml',
+    '- Coordination:   .agent/coordination/README.md',
+    '- PR process:     .github/PULL_REQUEST_TEMPLATE.md',
+    '- Agent scripts:  scripts/agent/',
+    '- Doc sweep:      scripts/doc-sweep/',
+  ];
+  if (legacy.length) lines.push(`- Legacy plans:   ${legacy.join(', ')} (history only)`);
+  if (readiness?.missing?.length) lines.push('', `Missing startup baseline paths: ${readiness.missing.join(', ')}`);
+  lines.push('', 'If these files are missing or unclear, stop searching and run:', `${archonSetupCommand} ${repoPath} --audit`);
+  return lines.join('\n');
+}
 export function formatStatusReport(s) {
   const prText = s.pr ? `#${s.pr.number} ${s.pr.state} ${s.pr.url}` : 'none';
   return [
