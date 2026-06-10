@@ -98,9 +98,9 @@ export function parseWorktreeList(porcelain) {
 
 // Prune safety contract (#27 AC): remove ONLY worktrees that are
 //   (a) not the primary checkout, (b) not the current checkout,
-//   (c) not the default branch, (d) on an agent/* branch already merged
-//       into the default branch, AND (e) clean (no uncommitted changes).
-// Anything dirty is skipped and reported. Anything unmerged is kept.
+//   (c) not the default branch, (d) on an explicitly retired agent/* branch,
+//   AND (e) clean (no uncommitted changes).
+// Anything dirty is skipped and reported. Anything unretired is kept.
 export function classifyPruneCandidates({ worktrees, primaryPath, currentPath, defaultBranch, mergedBranches, dirtyPaths }) {
   const remove = [], skipDirty = [], keep = [];
   for (const wt of worktrees) {
@@ -138,6 +138,40 @@ export function classifyPrMergeSignal({ prs, defaultBranch, localTip }) {
   const headMatch = mergedIntoDefault.some((p) => p?.headRefOid && p.headRefOid === localTip);
   if (!headMatch) return { merged: false, reason: 'tip-ahead-of-merged' };
   return { merged: true, reason: 'github-pr' };
+}
+
+export function classifyPruneRetirement({
+  worktrees,
+  ancestryMergedBranches = new Set(),
+  prsByBranch = new Map(),
+  defaultBranch,
+  ghUnavailable = false,
+}) {
+  const retiredBranches = new Set();
+  const keepReason = new Map();
+  const retireReason = new Map();
+
+  for (const wt of worktrees) {
+    if (!wt.branch?.startsWith('agent/')) continue;
+    if (ghUnavailable) {
+      keepReason.set(wt.branch, ancestryMergedBranches.has(wt.branch) ? 'gh-unavailable-ancestry-only' : 'gh-unavailable');
+      continue;
+    }
+
+    const signal = classifyPrMergeSignal({
+      prs: prsByBranch.get(wt.branch) || [],
+      defaultBranch,
+      localTip: wt.head,
+    });
+    if (signal.merged) {
+      retiredBranches.add(wt.branch);
+      retireReason.set(wt.branch, signal.reason);
+    } else {
+      keepReason.set(wt.branch, signal.reason);
+    }
+  }
+
+  return { retiredBranches, keepReason, retireReason };
 }
 
 export function inferNextAction({ onDefaultBranch, dirty, hasPr, ahead = 0 }) {
