@@ -39,6 +39,7 @@ node <path-to-archon-setup>/bin/onboard.mjs <repo> --audit
 4. **Conventional Commits** for messages: `<type>(<scope>): <description>` where `<type>` is one of `feat fix refactor test docs style chore perf ci build revert`.
 5. **PR metadata must pass the shared contract before ready-for-review.** Non-doc PRs must use this exact body order: `## Summary`, `## Verification`, `### Verification Notes`, `## Docs / Changelog`, and an issue link (`Closes #N`, `Fixes #N`, or `Refs #N`). The PR title must use Conventional Commits. Each checked verification box must be backed by concrete command/check/manual evidence, and placeholders such as TODO/TBD/N/A must be gone. Doc-only PRs (every file matches `*.md`, `*.txt`, an image extension, or `.changelog/**`) skip the body ceremony but still need a valid title and branch. When `agent:start-task` creates `.pr-body.md`, keep using that file for `gh pr create --body-file` / `gh pr edit --body-file`; if it is missing, regenerate it from the committed `.github/PULL_REQUEST_TEMPLATE.md`, not from notes or memory.
 6. **Repo update log.** Every PR that changes code, config, behavior, protected docs, tracked workflows, or repository policy must append one entry to `docs/repo-update-log.md` before review. Include the date, issue/PR, branch, changed paths, verification, and whether follow-up propagation is needed. Doc-only typo fixes may skip the log only when the PR body says why.
+7. **Plan/status artifact closeout.** Delivery is incomplete while any plan, task file, progress file, findings file, handoff, audit, roadmap/status tracker, or coordination note created or used by the lane still reads as active execution guidance. Before PR ready/merge, close it, narrow it to remaining scoped work, or mark it deprecated/superseded with the current source of truth. Do this in the same branch/PR for repo-facing artifacts.
 
 ## Checkout role / worktrees
 
@@ -163,6 +164,7 @@ Before marking a PR ready for review:
 
 - Treat `repo-required-gate / decision` as the stable branch-protection check. Do not make path-filtered leaf workflows required.
 - Use `.agent/check-map.yml` to record repo-specific path-to-check expectations. If the repo stack changes, update both `.agent/check-map.yml` and `.github/workflows/repo-required-gate.yml` in the same PR.
+- Confirm every plan/status artifact created or used by the lane is closed, narrowed, deprecated/superseded, or explicitly not applicable.
 - Run the repo's lint, typecheck, and test commands. Record exact commands in `### Verification Notes`.
 - If the change is user-visible, smoke-test it. Record what you exercised.
 - Tick a `- [x]` box **only after** the command actually passed.
@@ -193,6 +195,10 @@ real changes.
 ## Closeout
 
 - Preparing a PR for review and shipping it are different states.
+- Closeout includes plan/status artifact hygiene: no lane-created or lane-used
+  plan, task, progress, findings, handoff, audit, roadmap/status, or
+  coordination artifact may remain active-looking unless it has been narrowed to
+  still-open scoped work.
 - Use `close:review` for verify -> push -> PR body -> ready-for-review handoff.
 - Use `close:ship` only when the user explicitly says `/close`, `ship it`,
   `land it`, `merge to main`, or equivalent delivery language.
