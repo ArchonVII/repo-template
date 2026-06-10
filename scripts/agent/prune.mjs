@@ -1,7 +1,7 @@
 // scripts/agent/prune.mjs
 import { execFileSync } from 'node:child_process';
 import { rmSync, existsSync } from 'node:fs';
-import { parseWorktreeList, classifyPruneCandidates, classifyPrMergeSignal } from './lib.mjs';
+import { parseWorktreeList, classifyPruneCandidates, classifyPruneRetirement } from './lib.mjs';
 
 const dryRun = process.argv.includes('--dry-run');
 
@@ -13,15 +13,15 @@ git(['worktree', 'prune']); // safe: only drops admin records for already-delete
 
 const worktrees = parseWorktreeList(git(['worktree', 'list', '--porcelain']));
 
-// Signal 1 — ancestry: branches whose tip is reachable from the default branch
-// (true merges + fast-forwards). Misses squash/rebase merges by design (new SHA).
+// Ancestry is useful context, but not sufficient proof of retirement: a fresh
+// no-diff task branch is also reachable from the default branch after it advances.
 const ancestryMerged = new Set(
   git(['branch', '--merged', defaultBranch, '--format=%(refname:short)']).split(/\r?\n/).map((b) => b.trim()).filter(Boolean),
 );
 
-// Signal 2 — GitHub PR state: catches squash/rebase-merged lanes ancestry can't see.
+// GitHub PR state is the retirement signal for merge, squash, and rebase lanes.
 // Graceful degradation: if `gh` is missing/unauthenticated/rate-limited/malformed,
-// `prsByBranch` stays empty and we fall back to ancestry-only — never fail open.
+// `prsByBranch` stays empty and agent lanes are kept — never delete on uncertainty.
 // --limit 200 covers recent lanes (gh lists newest-first); stale lanes beyond that
 // are simply kept, never wrongly removed.
 const prListRaw = ghOrNull(['pr', 'list', '--state', 'all', '--limit', '200',
@@ -37,25 +37,18 @@ if (!ghUnavailable) {
   } catch { /* malformed gh output — leave map empty; ancestry signal still applies */ }
 }
 
-// Per-lane reasons drive both removal-mode logging and --dry-run transparency.
-const prMerged = new Set();   // agent lanes proven merged via a GitHub PR head-SHA match
-const keepReason = new Map(); // agent branch -> why a kept lane was kept
-for (const wt of worktrees) {
-  if (!wt.branch?.startsWith('agent/') || ancestryMerged.has(wt.branch)) continue;
-  if (ghUnavailable) { keepReason.set(wt.branch, 'gh-unavailable'); continue; }
-  const signal = classifyPrMergeSignal({ prs: prsByBranch.get(wt.branch) || [], defaultBranch, localTip: wt.head });
-  if (signal.merged) prMerged.add(wt.branch);
-  else keepReason.set(wt.branch, signal.reason);
-}
-
-const mergedBranches = new Set([...ancestryMerged, ...prMerged]);
+const {
+  retiredBranches: mergedBranches,
+  keepReason,
+  retireReason,
+} = classifyPruneRetirement({ worktrees, ancestryMergedBranches: ancestryMerged, prsByBranch, defaultBranch, ghUnavailable });
 const dirtyPaths = new Set(worktrees.filter((wt) => isDirty(wt.path)).map((wt) => wt.path));
 
 const { remove, skipDirty, keep } = classifyPruneCandidates({
   worktrees, primaryPath, currentPath, defaultBranch, mergedBranches, dirtyPaths,
 });
 
-const removeReason = (wt) => (ancestryMerged.has(wt.branch) ? 'ancestry-merged' : 'github-pr');
+const removeReason = (wt) => retireReason.get(wt.branch) || 'github-pr';
 
 if (dryRun) {
   console.log('agent:prune --dry-run (no changes will be made)\n');
@@ -63,7 +56,7 @@ if (dryRun) {
   for (const wt of skipDirty) console.log(`keep    [dirty]  ${wt.path} [${wt.branch}]`);
   for (const wt of keep) console.log(`keep    [${keepReason.get(wt.branch) || 'unmerged'}]  ${wt.path} [${wt.branch}]`);
   console.log(`\nwould remove ${remove.length}, keep-dirty ${skipDirty.length}, keep ${keep.length}`);
-  if (ghUnavailable) console.log('note: `gh` unavailable — squash/rebase-merge detection skipped (ancestry-only).');
+  if (ghUnavailable) console.log('note: `gh` unavailable — agent lanes kept because merged-PR evidence cannot be checked.');
   process.exit(0);
 }
 
@@ -73,10 +66,9 @@ for (const wt of remove) {
   const reason = removeReason(wt);
   try {
     removeWorktree(wt.path);
-    // `git branch -d` for ancestry (git agrees it is merged); `-D` for PR-merged —
-    // ancestry won't agree, but classifyPrMergeSignal already proved local tip ==
-    // the merged PR's headRefOid, so the ref holds nothing beyond what landed.
-    try { git(['branch', reason === 'github-pr' ? '-D' : '-d', wt.branch]); } catch { /* leave a ref we couldn't delete */ }
+    // classifyPruneRetirement proved local tip == the merged PR's headRefOid, so
+    // the ref holds nothing beyond what landed, regardless of merge strategy.
+    try { git(['branch', '-D', wt.branch]); } catch { /* leave a ref we couldn't delete */ }
     console.log(`removed: ${wt.path} [${wt.branch}] (${reason})`);
     removed += 1;
   } catch (err) {
@@ -87,7 +79,7 @@ for (const wt of remove) {
 }
 for (const wt of skipDirty) console.log(`skipped (dirty, kept): ${wt.path} [${wt.branch}]`);
 console.log(`\nremoved ${removed}, skipped-dirty ${skipDirty.length}, kept ${keep.length}, failed ${failed.length}`);
-if (ghUnavailable) console.log('note: `gh` unavailable — squash/rebase-merge detection skipped (ancestry-only).');
+if (ghUnavailable) console.log('note: `gh` unavailable — agent lanes kept because merged-PR evidence cannot be checked.');
 if (failed.length) process.exitCode = 1; // surface partial failure, but only after the full sweep
 
 function git(a) { return execFileSync('git', a, { cwd: process.cwd(), encoding: 'utf8' }).trim(); }

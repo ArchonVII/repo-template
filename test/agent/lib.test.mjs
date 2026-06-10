@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeSlug, buildBranchName, parseIssueFromBranch, populatePrBodyTemplate, parseGitStatusPorcelain, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, classifyPrMergeSignal, inferNextAction, formatStatusReport, detectClaimsInstalled, checkStartupReadiness, formatStartupMap } from '../../scripts/agent/lib.mjs';
+import { sanitizeSlug, buildBranchName, parseIssueFromBranch, populatePrBodyTemplate, parseGitStatusPorcelain, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, classifyPrMergeSignal, classifyPruneRetirement, inferNextAction, formatStatusReport, detectClaimsInstalled, checkStartupReadiness, formatStartupMap } from '../../scripts/agent/lib.mjs';
 
 test('sanitizeSlug lowercases, hyphenates, trims, caps at 6 words', () => {
   assert.equal(sanitizeSlug('Add OAuth Flow!'), 'add-oauth-flow');
@@ -138,6 +138,34 @@ test('classifyPrMergeSignal: no PR for the branch → keep', () => {
 });
 test('classifyPrMergeSignal: merged PR but unknown local tip → keep (never delete on uncertainty)', () => {
   assert.deepEqual(classifyPrMergeSignal({ prs: [MERGED_PR()], defaultBranch: 'main', localTip: null }), { merged: false, reason: 'tip-unknown' });
+});
+
+test('classifyPruneRetirement keeps ancestry-merged agent worktrees without merged PR evidence', () => {
+  const branch = 'agent/codex/64-safe-agent-prune';
+  const result = classifyPruneRetirement({
+    worktrees: [{ path: '/repo-64-safe-agent-prune', branch, head: 'abc' }],
+    ancestryMergedBranches: new Set([branch]),
+    prsByBranch: new Map(),
+    defaultBranch: 'main',
+    ghUnavailable: false,
+  });
+
+  assert.equal(result.retiredBranches.has(branch), false);
+  assert.equal(result.keepReason.get(branch), 'no-pr');
+});
+
+test('classifyPruneRetirement retires agent worktrees with merged PR head evidence', () => {
+  const branch = 'agent/codex/64-safe-agent-prune';
+  const result = classifyPruneRetirement({
+    worktrees: [{ path: '/repo-64-safe-agent-prune', branch, head: 'abc' }],
+    ancestryMergedBranches: new Set([branch]),
+    prsByBranch: new Map([[branch, [MERGED_PR({ headRefName: branch })]]]),
+    defaultBranch: 'main',
+    ghUnavailable: false,
+  });
+
+  assert.equal(result.retiredBranches.has(branch), true);
+  assert.equal(result.retireReason.get(branch), 'github-pr');
 });
 
 test('inferNextAction: onDefaultBranch takes precedence, else dirty > push > review', () => {

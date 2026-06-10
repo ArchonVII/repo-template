@@ -77,16 +77,16 @@ Repo-owned helpers (zero-dep, `node`):
   so the working tree stays clean for the close/preflight gates.
 - `npm run agent:status` — branch, default branch, upstream, PR, issue, dirty state,
   worktree path, claims (if installed), and the next recommended action.
-- `npm run agent:prune` — **the way to retire finished worktrees.** Removes every merged +
+- `npm run agent:prune` — **the way to retire finished worktrees.** Removes every retired +
   clean agent worktree/branch in one sweep; never touches dirty work, locked worktrees, or
-  the primary/current checkout. Detects merges two ways: by **ancestry**
-  (`git branch --merged`) and — for **squash/rebase-merged** lanes ancestry can't see — by
-  **GitHub PR state**. A lane is retired via the PR signal only when its PR merged into the
-  default branch **and** the worktree's local tip equals the merged commit; an open PR, a
-  different merge base, or extra local commits keep the lane. If `gh` is unavailable it falls
-  back to ancestry-only (never deletes on uncertainty). Preview first with
+  the primary/current checkout. A lane is retired only when **GitHub PR state** proves its PR
+  merged into the default branch **and** the worktree's local tip equals the merged PR head.
+  This covers merge, squash, and rebase lanes without relying on ancestry alone. A fresh
+  no-diff task branch may also be reachable from the default branch after it advances, so
+  ancestry without merged-PR proof is kept. An open PR, a different merge base, extra local
+  commits, no PR, or unavailable `gh` keep the lane. Preview first with
   `npm run agent:prune -- --dry-run`, which prints every lane with a reason
-  (`ancestry-merged` / `github-pr` / `dirty` / `open-pr` / `tip-ahead-of-merged` / …) and
+  (`github-pr` / `dirty` / `open-pr` / `tip-ahead-of-merged` / `no-pr` / `gh-unavailable` / …) and
   changes nothing. Survives Windows `git worktree remove` failures: when a
   worktree still holds ignored build residue (`node_modules/`, `dist/`) or long paths, bare
   `git worktree remove` aborts with "Directory not empty" and strands a half-removed lane,

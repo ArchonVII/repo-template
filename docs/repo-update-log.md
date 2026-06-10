@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-10 - Safe agent prune retirement
+
+- **Issue/PR:** #64 / (pending)
+- **Branch:** agent/codex/64-safe-agent-prune
+- **Changed paths:** AGENTS.md, scripts/agent/lib.mjs, scripts/agent/prune.mjs, test/agent/lib.test.mjs, .changelog/unreleased/64-safe-agent-prune.md, docs/repo-update-log.md
+- **What changed:** Changed `agent:prune` so clean agent worktrees are retired only with merged-PR head evidence, not from ancestry alone. Added regression coverage for fresh no-PR branches that are reachable from the default branch but still active.
+- **Verification:** `npm test -- test/agent/lib.test.mjs` passed (34/34); `npm test` passed (102/102).
+- **Propagation:** pending archon-setup snapshot refresh and consumer sync for ArchonVII/jma-history.
+
 ## 2026-06-09 - Drop scratch .pr-body.md; read committed PR template directly
 
 - **Issue/PR:** #58 / (pending)
