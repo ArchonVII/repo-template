@@ -96,6 +96,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Verification:** `git diff --check` and `git diff origin/main...HEAD --check` passed.
 - **Propagation:** pending archon-setup snapshots
 
+## 2026-06-10 - Plan/status artifact closeout guidance
+
+- **Issue/PR:** #62 / (pending)
+- **Branch:** agent/codex/62-plan-status-closeout-guidance
+- **Changed paths:** AGENTS.md, .github/PULL_REQUEST_TEMPLATE.md, .changelog/unreleased/62-plan-status-closeout-guidance.md, docs/repo-update-log.md
+- **What changed:** Added default cross-tool guidance that delivery is incomplete while lane-created or lane-used plan/status artifacts still read as active execution guidance. The PR template now prompts authors to record whether those artifacts were closed, narrowed, deprecated/superseded, or not applicable.
+- **Verification:** `git diff --check` passed with CRLF warnings only; `npm test` passed (100/100); `npm run agent:pr-body -- 62 | Select-String -Pattern "Plan/status artifacts|Closes #62"` showed both the new plan/status prompt and the filled issue link.
+- **Propagation:** pending archon-setup snapshot refresh after merge
+
 ## 2026-06-02 - Template library inventory
 
 - **Issue/PR:** #38 / (pending)
