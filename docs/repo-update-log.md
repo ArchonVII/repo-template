@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-11 - Port archon-setup #197 lifecycle/doc-sweep fixes
+
+- **Issue/PR:** #66 / (pending)
+- **Branch:** agent/claude/66-port-197-fixes
+- **Changed paths:** .agent/startup-baseline.json, scripts/agent/lib.mjs, scripts/agent/status.mjs, scripts/agent/prune.mjs, scripts/doc-sweep/sweep.mjs, test/startup-baseline.test.mjs, test/agent/lib.test.mjs, .changelog/unreleased/66-port-197-fixes.md, docs/repo-update-log.md
+- **What changed:** Ported the five review fixes from archon-setup PR #197 that had been hand-applied to archon-setup's snapshot mirror of this repo: the startup baseline requires `scripts/agent/pr-body.mjs`; claims detection reads `.agent/coordination/claims/`; `agent:status`/`agent:prune` share a backslash-tolerant `primaryRootFromCommonDir` helper (with unit tests); the doc-sweep `--apply` lock-held early return strips the internal `captured` field. Restores provider-first flow so the next archon-setup snapshot refresh cannot clobber the fixes (ArchonVII/archon-setup#199).
+- **Verification:** `npm test` (node --test) passed 103/103 after each fix commit; merged-file deltas verified against archon-setup `main` snapshot bodies (byte-identical for the four files #65 did not touch; fix-only additive deltas on the three files it did).
+- **Propagation:** pending archon-setup snapshot refresh (ArchonVII/archon-setup#199).
+
 ## 2026-06-10 - Safe agent prune retirement
 
 - **Issue/PR:** #64 / (pending)
