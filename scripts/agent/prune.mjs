@@ -1,11 +1,11 @@
 // scripts/agent/prune.mjs
 import { execFileSync } from 'node:child_process';
 import { rmSync, existsSync } from 'node:fs';
-import { parseWorktreeList, classifyPruneCandidates, classifyPruneRetirement } from './lib.mjs';
+import { parseWorktreeList, classifyPruneCandidates, classifyPruneRetirement, primaryRootFromCommonDir } from './lib.mjs';
 
 const dryRun = process.argv.includes('--dry-run');
 
-const primaryPath = git(['rev-parse', '--path-format=absolute', '--git-common-dir']).replace(/\/?\.git.*$/, '');
+const primaryPath = primaryRootFromCommonDir(git(['rev-parse', '--path-format=absolute', '--git-common-dir']));
 const currentPath = git(['rev-parse', '--show-toplevel']);
 const defaultBranch = ghOrNull(['repo', 'view', '--json', 'defaultBranchRef', '--jq', '.defaultBranchRef.name']) || 'main';
 

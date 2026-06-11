@@ -2,11 +2,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { parseIssueFromBranch, parseGitStatusPorcelain, detectClaimsInstalled, inferNextAction, formatStatusReport, checkStartupReadiness, formatStartupMap } from './lib.mjs';
+import { parseIssueFromBranch, parseGitStatusPorcelain, detectClaimsInstalled, inferNextAction, formatStatusReport, checkStartupReadiness, formatStartupMap, primaryRootFromCommonDir } from './lib.mjs';
 
 const checkoutRoot = git(['rev-parse', '--show-toplevel']);
 const commonDir = git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
-const commonRoot = commonDir.replace(/\/?\.git.*$/, '');
+const commonRoot = primaryRootFromCommonDir(commonDir);
 
 const branch = git(['branch', '--show-current']) || '(detached)';
 const defaultBranch = ghOrNull(['repo', 'view', '--json', 'defaultBranchRef', '--jq', '.defaultBranchRef.name']) || 'main';
