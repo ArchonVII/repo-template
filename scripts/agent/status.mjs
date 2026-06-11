@@ -5,8 +5,6 @@ import { execFileSync } from 'node:child_process';
 import { parseIssueFromBranch, parseGitStatusPorcelain, detectClaimsInstalled, inferNextAction, formatStatusReport, checkStartupReadiness, formatStartupMap } from './lib.mjs';
 
 const checkoutRoot = git(['rev-parse', '--show-toplevel']);
-const commonDir = git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
-const commonRoot = commonDir.replace(/\/?\.git.*$/, '');
 
 const branch = git(['branch', '--show-current']) || '(detached)';
 const defaultBranch = ghOrNull(['repo', 'view', '--json', 'defaultBranchRef', '--jq', '.defaultBranchRef.name']) || 'main';
@@ -15,7 +13,12 @@ const statusEntries = parseGitStatusPorcelain(git(['status', '--porcelain=1', '-
 const ahead = upstream ? Number(gitOrNull(['rev-list', '--count', `${upstream}..HEAD`]) || 0) : 0;
 const prRaw = ghOrNull(['pr', 'view', '--json', 'number,url,state']);
 const pr = prRaw ? JSON.parse(prRaw) : null;
-const claimsInstalled = detectClaimsInstalled({ claimsFileExists: fs.existsSync(path.join(commonRoot, '.agent', 'claims.json')) });
+// Claims live under .agent/coordination/claims/ per the coordination contract
+// (.agent/coordination/README.md), not at a top-level .agent/claims.json.
+// Resolve them against the current worktree, not the primary checkout's root
+// (--git-common-dir): claims are per-worktree state, and doc-sweep's loader
+// reads them from the worktree being inspected the same way.
+const claimsInstalled = detectClaimsInstalled({ claimsFileExists: fs.existsSync(path.join(checkoutRoot, '.agent', 'coordination', 'claims')) });
 
 console.log(formatStatusReport({
   branch, defaultBranch, upstream, pr, issue: parseIssueFromBranch(branch),

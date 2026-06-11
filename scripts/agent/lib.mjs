@@ -184,6 +184,12 @@ export function inferNextAction({ onDefaultBranch, dirty, hasPr, ahead = 0 }) {
 export function detectClaimsInstalled({ claimsFileExists }) {
   return Boolean(claimsFileExists);
 }
+export function primaryRootFromCommonDir(commonDir) {
+  // `git rev-parse --path-format=absolute --git-common-dir` ends in /.git, but
+  // git can emit backslash separators on Windows; accept either so the result
+  // is the primary checkout root with no trailing separator.
+  return String(commonDir).replace(/[\\/]?\.git([\\/].*)?$/, '');
+}
 export function checkStartupReadiness(baseline, { exists }) {
   const required = Array.isArray(baseline?.required) ? baseline.required : [];
   const expectedDirectories = Array.isArray(baseline?.expectedDirectories) ? baseline.expectedDirectories : [];

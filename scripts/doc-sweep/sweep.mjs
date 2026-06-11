@@ -380,7 +380,10 @@ export async function sweepRepo(wt, {
   if (apply && eligible.length > 0) {
     const lockResult = acquireLock(wt);
     if (!lockResult.acquired) {
-      // Lock held by another sweep — skip without queuing (spec §4.5 H5)
+      // Lock held by another sweep — skip without queuing (spec §4.5 H5).
+      // Strip the internal TOCTOU metadata here too so this early return has
+      // the same item shape as the normal path below.
+      for (const item of eligible) delete item.captured;
       process.stderr.write('[doc-sweep] Lock held by another sweep; skipping apply.\n');
       return { eligible, leaveLog, skip, surfaceOnly };
     }

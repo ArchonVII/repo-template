@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeSlug, buildBranchName, parseIssueFromBranch, populatePrBodyTemplate, parseGitStatusPorcelain, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, classifyPrMergeSignal, classifyPruneRetirement, inferNextAction, formatStatusReport, detectClaimsInstalled, checkStartupReadiness, formatStartupMap } from '../../scripts/agent/lib.mjs';
+import { sanitizeSlug, buildBranchName, parseIssueFromBranch, populatePrBodyTemplate, parseGitStatusPorcelain, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, classifyPrMergeSignal, classifyPruneRetirement, inferNextAction, formatStatusReport, detectClaimsInstalled, checkStartupReadiness, formatStartupMap, primaryRootFromCommonDir } from '../../scripts/agent/lib.mjs';
 
 test('sanitizeSlug lowercases, hyphenates, trims, caps at 6 words', () => {
   assert.equal(sanitizeSlug('Add OAuth Flow!'), 'add-oauth-flow');
@@ -215,4 +215,10 @@ test('checkStartupReadiness reports missing required files and directories', () 
 test('detectClaimsInstalled is true only when the claims file exists', () => {
   assert.equal(detectClaimsInstalled({ claimsFileExists: true }), true);
   assert.equal(detectClaimsInstalled({ claimsFileExists: false }), false);
+});
+
+test('primaryRootFromCommonDir strips the .git suffix for forward- and backslash paths', () => {
+  assert.equal(primaryRootFromCommonDir('C:/GitHub/repo/.git'), 'C:/GitHub/repo');
+  assert.equal(primaryRootFromCommonDir('C:\\GitHub\\repo\\.git'), 'C:\\GitHub\\repo');
+  assert.equal(primaryRootFromCommonDir('/home/user/repo/.git'), '/home/user/repo');
 });
