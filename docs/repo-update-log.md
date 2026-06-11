@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-11 - Baseline audit residual adjudication
+
+- **Issue/PR:** #68 / (pending)
+- **Branch:** agent/codex/68-chore-baseline-close-onboarding-audit-residuals
+- **Changed paths:** CLAUDE.md, GEMINI.md, .github/CODEOWNERS, .changelog/unreleased/68-baseline-audit-residuals.md, docs/repo-update-log.md
+- **What changed:** Added the Claude and Gemini pointer files so per-tool addenda exist and simplified CODEOWNERS to the generated baseline owner entry. Adjudicated remaining audit drift: README.md and AGENTS.md are intentional template/provider content, docs/repo-update-log.md is the provider's operational ledger, .githooks drift is intentional because archon-setup scrubs repo-template-only F18/F19 authority references for generated consumers, and `docs/superpowers/plans/` remains history-only per AGENTS.md.
+- **Verification:** `npm test` passed 103/103. `node C:\GitHub\archon-setup\bin\onboard.mjs C:\GitHub\repo-template-68-chore-baseline-close-onboarding-audit-residuals --audit --json` reported 27 present / 0 missing / 9 drifted, with the remaining drift adjudicated above. `C:\Program Files\Git\bin\bash.exe .githooks/scripts/install-githooks.sh`, `test-owner-maintenance.sh`, `test-checkout-role.sh`, and `bash -n .githooks/commit-msg .githooks/pre-commit .githooks/scripts/*.sh` passed. `C:\Users\josep\go\bin\actionlint.exe .github/workflows/actionlint.yml` passed.
+- **Propagation:** pending archon-setup snapshot refresh after merge.
+
 ## 2026-06-11 - Port archon-setup #197 lifecycle/doc-sweep fixes
 
 - **Issue/PR:** #66 / (pending)
