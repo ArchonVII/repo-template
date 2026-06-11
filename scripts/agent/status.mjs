@@ -15,7 +15,9 @@ const statusEntries = parseGitStatusPorcelain(git(['status', '--porcelain=1', '-
 const ahead = upstream ? Number(gitOrNull(['rev-list', '--count', `${upstream}..HEAD`]) || 0) : 0;
 const prRaw = ghOrNull(['pr', 'view', '--json', 'number,url,state']);
 const pr = prRaw ? JSON.parse(prRaw) : null;
-const claimsInstalled = detectClaimsInstalled({ claimsFileExists: fs.existsSync(path.join(commonRoot, '.agent', 'claims.json')) });
+// Claims live under .agent/coordination/claims/ per the coordination contract
+// (.agent/coordination/README.md), not at a top-level .agent/claims.json.
+const claimsInstalled = detectClaimsInstalled({ claimsFileExists: fs.existsSync(path.join(commonRoot, '.agent', 'coordination', 'claims')) });
 
 console.log(formatStatusReport({
   branch, defaultBranch, upstream, pr, issue: parseIssueFromBranch(branch),
