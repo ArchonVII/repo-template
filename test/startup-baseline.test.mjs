@@ -21,6 +21,7 @@ test('startup baseline contract names canonical startup files and legacy plan pa
     'scripts/agent/start-task.mjs',
     'scripts/agent/status.mjs',
     'scripts/agent/prune.mjs',
+    'scripts/agent/pr-body.mjs',
     'scripts/doc-sweep/lib.mjs',
     'scripts/doc-sweep/git.mjs',
     'scripts/doc-sweep/sweep.mjs',
