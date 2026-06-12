@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-12 - Friction append-log ledger
+
+- **Issue/PR:** #78 / (pending)
+- **Branch:** agent/codex/78-feat-friction-claude-friction-md-append
+- **Changed paths:** .claude/friction.md, .gitignore, .githooks/commit-msg, .githooks/pre-commit, .githooks/scripts/owner-maintenance.sh, .githooks/scripts/test-owner-maintenance.sh, AGENTS.md, test/startup-baseline.test.mjs, .changelog/unreleased/78-friction-ledger.md, docs/repo-update-log.md
+- **What changed:** Added `.claude/friction.md` as the structured, machine-parseable ledger for non-bug workflow hiccups. The owner-maintenance append-log allowlist, hook messages, gitignore exception, managed AGENTS instruction, and regression tests now distinguish friction events from anomaly-triage bugs/security/off-task defects.
+- **Verification:** `npm test -- test/startup-baseline.test.mjs` passed (8/8); `C:\Program Files\Git\bin\bash.exe .githooks/scripts/test-owner-maintenance.sh` passed, including the direct-main `.claude/friction.md` append case and non-ledger `.claude/settings.json` negative case; `git check-ignore -v .claude/friction.md .claude/settings.local.json` showed `.claude/friction.md` matched `!.claude/friction.md` and `.claude/settings.local.json` matched `.claude/*`; `npm test` passed (115/115); `C:\Program Files\Git\bin\bash.exe -n .githooks/commit-msg .githooks/pre-commit .githooks/scripts/*.sh` passed; `C:\Program Files\Git\bin\bash.exe .githooks/scripts/test-checkout-role.sh` passed; `git diff --check` passed with CRLF normalization warnings only.
+- **Propagation:** pending archon-setup snapshot refresh after merge.
+
 ## 2026-06-12 - Local close-scan delivery guard
 
 - **Issue/PR:** #28 / (pending)

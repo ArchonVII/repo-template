@@ -18,6 +18,8 @@ owner_maintenance_subject() {
 #                        "append one-liner to .claude/noticed.md")
 #   .claude/napkin.md  — per-repo curated runbook (napkin skill, curated each
 #                        session)
+#   .claude/friction.md — per-repo structured friction ledger (non-bug workflow
+#                         hiccups; one table row per event)
 #
 # Source: ArchonVII owner conventions; repo-template#50 (page-gm incident
 # gm-20260605-113318 — flushing .claude/noticed.md required a double bypass:
@@ -25,7 +27,7 @@ owner_maintenance_subject() {
 owner_maintenance_is_append_log() {
     local path="${1:-}"
     case "${path}" in
-        .claude/noticed.md|.claude/napkin.md)
+        .claude/noticed.md|.claude/napkin.md|.claude/friction.md)
             return 0
             ;;
     esac

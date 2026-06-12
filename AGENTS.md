@@ -25,6 +25,7 @@ Agents should not spend time rediscovering the process files. Start here:
 - Close guards: `scripts/close/`
 - Doc sweep: `scripts/doc-sweep/`
 - Legacy plans: `docs/superpowers/plans/` is history only; do not add new implementation plans there.
+- Friction ledger: for a non-bug workflow hiccup, append one row to `.claude/friction.md`, do not fix it mid-task, and keep working; bugs/security or off-task defects still go to `.archon/anomalies-thispr.md`.
 
 If these files are missing or unclear, stop searching and run:
 
@@ -121,6 +122,7 @@ A narrow, named set of agent-local note files may be **added or modified** direc
 
 - `.claude/noticed.md` — per-repo observation log (the `Observations` convention)
 - `.claude/napkin.md` — per-repo curated runbook (the napkin skill, curated each session)
+- `.claude/friction.md` — per-repo structured friction ledger for non-bug workflow hiccups
 
 These need no `(owner)` scope — any Conventional Commit subject works (e.g. `chore(noticed): flush observations`), and the issue-ref requirement is waived when every staged path is a ledger. Renames, copies, and deletes of a ledger still require the normal branch/PR lane. The allowlist lives in `.githooks/scripts/owner-maintenance.sh` (`owner_maintenance_is_append_log`); extend it only for a file a documented convention mandates frequent low-ceremony writes to.
 

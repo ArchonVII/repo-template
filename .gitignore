@@ -47,7 +47,8 @@ venv/
 target/
 
 # ----- Agent / local state -----
-.claude/
+.claude/*
+!.claude/friction.md
 .gemini/
 .codex/
 .archon/*

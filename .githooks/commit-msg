@@ -11,7 +11,8 @@
 #        - scratch: `chore(scratch):` / `docs(scratch):` prefix, OR every
 #          staged path lives under `docs/scratch/**`;
 #        - append-log ledger: every staged path is a named ledger
-#          (`.claude/noticed.md`, `.claude/napkin.md`) — any subject;
+#          (`.claude/noticed.md`, `.claude/napkin.md`,
+#          `.claude/friction.md`) — any subject;
 #        - Owner Maintenance: `docs(owner):` / `chore(owner):` plus add-only
 #          safe maintenance paths.
 #
@@ -164,7 +165,7 @@ Scratch-scope exemptions:
 
 Append-log ledger exemption (any conventional-commit subject):
   - All staged paths are append-log ledgers (.claude/noticed.md,
-    .claude/napkin.md) — added or modified
+    .claude/napkin.md, .claude/friction.md) — added or modified
 
 Owner Maintenance exemption:
   - Message prefixed docs(owner): or chore(owner):

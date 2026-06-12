@@ -58,6 +58,21 @@ test('AGENTS exposes the startup map before workflow details', async () => {
   assert.match(body, /node <path-to-archon-setup>\/bin\/onboard\.mjs <repo> --audit/);
 });
 
+test('AGENTS managed start map includes the friction ledger instruction', async () => {
+  const body = await readFile(join(ROOT, 'AGENTS.md'), 'utf8');
+  const start = body.indexOf('<!-- BEGIN MANAGED AGENT START MAP -->');
+  const end = body.indexOf('<!-- END MANAGED AGENT START MAP -->');
+  assert.ok(start > -1, 'AGENTS.md should include the managed start-map start marker');
+  assert.ok(end > start, 'AGENTS.md should include the managed start-map end marker');
+
+  const managed = body.slice(start, end);
+  assert.match(managed, /`\.claude\/friction\.md`/);
+  assert.match(managed, /do not fix it mid-task/i);
+  assert.match(managed, /keep working/i);
+  assert.match(managed, /bugs\/security.*`\.archon\/anomalies-thispr\.md`/i);
+  assert.match(managed, /non-bug workflow hiccup/i);
+});
+
 test('anomaly triage contract uses the canonical ledger path and installed caller', async () => {
   const agents = await readFile(join(ROOT, 'AGENTS.md'), 'utf8');
   assert.match(agents, /`\.archon\/anomalies-thispr\.md`/);
@@ -73,4 +88,24 @@ test('gitignore keeps archon local state ignored while allowing the anomaly ledg
   const body = await readFile(join(ROOT, '.gitignore'), 'utf8');
   assert.match(body, /^\.archon\/\*$/m);
   assert.match(body, /^!\.archon\/anomalies-thispr\.md$/m);
+});
+
+test('gitignore keeps claude local state ignored while allowing the friction ledger', async () => {
+  const body = await readFile(join(ROOT, '.gitignore'), 'utf8');
+  assert.match(body, /^\.claude\/\*$/m);
+  assert.match(body, /^!\.claude\/friction\.md$/m);
+  assert.doesNotMatch(body, /^\.claude\/$/m);
+});
+
+test('friction ledger starts with the exact machine-parseable contract header', async () => {
+  const body = await readFile(join(ROOT, '.claude', 'friction.md'), 'utf8');
+  const meaningfulLines = body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('<!--'));
+
+  assert.equal(meaningfulLines[0], '| date | category | what happened | cost | suggested fix |');
+  assert.equal(meaningfulLines[1], '|---|---|---|---|---|');
+  assert.match(body, /tooling \| docs \| skill \| hook \| ci \| env/);
+  assert.match(body, /rerun \| blocked \| context-burn \| none/);
 });
