@@ -10,6 +10,7 @@ Cross-tool contract for AI agents (Claude, Codex, Copilot, Gemini, etc.) working
 - `ARCHITECTURE.md` — directory ownership and cross-boundary rules (add when the layout outgrows obviousness)
 
 <!-- BEGIN MANAGED AGENT START MAP -->
+
 ## Agent Start Map
 
 Agents should not spend time rediscovering the process files. Start here:
@@ -29,6 +30,7 @@ If these files are missing or unclear, stop searching and run:
 ```text
 node <path-to-archon-setup>/bin/onboard.mjs <repo> --audit
 ```
+
 <!-- END MANAGED AGENT START MAP -->
 
 ## Workflow

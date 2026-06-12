@@ -25,7 +25,5 @@
     "scripts/agent/",
     "scripts/doc-sweep/"
   ],
-  "legacy": [
-    "docs/superpowers/plans/"
-  ]
+  "legacy": ["docs/superpowers/plans/"]
 }

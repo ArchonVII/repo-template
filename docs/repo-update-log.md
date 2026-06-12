@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-12 - Doc orphan detector caller
+
+- **Issue/PR:** #76 / (pending)
+- **Branch:** agent/codex/76-doc-orphan-detector
+- **Changed paths:** .github/workflows/doc-orphan-detector.yml, docs/agent-process/doc-sweep.md, test/doc-orphan-detector-workflow.test.mjs, .changelog/unreleased/76-doc-orphan-detector.md, docs/repo-update-log.md
+- **What changed:** Added the template's doc-orphan-detector GitHub Actions caller, pinned to `ArchonVII/github-workflows/.github/workflows/doc-orphan-detector.yml@v1`, with the weekly Monday 07:00 UTC cadence and manual dispatch. Updated the doc-sweep spec to mark the gh-cron backstop as wired for this template.
+- **Verification:** `npm test -- test/doc-orphan-detector-workflow.test.mjs` first failed with the expected missing-workflow ENOENT, then passed 1/1 after the caller was added. `C:\Users\josep\go\bin\actionlint.exe .github\workflows\doc-orphan-detector.yml` passed with no output. `npm test` passed 104/104.
+- **Propagation:** pending archon-setup snapshot refresh after merge.
+
 ## 2026-06-12 - Install anomaly triage caller
 
 - **Issue/PR:** #75 / (pending)

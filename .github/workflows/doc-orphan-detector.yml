@@ -1,0 +1,26 @@
+# Copy from ArchonVII/github-workflows/examples/doc-orphan-detector.yml.
+# Runs weekly (Mon 07:00 UTC).
+#
+# The doc-sweep gh-cron backstop (spec section 4.7): for every branch with no open
+# PR it opens or updates a tracking issue listing committed allow-list docs whose
+# newest touching commit is older than `stale-hours`. Detection only: it never
+# commits or pushes, and it reports paths only.
+
+name: Doc Orphan Detector
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  detect:
+    uses: ArchonVII/github-workflows/.github/workflows/doc-orphan-detector.yml@v1
+    # with:
+    #   stale-hours: 12
+    #   base-label: doc-orphan
+    #   default-branch: main
