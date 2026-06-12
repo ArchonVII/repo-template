@@ -118,7 +118,7 @@ These need no `(owner)` scope — any Conventional Commit subject works (e.g. `c
 
 ## Anomaly triage
 
-While working on a PR, you'll often notice off-task bugs, stale files, or tech debt that **don't belong in the current change** but shouldn't be lost. The convention: write a structured entry to `.archon/anomalies-thispr.md` on the PR branch. A reusable workflow (`anomaly-triage.yml` from [`ArchonVII/github-workflows`](https://github.com/ArchonVII/github-workflows)) reads that file on every PR event and routes each entry — related entries become sticky PR review comments, unrelated entries become new GitHub issues. Re-runs are idempotent (each entry carries a fingerprint).
+While working on a PR, you'll often notice off-task bugs, stale files, or tech debt that **don't belong in the current change** but shouldn't be lost. The convention: write a structured entry to `.archon/anomalies-thispr.md` on the PR branch. The caller workflow at `.github/workflows/anomaly-triage.yml` invokes [`ArchonVII/github-workflows`](https://github.com/ArchonVII/github-workflows) on every PR event and routes each entry — related entries become sticky PR review comments, unrelated entries become new GitHub issues. Re-runs are idempotent (each entry carries a fingerprint).
 
 ### Entry format
 
@@ -142,7 +142,7 @@ hypothesis you have. Imagine a different agent or human picking this up cold.>
 
 ### Rules
 
-- The file lives at `.archon/anomalies-thispr.md` on the PR branch. The `.archon/` directory should be in `.gitignore` **except** for this one file (use `!anomalies-thispr.md`).
+- The file lives at `.archon/anomalies-thispr.md` on the PR branch. `.gitignore` should ignore `.archon/*` local state while keeping `!.archon/anomalies-thispr.md` trackable.
 - Append rather than overwrite — multiple entries are normal across a PR's commits.
 - Don't summarize the anomaly in your PR description. The triage workflow does that automatically in its summary comment.
 - If you notice something while working but realize it _is_ part of the PR's scope, fix it directly in the PR — don't write an anomaly entry for work you're about to do anyway.
@@ -156,7 +156,7 @@ hypothesis you have. Imagine a different agent or human picking this up cold.>
 - **Unrelated** → opens a new GitHub issue in this repo (or `Downstream repo` if specified) with a back-link to this PR and the `auto-triaged` label.
 - Posts a single summary comment on the PR listing everything filed.
 
-Set this up by adding the caller workflow from [`github-workflows/examples/anomaly-triage.yml`](https://github.com/ArchonVII/github-workflows/blob/main/examples/anomaly-triage.yml) to `.github/workflows/`.
+Keep `.github/workflows/anomaly-triage.yml` aligned with [`github-workflows/examples/anomaly-triage.yml`](https://github.com/ArchonVII/github-workflows/blob/main/examples/anomaly-triage.yml).
 
 ## Verification
 
