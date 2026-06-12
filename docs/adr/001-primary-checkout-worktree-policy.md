@@ -93,11 +93,10 @@ Adopt the **checkout-role** model and enforce it by **extending the existing
    - Add `.githooks/scripts/checkout-role.sh`: resolves primary-vs-linked
      (`--git-dir` vs `--git-common-dir`) and the default branch, sharing the precedent set by
      `.githooks/scripts/owner-maintenance.sh`.
-   - Extend `.githooks/pre-commit`: after the existing main-block, add the
+   - Extend `.githooks/pre-commit`: after the existing default-branch block, add the
      primary + non-default-branch block via the helper; rewrite the error text to recommend
-     `git worktree add`. Comment the new block's authority as **this ADR (001)** — do **not**
-     touch the pre-existing `docs/phase2/hook-authority.md` "Authority" comments; those are
-     general hook-layer authority and are repointed by the catalog follow-up (see Decisions).
+     `git worktree add`. Comment the hook layer's authority as **this ADR (001)** plus the
+     Owner Maintenance Lane contract in `AGENTS.md`.
    - Add `.githooks/scripts/checkout-doctor.sh` and document its invocation
      (`bash .githooks/scripts/checkout-doctor.sh`; Node repos may add an `npm run` alias but it
      must not depend on npm).
@@ -119,11 +118,9 @@ Adopt the **checkout-role** model and enforce it by **extending the existing
 - **Feature number.** This capability is **F19** ("Primary checkout worktree guard"). The
   capability catalog records and normalizes the ID later, but the ADR carries it now. The
   catalog itself is a **separate, lightweight follow-up foundation task**
-  (`docs/capabilities/catalog.md`), explicitly **not a blocker** for this guard. That follow-up
-  owns the **Option-B repoint** of the four dangling `docs/phase2` references (`hook-authority.md`
-  in `commit-msg` / `pre-commit` / `install-githooks.sh`; `findings.md` in `README.md:30`) to the
-  catalog. `docs/phase2/` never existed in this repo's git history — it is inherited scaffolding,
-  so the references are repointed, not restored. Logged in `.claude/noticed.md`.
+  (`docs/capabilities/catalog.md`), explicitly **not a blocker** for this guard. The inherited
+  dangling hook-authority and findings references are repointed by repo-template#77 to this ADR
+  and the Owner Maintenance Lane contract instead of being restored as missing scaffolding.
 - **Linked worktree on the default branch.** Blocked by the existing F18 rule — no v1 warning
   downgrade: git refuses to check out the same branch in two worktrees, so the state is only
   reachable via `--detach`/`--force`, and a warning would weaken default-branch protection for a

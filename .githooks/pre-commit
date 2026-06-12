@@ -2,7 +2,7 @@
 #
 # pre-commit — Repo-template baseline (F18, ArchonVII/repo-template#16).
 #
-# Single purpose: block direct commits to `main` / `master`, except for the
+# Single purpose: block direct commits to the default branch, except for the
 # narrow Owner Maintenance Lane.
 #
 # This hook gates on the *branch*, not on individual commands. The branch
@@ -13,10 +13,11 @@
 #   ALLOW_MAIN_COMMIT=1 git commit ...
 #
 # Rebase / merge / cherry-pick states are exempt — we don't want to
-# break a `git rebase main` or `git pull --rebase` on main during
+# break a `git rebase <default-branch>` or `git pull --rebase` during
 # legitimate maintenance.
 #
-# Authority: Layer 5 in docs/phase2/hook-authority.md.
+# Authority: docs/adr/001-primary-checkout-worktree-policy.md and AGENTS.md
+# "Owner Maintenance Lane".
 
 set -euo pipefail
 
@@ -27,7 +28,7 @@ source "${hook_dir}/scripts/owner-maintenance.sh"
 source "${hook_dir}/scripts/checkout-role.sh"
 
 # --- Detect in-progress git operations and skip the branch check -------
-# During rebase/merge/cherry-pick, HEAD may transiently be on main even
+# During rebase/merge/cherry-pick, HEAD may transiently be on the default branch
 # though the user isn't authoring a fresh commit there.
 git_dir="$(git rev-parse --git-dir)"
 for marker in MERGE_HEAD REBASE_HEAD CHERRY_PICK_HEAD; do
@@ -48,8 +49,8 @@ fi
 # so the `|| echo HEAD` fallback still fires for the detached case below.
 branch="$(git symbolic-ref --short -q HEAD || echo HEAD)"
 
-# Detached HEAD is fine — typically a checkout of a tag or SHA, not a
-# direct main commit.
+# Detached HEAD is fine — typically a checkout of a tag or SHA, not a direct
+# default-branch commit.
 if [[ "${branch}" == "HEAD" ]]; then
     exit 0
 fi
@@ -94,7 +95,7 @@ EOF
 fi
 
 # Non-default branches in a linked worktree are the normal feature path.
-if [[ "${branch}" != "main" && "${branch}" != "master" ]]; then
+if [[ "${branch}" != "${default_branch}" ]]; then
     exit 0
 fi
 

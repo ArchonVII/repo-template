@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-12 - Default-branch owner-lane hook gate
+
+- **Issue/PR:** #77 / (pending)
+- **Branch:** agent/codex/77-hooks-default-branch-doc-refs
+- **Changed paths:** .githooks/commit-msg, .githooks/pre-commit, .githooks/scripts/install-githooks.sh, .githooks/scripts/test-owner-maintenance.sh, README.md, docs/adr/001-primary-checkout-worktree-policy.md, .changelog/unreleased/77-hooks-default-branch-doc-refs.md, docs/repo-update-log.md
+- **What changed:** The pre-commit owner-lane gate now compares the current branch with `checkout_default_branch()` instead of the literal `main`/`master` pair, so unsafe direct commits are blocked on repos whose default branch is named differently. Hook-layer authority references now point to ADR-001 and the Owner Maintenance Lane contract instead of missing legacy docs.
+- **Verification:** `C:\Program Files\Git\bin\bash.exe .githooks/scripts/test-owner-maintenance.sh` passed, including the new `trunk` default-branch unsafe-path regression; `C:\Program Files\Git\bin\bash.exe .githooks/scripts/test-checkout-role.sh` passed; `C:\Program Files\Git\bin\bash.exe -n .githooks/commit-msg .githooks/pre-commit .githooks/scripts/*.sh` passed; `C:\Program Files\Git\bin\bash.exe .githooks/scripts/checkout-doctor.sh` passed and reported this lane as a linked worktree on `agent/codex/77-hooks-default-branch-doc-refs`; `npm test` passed 103/103; `$pattern = "docs/phase" + "2"; rg -n $pattern .` returned no matches; `git diff --check` passed with CRLF normalization warnings only.
+- **Propagation:** pending archon-setup snapshot refresh after merge.
+
 ## 2026-06-11 - Baseline audit residual adjudication
 
 - **Issue/PR:** #68 / (pending)
@@ -184,7 +193,7 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Changed paths:** docs/adr/001-primary-checkout-worktree-policy.md, .githooks/pre-commit, .githooks/scripts/checkout-role.sh, .githooks/scripts/checkout-doctor.sh, .githooks/scripts/test-checkout-role.sh, AGENTS.md, docs/repo-update-log.md
 - **What changed:** The primary checkout now accepts only default-branch owner-maintenance commits; feature-branch commits in the primary checkout are blocked and redirected to `git worktree add` (bypass `ALLOW_PRIMARY_FEATURE_COMMIT=1`, audit-logged to `.agent/bypass.log`). F18's `git switch -c` guidance is replaced with worktree guidance. Adds the `checkout-role.sh` helper, a `checkout-doctor.sh` diagnostic, and the AGENTS.md "Checkout role / worktrees" contract. Note: `checkout_is_primary` requires git >= 2.31 (`--path-format`) and fails open (skips the block) on older git.
 - **Verification:** `bash .githooks/scripts/test-checkout-role.sh` passed; `bash .githooks/scripts/test-owner-maintenance.sh` passed (regression); `bash -n .githooks/pre-commit .githooks/scripts/*.sh` clean.
-- **Propagation:** pending archon-setup snapshots (Phase 2; the catalog follow-up also repoints the dangling docs/phase2 refs)
+- **Propagation:** pending archon-setup snapshots; legacy hook-authority refs are repointed by #77.
 
 ## 2026-05-28 - Owner Maintenance Lane hooks
 
