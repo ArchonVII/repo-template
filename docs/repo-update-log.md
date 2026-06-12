@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-12 - Local close-scan delivery guard
+
+- **Issue/PR:** #28 / (pending)
+- **Branch:** agent/codex/28-close-scan-local-guard
+- **Changed paths:** AGENTS.md, README.md, .gitignore, .agent/startup-baseline.json, package.json, scripts/close/lib.mjs, scripts/close/scan-complete.mjs, scripts/close/ci-guard.mjs, scripts/agent/lib.mjs, test/close-scan.test.mjs, test/agent/lib.test.mjs, test/startup-baseline.test.mjs, .changelog/unreleased/28-close-scan-local-guard.md, docs/repo-update-log.md
+- **What changed:** Added repo-local close-scan delivery commands. `close:scan:complete` runs local required-gate parity checks and writes `.agent/close-scan/complete.json` for the exact current `HEAD`; `close:ci:guard` verifies that marker, PR body evidence, local branch/upstream identity, and `repo-required-gate / decision` before ready/merge delivery actions.
+- **Verification:** `npm test` passed (109/109); `node --check scripts/close/lib.mjs; node --check scripts/close/scan-complete.mjs; node --check scripts/close/ci-guard.mjs; node --check scripts/agent/lib.mjs; node --check scripts/pr-contract.mjs` passed; `git diff --check` passed with CRLF normalization warnings only; `actionlint .github/workflows/actionlint.yml .github/workflows/repo-required-gate.yml` passed; `bash -n .githooks/commit-msg .githooks/pre-commit .githooks/scripts/*.sh` passed.
+- **Propagation:** pending archon-setup snapshot refresh after merge.
+
 ## 2026-06-12 - Default-branch owner-lane hook gate
 
 - **Issue/PR:** #77 / (pending)

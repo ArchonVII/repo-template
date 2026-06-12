@@ -1,5 +1,5 @@
 {
-  "version": "2026-06-12-anomaly-triage-caller",
+  "version": "2026-06-12-close-scan-guard",
   "required": [
     "AGENTS.md",
     "docs/plans/README.md",
@@ -14,6 +14,9 @@
     "scripts/agent/status.mjs",
     "scripts/agent/prune.mjs",
     "scripts/agent/pr-body.mjs",
+    "scripts/close/lib.mjs",
+    "scripts/close/scan-complete.mjs",
+    "scripts/close/ci-guard.mjs",
     "scripts/doc-sweep/lib.mjs",
     "scripts/doc-sweep/git.mjs",
     "scripts/doc-sweep/sweep.mjs",
@@ -23,6 +26,7 @@
     "docs/plans/",
     "docs/agent-process/",
     "scripts/agent/",
+    "scripts/close/",
     "scripts/doc-sweep/"
   ],
   "legacy": ["docs/superpowers/plans/"]

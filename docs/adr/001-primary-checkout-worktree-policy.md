@@ -12,7 +12,7 @@ It blocks commits on `main`/`master` and, in its own error text, instructs the a
 git switch -c <type>/<short-description>
 ```
 
-That guidance is the *in-place feature-branch* model: it re-points **the current checkout**
+That guidance is the _in-place feature-branch_ model: it re-points **the current checkout**
 onto a new branch. The owner's working model is the opposite — the **worktree** model: the
 primary checkout stays on the default branch (a stable "desk"), and feature work happens in a
 separate linked worktree folder (a disposable "bench").
@@ -28,7 +28,7 @@ We want one enforced convention across every agent-driven repo (Claude / Codex /
 shipped the tool-agnostic way (see `pattern-tool-agnostic-capability`): an `AGENTS.md` contract
 section plus a tracked git hook, distributed via `repo-template` → `archon-setup`. Not a
 per-CLI skill, and not an untracked local `.git/hooks` script (which never survives a fresh
-clone and so is the *least* global option available).
+clone and so is the _least_ global option available).
 
 There is no reusable-workflow half for this capability: CI runs server-side and cannot observe
 a clone's local worktree topology, so enforcement lives entirely in the hook + the contract.
@@ -63,13 +63,13 @@ Adopt the **checkout-role** model and enforce it by **extending the existing
 
 "Primary" = the checkout where `--git-dir` equals `--git-common-dir`.
 
-| Context | Commit? | Source of rule |
-| --- | --- | --- |
-| Primary, default branch, owner-maintenance safe paths | **allow** | existing owner lane |
-| Primary, default branch, unsafe paths | **block** | existing F18 |
-| Primary, **non-default branch** | **block → worktree** | **NEW (this ADR)** |
-| Linked worktree, non-default branch | **allow** | normal feature flow |
-| Linked worktree, default branch | **block** | existing F18 |
+| Context                                               | Commit?              | Source of rule      |
+| ----------------------------------------------------- | -------------------- | ------------------- |
+| Primary, default branch, owner-maintenance safe paths | **allow**            | existing owner lane |
+| Primary, default branch, unsafe paths                 | **block**            | existing F18        |
+| Primary, **non-default branch**                       | **block → worktree** | **NEW (this ADR)**  |
+| Linked worktree, non-default branch                   | **allow**            | normal feature flow |
+| Linked worktree, default branch                       | **block**            | existing F18        |
 
 ## Consequences
 

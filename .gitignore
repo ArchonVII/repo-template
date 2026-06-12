@@ -61,3 +61,6 @@ progress.md
 
 # agent lifecycle runtime metadata (written by agent:start-task)
 .agent/current-task.json
+
+# close-scan runtime marker (written by close:scan:complete)
+.agent/close-scan/

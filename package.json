@@ -7,6 +7,8 @@
   "scripts": {
     "test": "node --test",
     "pr:contract": "node scripts/pr-contract.mjs",
+    "close:scan:complete": "node scripts/close/scan-complete.mjs",
+    "close:ci:guard": "node scripts/close/ci-guard.mjs",
     "agent:close-preflight": "node scripts/agent-close-preflight.mjs",
     "agent:pr-ready": "node scripts/agent-pr-ready.mjs",
     "agent:status": "node scripts/agent/status.mjs",

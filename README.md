@@ -101,6 +101,23 @@ npm run pr:contract -- --repo OWNER/REPO --pr <number>
 npm run agent:pr-ready -- --repo OWNER/REPO --pr <number> --dry-run
 ```
 
+## Local close-scan guards
+
+This template ships local delivery guards that bind final verification to the
+exact commit being delivered:
+
+```bash
+npm run close:scan:complete -- --repo OWNER/REPO --pr <number> --changelog-decision "fragment .changelog/unreleased/<issue>-<slug>.md" --findings-decision "no findings file used"
+git push
+npm run close:ci:guard -- --repo OWNER/REPO --pr <number>
+```
+
+`close:scan:complete` runs local parity checks for the required gate and writes
+the ignored `.agent/close-scan/complete.json` marker for the current `HEAD`.
+`close:ci:guard` runs after push and fails if the marker is stale, PR evidence
+is invalid, the local branch is not identical to upstream, or
+`repo-required-gate / decision` is missing, pending, or not green.
+
 Verify hook behavior after edits with:
 
 ```bash
