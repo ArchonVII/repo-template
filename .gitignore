@@ -50,6 +50,8 @@ target/
 .claude/
 .gemini/
 .codex/
+.archon/*
+!.archon/anomalies-thispr.md
 task_plan.md
 findings.md
 progress.md

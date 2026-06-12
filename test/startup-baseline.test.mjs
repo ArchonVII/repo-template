@@ -8,13 +8,14 @@ const ROOT = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
 
 test('startup baseline contract names canonical startup files and legacy plan path', async () => {
   const baseline = JSON.parse(await readFile(join(ROOT, '.agent', 'startup-baseline.json'), 'utf8'));
-  assert.equal(baseline.version, '2026-06-08-agent-start-map');
+  assert.equal(baseline.version, '2026-06-12-anomaly-triage-caller');
   for (const path of [
     'AGENTS.md',
     'docs/plans/README.md',
     '.agent/check-map.yml',
     '.agent/coordination/README.md',
     '.github/PULL_REQUEST_TEMPLATE.md',
+    '.github/workflows/anomaly-triage.yml',
     'docs/repo-update-log.md',
     'package.json',
     'scripts/agent/lib.mjs',
@@ -51,4 +52,21 @@ test('AGENTS exposes the startup map before workflow details', async () => {
   assert.ok(startupIndex < workflowIndex, 'Agent Start Map should appear before workflow details');
   assert.match(body, /docs\/plans\//);
   assert.match(body, /node <path-to-archon-setup>\/bin\/onboard\.mjs <repo> --audit/);
+});
+
+test('anomaly triage contract uses the canonical ledger path and installed caller', async () => {
+  const agents = await readFile(join(ROOT, 'AGENTS.md'), 'utf8');
+  assert.match(agents, /`\.archon\/anomalies-thispr\.md`/);
+  assert.match(agents, /`\.github\/workflows\/anomaly-triage\.yml`/);
+  assert.doesNotMatch(agents, /workflow input/i);
+
+  const workflow = await readFile(join(ROOT, '.github', 'workflows', 'anomaly-triage.yml'), 'utf8');
+  assert.match(workflow, /uses: ArchonVII\/github-workflows\/\.github\/workflows\/anomaly-triage\.yml@v1/);
+  assert.match(workflow, /\.archon\/anomalies-thispr\.md/);
+});
+
+test('gitignore keeps archon local state ignored while allowing the anomaly ledger', async () => {
+  const body = await readFile(join(ROOT, '.gitignore'), 'utf8');
+  assert.match(body, /^\.archon\/\*$/m);
+  assert.match(body, /^!\.archon\/anomalies-thispr\.md$/m);
 });
