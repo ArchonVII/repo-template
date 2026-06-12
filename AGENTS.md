@@ -21,6 +21,7 @@ Agents should not spend time rediscovering the process files. Start here:
 - Coordination: `.agent/coordination/README.md`
 - PR process: `.github/PULL_REQUEST_TEMPLATE.md`
 - Agent scripts: `scripts/agent/`
+- Close guards: `scripts/close/`
 - Doc sweep: `scripts/doc-sweep/`
 - Legacy plans: `docs/superpowers/plans/` is history only; do not add new implementation plans there.
 
@@ -93,7 +94,12 @@ Repo-owned helpers (zero-dep, `node`):
   whereas `agent:prune` finishes the delete and skips any single un-removable lane instead
   of aborting the batch. Idempotent.
 
-Optional capabilities (claims #14, close-scan #28) are reported as "not installed" when absent.
+Optional claim capabilities (#14) are reported as "not installed" when absent.
+
+Local delivery guards:
+
+- `npm run close:scan:complete -- --repo OWNER/REPO --pr <number> --changelog-decision "<fragment-or-no-changelog>" --findings-decision "<decision>"` — run after final local verification and before pushing a delivery update. It runs local required-gate parity checks and writes the ignored `.agent/close-scan/complete.json` marker bound to the exact current `HEAD`.
+- `npm run close:ci:guard -- --repo OWNER/REPO --pr <number>` — run after pushing the exact final `HEAD` and before `agent:close-preflight`, `agent:pr-ready`, or merge actions. It verifies the close-scan marker, PR body evidence, local branch/upstream identity, and the `repo-required-gate / decision` check. Missing or unavailable CI is a failure, not a pass.
 
 ## Owner Maintenance Lane
 
@@ -181,12 +187,24 @@ Before marking a PR ready for review:
 
 ## Local delivery guards
 
-If this repo adds a local close-scan, pre-push, or CI-delivery guard, keep the
-guard strict for pushes that would update the remote branch: verification and
-any close-scan completion marker must bind to the exact final `HEAD` after the
-last commit.
+This repo includes local close-scan delivery guards. Keep them strict for pushes
+that would update the remote branch: verification and the close-scan completion
+marker must bind to the exact final `HEAD` after the last commit.
 
-The guard should still allow true no-op finalization pushes, where local `HEAD`
+Run `npm run close:scan:complete -- --repo OWNER/REPO --pr <number>
+--changelog-decision "<fragment-or-no-changelog>" --findings-decision
+"<decision>"` after final local verification and before pushing. It writes the
+ignored `.agent/close-scan/complete.json` marker with changelog, findings, and
+verification decisions for the current `HEAD`.
+
+After pushing that exact `HEAD`, run `npm run close:ci:guard -- --repo
+OWNER/REPO --pr <number>` before `npm run agent:close-preflight`, `npm run
+agent:pr-ready`, or `gh pr merge`. The guard verifies local branch/upstream
+identity, PR body evidence, the fresh close-scan marker, and the
+`repo-required-gate / decision` check. If CI checks are missing, pending, or not
+green, the guard fails rather than pretending they ran.
+
+The guard still allows true no-op finalization pushes, where local `HEAD`
 already matches the upstream branch and no remote update or CI-triggering
 delivery action would occur. This keeps Copilot/Codex automatic cleanup pushes
 from failing after the branch is already synced, without creating a bypass for
@@ -202,8 +220,8 @@ real changes.
 - Use `close:review` for verify -> push -> PR body -> ready-for-review handoff.
 - Use `close:ship` only when the user explicitly says `/close`, `ship it`,
   `land it`, `merge to main`, or equivalent delivery language.
-- If this repo adds a local close-scan guard, run it before `git push`,
-  `npm run agent:pr-ready`, and `gh pr merge`.
+- Run `close:scan:complete` before a delivery `git push`, then run
+  `close:ci:guard` before `npm run agent:pr-ready` and `gh pr merge`.
 
 ## CHANGELOG
 

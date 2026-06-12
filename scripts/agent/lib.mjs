@@ -213,6 +213,7 @@ export function formatStartupMap(baseline, { repoPath = '<repo>', archonSetupCom
     '- Coordination:   .agent/coordination/README.md',
     '- PR process:     .github/PULL_REQUEST_TEMPLATE.md',
     '- Agent scripts:  scripts/agent/',
+    '- Close guards:   scripts/close/',
     '- Doc sweep:      scripts/doc-sweep/',
   ];
   if (legacy.length) lines.push(`- Legacy plans:   ${legacy.join(', ')} (history only)`);

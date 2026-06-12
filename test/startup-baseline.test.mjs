@@ -8,7 +8,7 @@ const ROOT = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
 
 test('startup baseline contract names canonical startup files and legacy plan path', async () => {
   const baseline = JSON.parse(await readFile(join(ROOT, '.agent', 'startup-baseline.json'), 'utf8'));
-  assert.equal(baseline.version, '2026-06-08-agent-start-map');
+  assert.equal(baseline.version, '2026-06-12-close-scan-guard');
   for (const path of [
     'AGENTS.md',
     'docs/plans/README.md',
@@ -22,6 +22,9 @@ test('startup baseline contract names canonical startup files and legacy plan pa
     'scripts/agent/status.mjs',
     'scripts/agent/prune.mjs',
     'scripts/agent/pr-body.mjs',
+    'scripts/close/lib.mjs',
+    'scripts/close/scan-complete.mjs',
+    'scripts/close/ci-guard.mjs',
     'scripts/doc-sweep/lib.mjs',
     'scripts/doc-sweep/git.mjs',
     'scripts/doc-sweep/sweep.mjs',
@@ -29,7 +32,7 @@ test('startup baseline contract names canonical startup files and legacy plan pa
   ]) {
     assert.ok(baseline.required.includes(path), `baseline required should include ${path}`);
   }
-  for (const path of ['docs/plans/', 'docs/agent-process/', 'scripts/agent/', 'scripts/doc-sweep/']) {
+  for (const path of ['docs/plans/', 'docs/agent-process/', 'scripts/agent/', 'scripts/close/', 'scripts/doc-sweep/']) {
     assert.ok(baseline.expectedDirectories.includes(path), `baseline directories should include ${path}`);
   }
   assert.ok(baseline.legacy.includes('docs/superpowers/plans/'));
@@ -50,5 +53,6 @@ test('AGENTS exposes the startup map before workflow details', async () => {
   assert.ok(workflowIndex > -1, 'AGENTS.md should include Workflow');
   assert.ok(startupIndex < workflowIndex, 'Agent Start Map should appear before workflow details');
   assert.match(body, /docs\/plans\//);
+  assert.match(body, /scripts\/close\//);
   assert.match(body, /node <path-to-archon-setup>\/bin\/onboard\.mjs <repo> --audit/);
 });
