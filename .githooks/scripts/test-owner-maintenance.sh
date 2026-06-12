@@ -89,6 +89,13 @@ stage_file "README.md" "unsafe"
 expect_failure "pre-commit-owner-unsafe" run_in_tmp "${pre_commit_hook}"
 
 reset_tmp_repo
+run_in_tmp git branch -m trunk
+run_in_tmp git update-ref refs/remotes/origin/trunk HEAD
+run_in_tmp git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk
+stage_file "src/app.ts" "unsafe"
+expect_failure "pre-commit-owner-unsafe-custom-default" run_in_tmp "${pre_commit_hook}"
+
+reset_tmp_repo
 stage_file "docs/process/policy.md" "unsafe"
 expect_failure "pre-commit-owner-unsafe-docs-process" run_in_tmp "${pre_commit_hook}"
 

@@ -12,7 +12,7 @@ It blocks commits on `main`/`master` and, in its own error text, instructs the a
 git switch -c <type>/<short-description>
 ```
 
-That guidance is the *in-place feature-branch* model: it re-points **the current checkout**
+That guidance is the _in-place feature-branch_ model: it re-points **the current checkout**
 onto a new branch. The owner's working model is the opposite — the **worktree** model: the
 primary checkout stays on the default branch (a stable "desk"), and feature work happens in a
 separate linked worktree folder (a disposable "bench").
@@ -28,7 +28,7 @@ We want one enforced convention across every agent-driven repo (Claude / Codex /
 shipped the tool-agnostic way (see `pattern-tool-agnostic-capability`): an `AGENTS.md` contract
 section plus a tracked git hook, distributed via `repo-template` → `archon-setup`. Not a
 per-CLI skill, and not an untracked local `.git/hooks` script (which never survives a fresh
-clone and so is the *least* global option available).
+clone and so is the _least_ global option available).
 
 There is no reusable-workflow half for this capability: CI runs server-side and cannot observe
 a clone's local worktree topology, so enforcement lives entirely in the hook + the contract.
@@ -63,13 +63,13 @@ Adopt the **checkout-role** model and enforce it by **extending the existing
 
 "Primary" = the checkout where `--git-dir` equals `--git-common-dir`.
 
-| Context | Commit? | Source of rule |
-| --- | --- | --- |
-| Primary, default branch, owner-maintenance safe paths | **allow** | existing owner lane |
-| Primary, default branch, unsafe paths | **block** | existing F18 |
-| Primary, **non-default branch** | **block → worktree** | **NEW (this ADR)** |
-| Linked worktree, non-default branch | **allow** | normal feature flow |
-| Linked worktree, default branch | **block** | existing F18 |
+| Context                                               | Commit?              | Source of rule      |
+| ----------------------------------------------------- | -------------------- | ------------------- |
+| Primary, default branch, owner-maintenance safe paths | **allow**            | existing owner lane |
+| Primary, default branch, unsafe paths                 | **block**            | existing F18        |
+| Primary, **non-default branch**                       | **block → worktree** | **NEW (this ADR)**  |
+| Linked worktree, non-default branch                   | **allow**            | normal feature flow |
+| Linked worktree, default branch                       | **block**            | existing F18        |
 
 ## Consequences
 
@@ -93,11 +93,10 @@ Adopt the **checkout-role** model and enforce it by **extending the existing
    - Add `.githooks/scripts/checkout-role.sh`: resolves primary-vs-linked
      (`--git-dir` vs `--git-common-dir`) and the default branch, sharing the precedent set by
      `.githooks/scripts/owner-maintenance.sh`.
-   - Extend `.githooks/pre-commit`: after the existing main-block, add the
+   - Extend `.githooks/pre-commit`: after the existing default-branch block, add the
      primary + non-default-branch block via the helper; rewrite the error text to recommend
-     `git worktree add`. Comment the new block's authority as **this ADR (001)** — do **not**
-     touch the pre-existing `docs/phase2/hook-authority.md` "Authority" comments; those are
-     general hook-layer authority and are repointed by the catalog follow-up (see Decisions).
+     `git worktree add`. Comment the hook layer's authority as **this ADR (001)** plus the
+     Owner Maintenance Lane contract in `AGENTS.md`.
    - Add `.githooks/scripts/checkout-doctor.sh` and document its invocation
      (`bash .githooks/scripts/checkout-doctor.sh`; Node repos may add an `npm run` alias but it
      must not depend on npm).
@@ -119,11 +118,9 @@ Adopt the **checkout-role** model and enforce it by **extending the existing
 - **Feature number.** This capability is **F19** ("Primary checkout worktree guard"). The
   capability catalog records and normalizes the ID later, but the ADR carries it now. The
   catalog itself is a **separate, lightweight follow-up foundation task**
-  (`docs/capabilities/catalog.md`), explicitly **not a blocker** for this guard. That follow-up
-  owns the **Option-B repoint** of the four dangling `docs/phase2` references (`hook-authority.md`
-  in `commit-msg` / `pre-commit` / `install-githooks.sh`; `findings.md` in `README.md:30`) to the
-  catalog. `docs/phase2/` never existed in this repo's git history — it is inherited scaffolding,
-  so the references are repointed, not restored. Logged in `.claude/noticed.md`.
+  (`docs/capabilities/catalog.md`), explicitly **not a blocker** for this guard. The inherited
+  dangling hook-authority and findings references are repointed by repo-template#77 to this ADR
+  and the Owner Maintenance Lane contract instead of being restored as missing scaffolding.
 - **Linked worktree on the default branch.** Blocked by the existing F18 rule — no v1 warning
   downgrade: git refuses to check out the same branch in two worktrees, so the state is only
   reachable via `--detach`/`--force`, and a warning would weaken default-branch protection for a

@@ -24,6 +24,33 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Verification:** `npm test` passed (109/109); `node --check scripts/close/lib.mjs; node --check scripts/close/scan-complete.mjs; node --check scripts/close/ci-guard.mjs; node --check scripts/agent/lib.mjs; node --check scripts/pr-contract.mjs` passed; `git diff --check` passed with CRLF normalization warnings only; `actionlint .github/workflows/actionlint.yml .github/workflows/repo-required-gate.yml` passed; `bash -n .githooks/commit-msg .githooks/pre-commit .githooks/scripts/*.sh` passed.
 - **Propagation:** pending archon-setup snapshot refresh after merge.
 
+## 2026-06-12 - Default-branch owner-lane hook gate
+
+- **Issue/PR:** #77 / (pending)
+- **Branch:** agent/codex/77-hooks-default-branch-doc-refs
+- **Changed paths:** .githooks/commit-msg, .githooks/pre-commit, .githooks/scripts/install-githooks.sh, .githooks/scripts/test-owner-maintenance.sh, README.md, docs/adr/001-primary-checkout-worktree-policy.md, .changelog/unreleased/77-hooks-default-branch-doc-refs.md, docs/repo-update-log.md
+- **What changed:** The pre-commit owner-lane gate now compares the current branch with `checkout_default_branch()` instead of the literal `main`/`master` pair, so unsafe direct commits are blocked on repos whose default branch is named differently. Hook-layer authority references now point to ADR-001 and the Owner Maintenance Lane contract instead of missing legacy docs.
+- **Verification:** `C:\Program Files\Git\bin\bash.exe .githooks/scripts/test-owner-maintenance.sh` passed, including the new `trunk` default-branch unsafe-path regression; `C:\Program Files\Git\bin\bash.exe .githooks/scripts/test-checkout-role.sh` passed; `C:\Program Files\Git\bin\bash.exe -n .githooks/commit-msg .githooks/pre-commit .githooks/scripts/*.sh` passed; `C:\Program Files\Git\bin\bash.exe .githooks/scripts/checkout-doctor.sh` passed and reported this lane as a linked worktree on `agent/codex/77-hooks-default-branch-doc-refs`; `npm test` passed 103/103; `$pattern = "docs/phase" + "2"; rg -n $pattern .` returned no matches; `git diff --check` passed with CRLF normalization warnings only.
+- **Propagation:** pending archon-setup snapshot refresh after merge.
+
+## 2026-06-12 - Doc orphan detector caller
+
+- **Issue/PR:** #76 / (pending)
+- **Branch:** agent/codex/76-doc-orphan-detector
+- **Changed paths:** .github/workflows/doc-orphan-detector.yml, docs/agent-process/doc-sweep.md, test/doc-orphan-detector-workflow.test.mjs, .changelog/unreleased/76-doc-orphan-detector.md, docs/repo-update-log.md
+- **What changed:** Added the template's doc-orphan-detector GitHub Actions caller, pinned to `ArchonVII/github-workflows/.github/workflows/doc-orphan-detector.yml@v1`, with the weekly Monday 07:00 UTC cadence and manual dispatch. Updated the doc-sweep spec to mark the gh-cron backstop as wired for this template.
+- **Verification:** `npm test -- test/doc-orphan-detector-workflow.test.mjs` first failed with the expected missing-workflow ENOENT, then passed 1/1 after the caller was added. `C:\Users\josep\go\bin\actionlint.exe .github\workflows\doc-orphan-detector.yml` passed with no output. `npm test` passed 104/104.
+- **Propagation:** pending archon-setup snapshot refresh after merge.
+
+## 2026-06-12 - Install anomaly triage caller
+
+- **Issue/PR:** #75 / (pending)
+- **Branch:** agent/codex/75-anomaly-triage-caller
+- **Changed paths:** .github/workflows/anomaly-triage.yml, .gitignore, AGENTS.md, .agent/startup-baseline.json, test/startup-baseline.test.mjs, docs/repo-update-log.md
+- **What changed:** Installed the anomaly-triage caller workflow from `ArchonVII/github-workflows`, kept `.archon/anomalies-thispr.md` as the canonical anomaly ledger path, and made `.archon/*` ignored except for that ledger file so agents can commit anomaly reports on PR branches.
+- **Verification:** `node --test test/startup-baseline.test.mjs` passed 5/5 after the red/green cycle; `npm test` passed 105/105; `C:\Users\josep\go\bin\actionlint.exe .github/workflows/actionlint.yml .github/workflows/repo-required-gate.yml .github/workflows/anomaly-triage.yml` passed; `git diff --check` passed with CRLF warnings only.
+- **Propagation:** pending archon-setup snapshot refresh after merge.
+
 ## 2026-06-11 - Baseline audit residual adjudication
 
 - **Issue/PR:** #68 / (pending)
@@ -193,7 +220,7 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Changed paths:** docs/adr/001-primary-checkout-worktree-policy.md, .githooks/pre-commit, .githooks/scripts/checkout-role.sh, .githooks/scripts/checkout-doctor.sh, .githooks/scripts/test-checkout-role.sh, AGENTS.md, docs/repo-update-log.md
 - **What changed:** The primary checkout now accepts only default-branch owner-maintenance commits; feature-branch commits in the primary checkout are blocked and redirected to `git worktree add` (bypass `ALLOW_PRIMARY_FEATURE_COMMIT=1`, audit-logged to `.agent/bypass.log`). F18's `git switch -c` guidance is replaced with worktree guidance. Adds the `checkout-role.sh` helper, a `checkout-doctor.sh` diagnostic, and the AGENTS.md "Checkout role / worktrees" contract. Note: `checkout_is_primary` requires git >= 2.31 (`--path-format`) and fails open (skips the block) on older git.
 - **Verification:** `bash .githooks/scripts/test-checkout-role.sh` passed; `bash .githooks/scripts/test-owner-maintenance.sh` passed (regression); `bash -n .githooks/pre-commit .githooks/scripts/*.sh` clean.
-- **Propagation:** pending archon-setup snapshots (Phase 2; the catalog follow-up also repoints the dangling docs/phase2 refs)
+- **Propagation:** pending archon-setup snapshots; legacy hook-authority refs are repointed by #77.
 
 ## 2026-05-28 - Owner Maintenance Lane hooks
 

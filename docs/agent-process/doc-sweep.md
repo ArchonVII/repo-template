@@ -214,6 +214,11 @@ For every branch with no open PR:
 > A gh-cron sees only **pushed** commits — committed-but-orphaned docs on stale branches. It
 > cannot see uncommitted working-tree files.
 
+**Template caller wired:** `repo-template/.github/workflows/doc-orphan-detector.yml` invokes
+`ArchonVII/github-workflows/.github/workflows/doc-orphan-detector.yml@v1` on the weekly
+`0 7 * * 1` cadence described above, with manual `workflow_dispatch` available for owner
+smokes.
+
 **Local backstop** — a scheduled local agent (`/schedule` + Cron) or SessionStart hook runs the
 sweep-on-open algorithm across ecosystem repos periodically. Tool-specific (operator config);
 the tool-agnostic contract keeps the behavior portable.
@@ -333,6 +338,10 @@ docs/race.md       eligible, touched after classify → abort → leave (TOCTOU 
 - **No silent caps:** any bounded/skipped work is logged.
 
 ## 9. Future hardening (out of scope for v1)
+
+The gh-cron detector is wired for this template in
+`.github/workflows/doc-orphan-detector.yml`; the remaining items below are still future
+hardening.
 
 - **Session heartbeat** (`.agent/coordination/heartbeat/<session>.json`) — the _second_
   positive worktree-liveness signal (a dead heartbeat marks abandonment without an expired
