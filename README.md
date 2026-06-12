@@ -42,7 +42,8 @@ See [LICENSE](LICENSE).
 
 This template ships a `.githooks/` baseline (issue
 [ArchonVII/repo-template#16](https://github.com/ArchonVII/repo-template/issues/16),
-finding F18 in `docs/phase2/findings.md`):
+documented by [`docs/adr/001-primary-checkout-worktree-policy.md`](docs/adr/001-primary-checkout-worktree-policy.md)
+and the Owner Maintenance Lane contract in [`AGENTS.md`](AGENTS.md)):
 
 - **`commit-msg`** — requires a conventional-commit prefix (`feat`,
   `fix`, `docs`, `chore`, `refactor`, `test`, `ci`, `build`, `perf`,
@@ -51,7 +52,7 @@ finding F18 in `docs/phase2/findings.md`):
   and commits scoped entirely to `docs/scratch/**`; `docs(owner):` /
   `chore(owner):` messages are exempt only when every staged path is
   add-only Owner Maintenance Lane content.
-- **`pre-commit`** — rejects direct commits to `main` / `master`.
+- **`pre-commit`** — rejects direct commits to the default branch.
   Exempt during in-progress rebase / merge / cherry-pick. Also allows
   Owner Maintenance Lane commits when every staged path is add-only and
   safe (`docs/**`, image files, or `.changelog/**`; explicit unsafe paths

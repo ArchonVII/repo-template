@@ -8,7 +8,8 @@
 # Usage:
 #   ./.githooks/scripts/install-githooks.sh
 #
-# Authority: Layer 5 in docs/phase2/hook-authority.md.
+# Authority: docs/adr/001-primary-checkout-worktree-policy.md and AGENTS.md
+# "Owner Maintenance Lane".
 
 set -euo pipefail
 
