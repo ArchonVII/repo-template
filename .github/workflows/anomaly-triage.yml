@@ -1,0 +1,28 @@
+name: Anomaly triage
+
+# Example caller for ArchonVII/github-workflows/.github/workflows/anomaly-triage.yml@v1
+#
+# Reads .archon/anomalies-thispr.md from the PR branch and routes each entry to
+# either a sticky PR review comment (related to this PR) or a new GitHub issue
+# (unrelated). See the reusable workflow's top comment for the entry format.
+#
+# Requires the consuming repo's AGENTS.md to instruct agents to write anomalies
+# to .archon/anomalies-thispr.md during PR work (see ArchonVII/repo-template).
+#
+# Cross-repo issue filing: if some unrelated anomalies' root causes live in
+# another repo (e.g. an upstream library), add a `triage-token` repo secret
+# holding a PAT with `issues: write` on that repo, then uncomment the secrets
+# block below and add `default-downstream-repo` if you want a default target.
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, synchronize]
+
+jobs:
+  triage:
+    uses: ArchonVII/github-workflows/.github/workflows/anomaly-triage.yml@v1
+    # with:
+    #   default-downstream-repo: ArchonVII/some-upstream
+    #   dry-run: false
+    # secrets:
+    #   triage-token: ${{ secrets.TRIAGE_TOKEN }}
