@@ -24,6 +24,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Verification:** `npm test -- test/doc-orphan-detector-workflow.test.mjs` first failed with the expected missing-workflow ENOENT, then passed 1/1 after the caller was added. `C:\Users\josep\go\bin\actionlint.exe .github\workflows\doc-orphan-detector.yml` passed with no output. `npm test` passed 104/104.
 - **Propagation:** pending archon-setup snapshot refresh after merge.
 
+## 2026-06-12 - Install anomaly triage caller
+
+- **Issue/PR:** #75 / (pending)
+- **Branch:** agent/codex/75-anomaly-triage-caller
+- **Changed paths:** .github/workflows/anomaly-triage.yml, .gitignore, AGENTS.md, .agent/startup-baseline.json, test/startup-baseline.test.mjs, docs/repo-update-log.md
+- **What changed:** Installed the anomaly-triage caller workflow from `ArchonVII/github-workflows`, kept `.archon/anomalies-thispr.md` as the canonical anomaly ledger path, and made `.archon/*` ignored except for that ledger file so agents can commit anomaly reports on PR branches.
+- **Verification:** `node --test test/startup-baseline.test.mjs` passed 5/5 after the red/green cycle; `npm test` passed 105/105; `C:\Users\josep\go\bin\actionlint.exe .github/workflows/actionlint.yml .github/workflows/repo-required-gate.yml .github/workflows/anomaly-triage.yml` passed; `git diff --check` passed with CRLF warnings only.
+- **Propagation:** pending archon-setup snapshot refresh after merge.
+
 ## 2026-06-11 - Baseline audit residual adjudication
 
 - **Issue/PR:** #68 / (pending)
