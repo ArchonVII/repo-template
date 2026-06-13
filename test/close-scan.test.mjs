@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import {
   buildCloseScanMarker,
@@ -7,6 +10,10 @@ import {
   evaluateCloseScanMarker,
   evaluateRequiredChecks,
 } from '../scripts/close/lib.mjs';
+import {
+  checkHookSyntax,
+  parseNameStatus,
+} from '../scripts/close/scan-complete.mjs';
 
 test('classifyCloseScanScope requires local parity checks for code and workflow changes', () => {
   const result = classifyCloseScanScope({
@@ -148,4 +155,82 @@ test('evaluateCloseScanMarker accepts only a fresh marker bound to the current f
   });
   assert.equal(stale.ok, false);
   assert.match(stale.failures.join('\n'), /HEAD/i);
+});
+
+test('parseNameStatus collects both sides of renames and includes deletions', () => {
+  // `git diff --name-status -M` output: tab-separated <status>\t<path>, with a
+  // third column for renames/copies. parseNameStatus must surface deletions (D)
+  // and BOTH the old and new path of a rename so scope derivation sees the
+  // source side (repo-template#84).
+  const raw = [
+    'M\tdocs/keep.md',
+    'D\tscripts/close/foo.mjs',
+    'R100\tscripts/close/torename.mjs\tdocs/renamed.md',
+  ].join('\n');
+
+  const paths = parseNameStatus(raw);
+  assert.deepEqual(paths, [
+    'docs/keep.md',
+    'scripts/close/foo.mjs',
+    'scripts/close/torename.mjs',
+    'docs/renamed.md',
+  ]);
+});
+
+test('deletion-only diff of a code file classifies into the wider (non-docs) scope', () => {
+  // Regression for repo-template#84 finding 1: a diff that only deletes a code
+  // file must not classify as docs-only. The old `--diff-filter=ACMRT` dropped
+  // D entries, so a deletion-only diff under-ran the guard (no node-test).
+  const raw = 'D\tscripts/close/foo.mjs';
+  const files = parseNameStatus(raw);
+  assert.deepEqual(files, ['scripts/close/foo.mjs']);
+
+  const scope = classifyCloseScanScope({ files, labels: [], stack: 'node' });
+  assert.equal(scope.docsOnly, false);
+  assert.equal(scope.requiresChangelog, true);
+  assert.ok(
+    scope.requiredChecks.some((check) => check.name === 'node-test'),
+    'a deleted code file must still require node-test',
+  );
+});
+
+test('checkHookSyntax catches a syntax error in the SECOND hook file, not just the first', () => {
+  // Regression for repo-template#84 finding 2: `bash -n a b c` only parses `a`
+  // and treats `b`/`c` as positional args, so the original single invocation
+  // silently skipped every hook past the first. checkHookSyntax must run
+  // `bash -n` per file and catch the broken Nth file while still checking all.
+  const dir = mkdtempSync(join(tmpdir(), 'close-scan-hooks-'));
+  try {
+    const first = join(dir, 'pre-commit');
+    const second = join(dir, 'commit-msg');
+    const third = join(dir, 'post-merge');
+    writeFileSync(first, '#!/usr/bin/env bash\necho ok\n');
+    // Unterminated `if` => `unexpected end of file` under `bash -n`.
+    writeFileSync(second, '#!/usr/bin/env bash\nif [ -z "$x" ; then echo broken\n');
+    writeFileSync(third, '#!/usr/bin/env bash\necho also ok\n');
+
+    const result = checkHookSyntax([first, second, third]);
+    assert.equal(result.ok, false);
+    // Proves the second (not first/last) file is covered.
+    assert.match(result.summary, /commit-msg/);
+    assert.doesNotMatch(result.summary, /pre-commit/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('checkHookSyntax passes when every hook file is syntactically valid', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'close-scan-hooks-ok-'));
+  try {
+    const first = join(dir, 'pre-commit');
+    const second = join(dir, 'commit-msg');
+    writeFileSync(first, '#!/usr/bin/env bash\necho ok\n');
+    writeFileSync(second, '#!/usr/bin/env bash\necho still ok\n');
+
+    const result = checkHookSyntax([first, second]);
+    assert.equal(result.ok, true);
+    assert.match(result.summary, /2 git hook shell file/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
