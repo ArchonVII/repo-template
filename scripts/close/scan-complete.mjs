@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   formatPrContractResult,
   validatePrContract,
@@ -89,13 +90,36 @@ function collectGitInfo() {
 
 function collectChangedFiles({ base, fallbackFiles }) {
   try {
-    const raw = git(['diff', '--name-only', '--diff-filter=ACMRT', `${base}...HEAD`], { ignoreErrors: true });
-    const files = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    // No `--diff-filter`: deletions (D) must count toward scope derivation. A PR
+    // that deletes code or hook files (while changing only docs otherwise) is not
+    // a docs-only change, and excluding D under-runs the guard (repo-template#84).
+    // `-M` detects renames; `--name-status` reports both the old and new path so a
+    // rename out of a code/hook path still classifies into the wider scope.
+    const raw = git(['diff', '--name-status', '-M', `${base}...HEAD`], { ignoreErrors: true });
+    const files = parseNameStatus(raw);
     if (files.length > 0) return files;
   } catch {
     // Fall through to GitHub's PR file list.
   }
   return fallbackFiles;
+}
+
+// Parse `git diff --name-status -M` output into the full set of affected paths.
+// Each line is tab-separated: `<status>\t<path>` for A/C/D/M/T, or
+// `<status>\t<oldPath>\t<newPath>` for renames (R) and copies (C with score).
+// Both the old and new path of a rename/copy are returned so scope derivation
+// sees the source side too (repo-template#84).
+function parseNameStatus(raw) {
+  const paths = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const parts = trimmed.split('\t').map((part) => part.trim()).filter(Boolean);
+    if (parts.length < 2) continue;
+    // parts[0] is the status code (e.g. `M`, `D`, `R100`); the rest are paths.
+    for (const path of parts.slice(1)) paths.push(path);
+  }
+  return paths;
 }
 
 function stackFromRequiredGate(root) {
@@ -123,6 +147,28 @@ function runExternalCheck(name, command, args, summary) {
       summary: `${command} ${args.join(' ')} failed${output ? `: ${truncate(output)}` : '.'}`,
     };
   }
+}
+
+// Syntax-check EVERY hook shell file, not just the first. `bash -n a b c` only
+// parses `a` and treats `b`/`c` as positional args ($1/$2), so the original
+// single-invocation `bash -n ...hooks` silently skipped every hook past the
+// first (repo-template#84). Run `bash -n` once per file, check all of them, and
+// fail the check if any file has a syntax error — reporting every failing file.
+function checkHookSyntax(hooks) {
+  const failures = [];
+  for (const hook of hooks) {
+    const result = runExternalCheck('hook-syntax', 'bash', ['-n', hook], '');
+    if (!result.ok) failures.push(result.summary);
+  }
+  if (failures.length > 0) {
+    return { name: 'hook-syntax', ok: false, summary: failures.join('; ') };
+  }
+  // hooks.length is > 0 here (the empty case is handled by the caller).
+  return {
+    name: 'hook-syntax',
+    ok: true,
+    summary: `\`bash -n\` passed for all ${hooks.length} git hook shell file(s).`,
+  };
 }
 
 function resolveCommand(command, args) {
@@ -207,7 +253,7 @@ function runLocalChecks({ root, pr, files, scope, changelogDecision }) {
     const hooks = listHookShellFiles(root);
     localChecks.push(
       hooks.length > 0
-        ? runExternalCheck('hook-syntax', 'bash', ['-n', ...hooks], '`bash -n` passed for git hook shell files.')
+        ? checkHookSyntax(hooks)
         : { name: 'hook-syntax', ok: true, summary: 'No shell hook files found; hook syntax check skipped by scope.' },
     );
   }
@@ -296,4 +342,10 @@ function main() {
   process.exitCode = ok ? 0 : 1;
 }
 
-main();
+// Export the scope-derivation and hook-syntax helpers so they can be unit-tested
+// without invoking `main()`. Mirrors the entry-point guard in pr-contract.mjs.
+export { checkHookSyntax, parseNameStatus };
+
+if (process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
+  main();
+}
