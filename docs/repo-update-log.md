@@ -19,7 +19,7 @@ This log records agent-visible repository changes that should be easy to audit l
 
 - **Issue/PR:** #84 / (pending)
 - **Branch:** fix/close-scan-deletions-and-multi-hook
-- **Changed paths:** scripts/close/scan-complete.mjs, test/close-scan.test.mjs, docs/repo-update-log.md
+- **Changed paths:** scripts/close/scan-complete.mjs, test/close-scan.test.mjs, .changelog/unreleased/84-close-scan-deletions-and-multi-hook.md, docs/repo-update-log.md
 - **What changed:** Fixed two P2 close-scan findings raised by the Codex bot on archon-setup PR #237. (1) `collectChangedFiles` now derives scope from `git diff --name-status -M` with no `--diff-filter`, so deletions (D) count toward scope and both the old and new path of a rename are included — a PR that deletes code/hook files while changing docs no longer under-runs as docs-only. (2) `checkHookSyntax` runs `bash -n` once per hook file instead of `bash -n a b c` (which only parses the first file and treats the rest as positional args), so every hook is syntax-checked and any failing file is reported. `parseNameStatus`/`checkHookSyntax` are exported behind a `process.argv[1]` entry-point guard for unit testing.
 - **Verification:** `npm test` passed (119/119, up from 115 by 4 new regression tests covering: rename both-sides parsing, deletion-only diff classifying into the wider non-docs scope, a multi-hook fixture where the SECOND file has a syntax error and is caught, and an all-valid multi-hook pass). `node --check scripts/close/scan-complete.mjs` passed. `npm run close:scan:complete -- --repo ArchonVII/repo-template --pr <n> ...` ran green on a clean lane.
 - **Propagation:** pending archon-setup snapshot refresh after merge.
