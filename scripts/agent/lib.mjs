@@ -208,7 +208,7 @@ export function formatStartupMap(baseline, { repoPath = '<repo>', archonSetupCom
     'Agent startup map:',
     '- Plans:          docs/plans/',
     '- Agent process:  docs/agent-process/',
-    '- Repo update log: docs/repo-update-log.md',
+    '- Repo update log: docs/repo-update-log/ (one file per PR)',
     '- Check map:      .agent/check-map.yml',
     '- Coordination:   .agent/coordination/README.md',
     '- PR process:     .github/PULL_REQUEST_TEMPLATE.md',

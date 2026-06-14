@@ -18,7 +18,7 @@ Agents should not spend time rediscovering the process files. Start here:
 - Projects (active feature work): `projects/<slug>/PLAN.md` — one capsule per feature; see `docs/agent-process/project-capsules.md`
 - Plans: `docs/plans/` — loose/cross-cutting plans; prefer a project capsule for feature work
 - Agent process: `docs/agent-process/`
-- Repo update log: `docs/repo-update-log.md`
+- Repo update log: `docs/repo-update-log/` — one fragment file per PR (`docs/repo-update-log.md` is the frozen pre-2026-06-13 archive)
 - Check map: `.agent/check-map.yml`
 - Coordination: `.agent/coordination/README.md`
 - PR process: `.github/PULL_REQUEST_TEMPLATE.md`
@@ -43,7 +43,7 @@ node <path-to-archon-setup>/bin/onboard.mjs <repo> --audit
 3. **Never commit to `main`.** Branch protection enforces this. Repo-facing docs, planning notes, prompts, ADRs, and shared markdown use the same branch/PR path when they are committed to the repo.
 4. **Conventional Commits** for messages: `<type>(<scope>): <description>` where `<type>` is one of `feat fix refactor test docs style chore perf ci build revert`.
 5. **PR metadata must pass the shared contract before ready-for-review.** Non-doc PRs must use this exact body order: `## Summary`, `## Verification`, `### Verification Notes`, `## Docs / Changelog`, and an issue link (`Closes #N`, `Fixes #N`, or `Refs #N`). The PR title must use Conventional Commits. Each checked verification box must be backed by concrete command/check/manual evidence, and placeholders such as TODO/TBD/N/A must be gone. Doc-only PRs (every file matches `*.md`, `*.txt`, an image extension, or `.changelog/**`) skip the body ceremony but still need a valid title and branch. When `agent:start-task` creates `.pr-body.md`, keep using that file for `gh pr create --body-file` / `gh pr edit --body-file`; if it is missing, regenerate it from the committed `.github/PULL_REQUEST_TEMPLATE.md`, not from notes or memory.
-6. **Repo update log.** Every PR that changes code, config, behavior, protected docs, tracked workflows, or repository policy must append one entry to `docs/repo-update-log.md` before review. Include the date, issue/PR, branch, changed paths, verification, and whether follow-up propagation is needed. Doc-only typo fixes may skip the log only when the PR body says why.
+6. **Repo update log.** Every PR that changes code, config, behavior, protected docs, tracked workflows, or repository policy must add one entry as a **new file** `docs/repo-update-log/<YYYY-MM-DD>-<issue>-<slug>.md` before review — one file per PR, never appended to a shared log (a single shared file caused merge conflicts across concurrent PRs). Use the template and field list in [`docs/repo-update-log/README.md`](docs/repo-update-log/README.md): date, issue/PR, branch, changed paths, verification, and whether follow-up propagation is needed. The pre-2026-06-13 `docs/repo-update-log.md` is a frozen archive. Doc-only typo fixes may skip the fragment only when the PR body says why.
 7. **Plan/status artifact closeout.** Delivery is incomplete while any plan, task file, progress file, findings file, handoff, audit, roadmap/status tracker, or coordination note created or used by the lane still reads as active execution guidance. Before PR ready/merge, close it, narrow it to remaining scoped work, or mark it deprecated/superseded with the current source of truth. Do this in the same branch/PR for repo-facing artifacts.
 
 ## Checkout role / worktrees
@@ -245,7 +245,7 @@ For PRs that don't warrant a CHANGELOG entry (refactor, tests, chore), apply the
 
 ## Reference precision
 
-In durable written artifacts — decision logs, ADRs, PR bodies, `docs/repo-update-log.md`, and verification notes — name git refs unambiguously. When a statement turns on the local-vs-remote distinction, write `origin/main` for the remote branch and "the local default branch" (or a specific local ref) for local state. Never write bare `main` when the local-vs-remote distinction is load-bearing: it reads as both and undermines the rule being recorded (e.g. "verify against `origin/main`").
+In durable written artifacts — decision logs, ADRs, PR bodies, `docs/repo-update-log/` entries, and verification notes — name git refs unambiguously. When a statement turns on the local-vs-remote distinction, write `origin/main` for the remote branch and "the local default branch" (or a specific local ref) for local state. Never write bare `main` when the local-vs-remote distinction is load-bearing: it reads as both and undermines the rule being recorded (e.g. "verify against `origin/main`").
 
 This generalizes: when a workflow rule turns on a distinction — ref, environment, scope, or time — use the fully-qualified term in the artifact, not the shorthand.
 

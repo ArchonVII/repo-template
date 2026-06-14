@@ -1,5 +1,5 @@
 {
-  "version": "2026-06-12-close-scan-guard",
+  "version": "2026-06-13-repo-update-log-fragments",
   "required": [
     "AGENTS.md",
     "docs/plans/README.md",
@@ -7,7 +7,7 @@
     ".agent/coordination/README.md",
     ".github/PULL_REQUEST_TEMPLATE.md",
     ".github/workflows/anomaly-triage.yml",
-    "docs/repo-update-log.md",
+    "docs/repo-update-log/README.md",
     "package.json",
     "scripts/agent/lib.mjs",
     "scripts/agent/start-task.mjs",
@@ -25,6 +25,7 @@
   "expectedDirectories": [
     "docs/plans/",
     "docs/agent-process/",
+    "docs/repo-update-log/",
     "scripts/agent/",
     "scripts/close/",
     "scripts/doc-sweep/"

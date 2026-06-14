@@ -104,7 +104,7 @@ Adopt the **checkout-role** model and enforce it by **extending the existing
      guidance.
    - Extend `.githooks/scripts/test-owner-maintenance.sh` (or a sibling test script) to cover
      the new matrix rows: primary+feature blocked, linked+feature allowed, owner lane intact.
-   - Add a `docs/repo-update-log.md` entry.
+   - Add a `docs/repo-update-log/` fragment entry.
 2. **archon-setup**:
    - `npm run refresh-snapshots`; confirm onboarding runs `install-githooks.sh`
      (sets `core.hooksPath`); add/confirm a registry feature in the `agent-workflow` group;
