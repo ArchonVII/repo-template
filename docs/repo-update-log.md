@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-13 - Project capsules convention (v1)
+
+- **Issue/PR:** #86 / (pending)
+- **Branch:** agent/claude/86-project-capsules-convention
+- **Changed paths:** docs/agent-process/project-capsules.md, projects/README.md, AGENTS.md, docs/plans/README.md, docs/repo-update-log.md
+- **What changed:** Added the convention-first v1 of project capsules — `projects/<slug>/PLAN.md` as the guessable per-feature front door — per the approved design spec (ArchonVII/archon-setup#246, lane L1a). Adds the `docs/agent-process/project-capsules.md` policy + trimmed PLAN.md template, a ≤5-line AGENTS `## Project capsules` contract, a Projects pointer in the managed Start Map (within the single existing block; `docs/plans/` demoted to loose/cross-cutting in both the Start Map and `docs/plans/README.md`), and a seed `projects/README.md`. No lifecycle engine, no `foundation.projects` feature, no new AGENTS.md writer — those are the gated v2.
+- **Verification:** Doc-only change (all files `*.md`). `npm test` passed 119/119 (startup-baseline, plans-README, managed-start-map friction, anomaly-triage, and PR-contract suites all green after the AGENTS.md edits). `git diff --check` clean (no whitespace/CRLF errors).
+- **Propagation:** pending archon-setup snapshot refresh (lane L1a′) so onboarded repos receive the convention; coordinate the AGENTS Start Map edit with the still-unbuilt document-policy lane 1b so its future section-order skeleton preserves the Projects lines.
+
 ## 2026-06-13 - Close-scan deletions in scope + per-file hook syntax
 
 - **Issue/PR:** #84 / (pending)
