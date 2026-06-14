@@ -133,6 +133,13 @@ npm run close:ci:guard -- --repo OWNER/REPO --pr <number>
 `close:ci:guard` must pass before `agent:close-preflight`, `agent:pr-ready`, or merge
 actions. Missing, pending, or unavailable required CI is not a pass.
 
+The guard is idempotent against `HEAD`: run `close:ci:guard` **once for the current
+`HEAD`**. A single passing run covers `agent:close-preflight`, `agent:pr-ready`, and the
+merge — do not re-run it for each gate while `HEAD` is unchanged; re-run only after a new
+commit moves `HEAD`. Once it passes and the PR is ready with `repo-required-gate /
+decision` green, one confirming status read is enough: do not repeatedly re-poll checks,
+re-snapshot PR status, or re-list review threads on an unchanged, green, ready PR.
+
 ### Closeout Modes
 
 - Preparing for review and shipping are different states.
