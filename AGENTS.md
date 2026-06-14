@@ -15,7 +15,8 @@ Cross-tool contract for AI agents (Claude, Codex, Copilot, Gemini, etc.) working
 
 Agents should not spend time rediscovering the process files. Start here:
 
-- Plans: `docs/plans/`
+- Projects (active feature work): `projects/<slug>/PLAN.md` — one capsule per feature; see `docs/agent-process/project-capsules.md`
+- Plans: `docs/plans/` — loose/cross-cutting plans; prefer a project capsule for feature work
 - Agent process: `docs/agent-process/`
 - Repo update log: `docs/repo-update-log.md`
 - Check map: `.agent/check-map.yml`
@@ -265,6 +266,10 @@ When coordination is needed, use this repo's local coordination area: `.agent/co
 handoffs belong there — or in another repo-local location this repo documents. The active
 board template lives at `.agent/coordination/board.md` and is opt-in; delete it if this
 repo does not do active multi-agent coordination.
+
+## Project capsules
+
+Active feature work lives in `projects/<slug>/PLAN.md` — the guessable front door for one feature (why, plan, invariants, current state). Read a capsule's `PLAN.md` before touching that feature. Create one for work spanning more than one session or PR, or with owner-facing scope/invariants; one-off fixes don't need one. `docs/plans/` is loose/legacy — don't start new files there for feature work once `projects/` is in use. Full convention: `docs/agent-process/project-capsules.md`.
 
 ## Doc Sweep-Up
 
