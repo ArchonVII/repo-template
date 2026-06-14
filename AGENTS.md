@@ -209,6 +209,14 @@ identity, PR body evidence, the fresh close-scan marker, and the
 `repo-required-gate / decision` check. If CI checks are missing, pending, or not
 green, the guard fails rather than pretending they ran.
 
+The guard is idempotent against `HEAD`: run it **once for the current `HEAD`**. A
+single passing run covers `agent:close-preflight`, `agent:pr-ready`, and `gh pr
+merge` — do not re-run the guard for each gate while `HEAD` is unchanged. Re-run
+only after a new commit moves `HEAD`. Once the guard passes and the PR is marked
+ready with `repo-required-gate / decision` green, a single confirming status read
+is enough: do not repeatedly re-poll checks, re-snapshot PR status, or re-list
+review threads on an unchanged, green, ready PR.
+
 The guard still allows true no-op finalization pushes, where local `HEAD`
 already matches the upstream branch and no remote update or CI-triggering
 delivery action would occur. This keeps Copilot/Codex automatic cleanup pushes
@@ -226,7 +234,9 @@ real changes.
 - Use `close:ship` only when the user explicitly says `/close`, `ship it`,
   `land it`, `merge to main`, or equivalent delivery language.
 - Run `close:scan:complete` before a delivery `git push`, then run
-  `close:ci:guard` before `npm run agent:pr-ready` and `gh pr merge`.
+  `close:ci:guard` **once for that `HEAD`**. A single passing run covers
+  `npm run agent:pr-ready` and `gh pr merge`; re-run only if a new commit moves
+  `HEAD`.
 
 ## CHANGELOG
 
