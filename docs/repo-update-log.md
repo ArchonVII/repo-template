@@ -15,6 +15,15 @@ This log records agent-visible repository changes that should be easy to audit l
 - **Propagation:** none | pending <repo/path> | completed <repo/path>
 ```
 
+## 2026-06-13 - Close-scan guard: run once per HEAD
+
+- **Issue/PR:** (quick fix, no issue) / (pending)
+- **Branch:** agent/claude/2026-06-13-close-scan-once-per-head
+- **Changed paths:** AGENTS.md, docs/repo-update-log.md
+- **What changed:** Reworded the "Local delivery guards" and "Closeout" cadence so the close-scan guard is run **once per `HEAD`** instead of being re-run before each of `agent:close-preflight` / `agent:pr-ready` / `gh pr merge`. The guard is idempotent against `HEAD`, so a single passing run covers every delivery gate while `HEAD` is unchanged; post-ready status/thread reads are bounded to one confirmation. Addresses observed agent churn (`close:ci:guard` run 3×, plus repeated PR status snapshots and review-thread re-reads on an unchanged green/ready PR) in a Codex session on ArchonVII/hudson-bend#188.
+- **Verification:** Doc-only change (all files `*.md`). `npm test` green (see PR).
+- **Propagation:** pending archon-setup snapshot refresh + consumer AGENTS.md (hudson-bend) — both handled in the same gamemaster repair (page-gm `gm-20260613-223646-ae95b590`).
+
 ## 2026-06-13 - Project capsules convention (v1)
 
 - **Issue/PR:** #86 / (pending)
