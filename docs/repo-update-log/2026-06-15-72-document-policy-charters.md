@@ -1,6 +1,6 @@
 ## 2026-06-15 - Document policy charters
 
-- **Issue/PR:** #72 / PR pending
+- **Issue/PR:** #72 / #96
 - **Branch:** agent/codex/72-document-policy-charters
 - **Changed paths:** `AGENTS.md`, `.agent/startup-baseline.json`, `docs/agent-process/document-policy.md`, `scripts/agent/lib.mjs`, `test/agent/lib.test.mjs`, `test/startup-baseline.test.mjs`
 - **What changed:** Added the repo-local document policy detail doc with document charters, lifecycle states, placement-priority rules, and doc-health duties. Compacted `AGENTS.md` to a contract-level Start Map and updated startup-baseline/status-map wiring so agents see the policy file immediately.
