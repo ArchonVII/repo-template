@@ -216,6 +216,7 @@ export function formatStartupMap(baseline, { repoPath = '<repo>', archonSetupCom
     '- Agent scripts:  scripts/agent/',
     '- Close guards:   scripts/close/',
     '- Doc sweep:      scripts/doc-sweep/',
+    '- Doc health:     scripts/doc-health/',
   ];
   if (legacy.length) lines.push(`- Legacy plans:   ${legacy.join(', ')} (history only)`);
   if (readiness?.missing?.length) lines.push('', `Missing startup baseline paths: ${readiness.missing.join(', ')}`);

@@ -29,6 +29,7 @@ Agents should not spend time rediscovering process files. Start here:
 - Agent scripts: `scripts/agent/`.
 - Close guards: `scripts/close/`.
 - Doc sweep: `scripts/doc-sweep/`.
+- Doc health: `scripts/doc-health/`.
 - Legacy plans: `docs/superpowers/plans/` is history only; do not add new implementation plans there.
 - Friction ledger: for a non-bug workflow hiccup, append one row to `.claude/friction.md`, do not fix it mid-task, and keep working; bugs/security or off-task defects still go to `.archon/anomalies-thispr.md`.
 
@@ -207,6 +208,12 @@ boundaries; full spec: `docs/agent-process/doc-sweep.md`.
 Use `docs/agent-process/document-policy.md` for document charters, status/lifecycle rules,
 placement priority, budgets, and doc-health duties. If a rule needs more than 10 lines in
 `AGENTS.md`, keep a short contract here and move the detail there.
+
+## Doc Health
+
+Run `node scripts/doc-health/health.mjs --repo <repo> --report <path>` for report-only document-policy drift checks.
+The checker emits warning findings and issue payloads; it never edits docs, opens gates, or blocks.
+Full contract: `docs/agent-process/doc-health.md`.
 
 ## CHANGELOG
 
