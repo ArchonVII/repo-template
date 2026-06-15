@@ -14,6 +14,13 @@
     "agent:status": "node scripts/agent/status.mjs",
     "agent:prune": "node scripts/agent/prune.mjs",
     "agent:start-task": "node scripts/agent/start-task.mjs",
-    "agent:pr-body": "node scripts/agent/pr-body.mjs"
+    "agent:pr-body": "node scripts/agent/pr-body.mjs",
+    "wiki:start": "node scripts/wiki/start.mjs",
+    "wiki:ingest": "node scripts/wiki/ingest.mjs",
+    "wiki:query": "node scripts/wiki/query.mjs",
+    "wiki:lint": "node scripts/wiki/lint.mjs",
+    "wiki:crystallize": "node scripts/wiki/crystallize.mjs",
+    "wiki:compact-save": "node scripts/wiki/compact-save.mjs",
+    "wiki:doctor": "node scripts/wiki/doctor.mjs"
   }
 }

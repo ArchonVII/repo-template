@@ -65,3 +65,8 @@ progress.md
 
 # close-scan runtime marker (written by close:scan:complete)
 .agent/close-scan/
+
+# ----- Wiki (Librarian) -----
+# Crystallized-facts tier is a machine-local junction; the ops log is append-only/local.
+docs/memory/
+docs/log.md

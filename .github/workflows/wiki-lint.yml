@@ -1,0 +1,48 @@
+name: Wiki Lint
+
+# Durable enforcement of the agent-neutral Librarian wiki contract. The session hooks
+# are convenience; this gate is the source of truth. The wiki:* scripts are
+# zero-dependency Node, so there is nothing to install.
+#
+# This is a leaf workflow (informational), not a branch-protection required check —
+# per AGENTS.md "Do not make path-filtered leaf workflows required." The stable
+# required check stays `repo-required-gate / decision`.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'docs/**'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'GEMINI.md'
+      - 'llms.txt'
+      - 'scripts/wiki/**'
+      - '.claude/settings.json'
+      - 'package.json'
+      - '.github/workflows/wiki-lint.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'AGENTS.md'
+      - 'llms.txt'
+      - 'scripts/wiki/**'
+      - 'package.json'
+
+jobs:
+  wiki:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Wiki doctor (navigation checksum)
+        run: node scripts/wiki/doctor.mjs
+
+      - name: Wiki lint (frontmatter + links)
+        run: node scripts/wiki/lint.mjs

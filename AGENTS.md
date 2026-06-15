@@ -36,6 +36,35 @@ node <path-to-archon-setup>/bin/onboard.mjs <repo> --audit
 
 <!-- END MANAGED AGENT START MAP -->
 
+## Librarian wiki
+
+This repo's `docs/` tree is an **agent-maintained wiki** (the "Librarian" system), shipped in
+the template so the repo starts with it. The canonical navigation layer — `AGENTS.md` (this
+file), `llms.txt`, `docs/CANON.md`, `docs/LIBRARIAN.md`, and `docs/INDEX.md` — is the source
+of truth. Anything under `.claude/`, `.codex/`, `.gemini/` (and `CLAUDE.md`/`GEMINI.md`) is an
+**adapter only**; if an adapter or hook conflicts with the canon docs, **trust the docs and
+open an audit** in `docs/audits/`.
+
+- **Read the schema before any wiki maintenance:** [docs/LIBRARIAN.md](docs/LIBRARIAN.md) is
+  the contract (frontmatter schema, status/confidence vocab, link rules, workflows).
+  [docs/CANON.md](docs/CANON.md) is the ground-truth register — read it first.
+- **Tiers:** `docs/raw/` (immutable sources) → `docs/` (durable pages with frontmatter) →
+  `docs/memory/` (crystallized facts; machine-local junction, gitignored). Corrections go in
+  `docs/audits/`. The pre-existing template trees (`docs/adr/`, `docs/agent-process/`,
+  `docs/plans/`, `docs/superpowers/`) are not yet under the schema — bring them in
+  incrementally (see [docs/LIBRARIAN.md](docs/LIBRARIAN.md) "What is NOT a page").
+- **Operations** (zero-dependency Node; same output for every agent):
+  `npm run wiki:start` · `wiki:ingest -- <src>` · `wiki:query -- "<q>"` · `wiki:lint` ·
+  `wiki:crystallize` · `wiki:compact-save` · `wiki:doctor`. CI runs `wiki:doctor` +
+  `wiki:lint` on every `docs/**` PR (the durable gate); session hooks are convenience and
+  fail-open — they never commit.
+- **Keep the navigation front doors current.** `llms.txt` (agent front door) and `README.md`
+  (human front door) summarize canon, so they drift when canon moves. When a change updates
+  `docs/CANON.md`, `docs/project-status.md`, or release/deploy-status facts, re-sync **both**
+  in the same PR — `wiki:doctor` only checks that `llms.txt` lists the required first-reads,
+  not that the front doors are fresh. See [docs/LIBRARIAN.md](docs/LIBRARIAN.md) "Re-sync the
+  navigation front doors".
+
 ## Workflow
 
 1. **Issue first.** Create a GitHub issue with explicit `Acceptance Criteria` before branching. Use the `Task` issue form.
