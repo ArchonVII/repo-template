@@ -175,7 +175,17 @@ function resolveCommand(command, args) {
   if (process.platform === 'win32' && command === 'npm') {
     return { command: 'cmd.exe', args: ['/d', '/s', '/c', ['npm', ...args].map(quoteCmdArg).join(' ')] };
   }
+  if (process.platform === 'win32' && command === 'bash') {
+    return { command, args: args.map(toWslPathIfWindowsAbsolute) };
+  }
   return { command, args };
+}
+
+function toWslPathIfWindowsAbsolute(value) {
+  const text = String(value);
+  const match = /^([A-Za-z]):[\\/](.*)$/.exec(text);
+  if (!match) return text;
+  return `/mnt/${match[1].toLowerCase()}/${match[2].replace(/\\/g, '/')}`;
 }
 
 function quoteCmdArg(value) {
