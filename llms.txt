@@ -1,0 +1,37 @@
+# <repo> — agent navigation
+
+Purpose:
+One or two lines on what this repository is. (Scaffold — replace when a repo is created from
+this template.) This repo is maintained as an agent-stewarded wiki by humans + AI agents
+(Claude, Codex, Gemini).
+
+Always read first (the canonical navigation layer):
+- AGENTS.md                 universal agent contract (workflow + nav)
+- docs/CANON.md             ground-truth register; what is true now vs. intended; locked decisions
+- docs/LIBRARIAN.md         wiki schema and operations (the contract)
+- docs/INDEX.md             map of content
+- docs/project-status.md    live workstreams, backlog, decision log
+
+Wiki tiers:
+- docs/raw/        immutable intake sources; do not rewrite
+- docs/            durable wiki pages (design, ADRs, guides) with frontmatter
+- docs/memory/     crystallized facts (machine-local junction; gitignored)
+- docs/audits/     unresolved human corrections (resolve, then move to archive/)
+- docs/log.md      append-only wiki operations log (gitignored)
+
+Core operations (shared zero-dependency Node scripts; same output for every agent):
+- npm run wiki:start
+- npm run wiki:ingest -- <source>
+- npm run wiki:query -- "<question>"
+- npm run wiki:lint
+- npm run wiki:crystallize
+- npm run wiki:compact-save
+- npm run wiki:doctor
+
+Links: page bodies use Markdown links (GitHub-friendly) or [[wikilinks]] — both are valid and
+wiki:lint resolves both. Frontmatter relations use quoted [[wikilinks]].
+
+Rule:
+AGENTS.md is the single agent contract. Anything under .claude/, .codex/, .gemini/ (and
+CLAUDE.md / GEMINI.md) are adapters only. Canon lives in docs/CANON.md and docs/LIBRARIAN.md.
+If an adapter or a hook conflicts with them, trust the docs and open an audit in docs/audits/.
