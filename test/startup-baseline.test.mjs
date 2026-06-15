@@ -13,6 +13,7 @@ test('startup baseline contract names canonical startup files and legacy plan pa
     'AGENTS.md',
     'docs/plans/README.md',
     'docs/agent-process/document-policy.md',
+    'docs/agent-process/doc-health.md',
     '.agent/check-map.yml',
     '.agent/coordination/README.md',
     '.github/PULL_REQUEST_TEMPLATE.md',
@@ -30,11 +31,13 @@ test('startup baseline contract names canonical startup files and legacy plan pa
     'scripts/doc-sweep/lib.mjs',
     'scripts/doc-sweep/git.mjs',
     'scripts/doc-sweep/sweep.mjs',
+    'scripts/doc-health/lib.mjs',
+    'scripts/doc-health/health.mjs',
     'docs/agent-process/doc-sweep.md',
   ]) {
     assert.ok(baseline.required.includes(path), `baseline required should include ${path}`);
   }
-  for (const path of ['docs/plans/', 'docs/agent-process/', 'docs/repo-update-log/', 'scripts/agent/', 'scripts/close/', 'scripts/doc-sweep/']) {
+  for (const path of ['docs/plans/', 'docs/agent-process/', 'docs/repo-update-log/', 'scripts/agent/', 'scripts/close/', 'scripts/doc-sweep/', 'scripts/doc-health/']) {
     assert.ok(baseline.expectedDirectories.includes(path), `baseline directories should include ${path}`);
   }
   assert.ok(baseline.legacy.includes('docs/superpowers/plans/'));
@@ -56,8 +59,18 @@ test('AGENTS exposes the startup map before workflow details', async () => {
   assert.ok(startupIndex < workflowIndex, 'Agent Start Map should appear before workflow details');
   assert.match(body, /docs\/plans\//);
   assert.match(body, /docs\/agent-process\/document-policy\.md/);
+  assert.match(body, /docs\/agent-process\/doc-health\.md/);
+  assert.match(body, /scripts\/doc-health\//);
   assert.match(body, /scripts\/close\//);
   assert.match(body, /node <path-to-archon-setup>\/bin\/onboard\.mjs <repo> --audit/);
+});
+
+test('AGENTS doc-health contract is report-only and points to the runner', async () => {
+  const body = await readFile(join(ROOT, 'AGENTS.md'), 'utf8');
+  assert.match(body, /## Doc Health/);
+  assert.match(body, /scripts\/doc-health\/health\.mjs/);
+  assert.match(body, /report-only/);
+  assert.match(body, /never edits docs/);
 });
 
 test('AGENTS stays within the document-policy line budget', async () => {
