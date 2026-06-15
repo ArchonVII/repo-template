@@ -1,30 +1,34 @@
 # AGENTS.md
 
-Cross-tool contract for AI agents (Claude, Codex, Copilot, Gemini, etc.) working in this repo.
-
-> **Per-tool addenda** live in `CLAUDE.md`, `GEMINI.md` etc. when they exist. This file holds the rules every agent must follow.
+Cross-tool contract for AI agents (Claude, Codex, Copilot, Gemini, etc.) working in this
+repo. Per-tool addenda such as `CLAUDE.md` and `GEMINI.md` are adapters only; rules that
+apply to every tool live here.
 
 ## Read First
 
-- `README.md` — what this project is and how to run it
-- `ARCHITECTURE.md` — directory ownership and cross-boundary rules (add when the layout outgrows obviousness)
+- `README.md` - what this project is and how to run it.
+- `docs/CANON.md` - current truth, intended state, and locked decisions.
+- `docs/LIBRARIAN.md` - wiki schema and operations.
+- `docs/INDEX.md` - map of durable docs.
+- `ARCHITECTURE.md` - subsystem ownership when the repo has one.
 
 <!-- BEGIN MANAGED AGENT START MAP -->
 
 ## Agent Start Map
 
-Agents should not spend time rediscovering the process files. Start here:
+Agents should not spend time rediscovering process files. Start here:
 
-- Projects (active feature work): `projects/<slug>/PLAN.md` — one capsule per feature; see `docs/agent-process/project-capsules.md`
-- Plans: `docs/plans/` — loose/cross-cutting plans; prefer a project capsule for feature work
-- Agent process: `docs/agent-process/`
-- Repo update log: `docs/repo-update-log/` — one fragment file per PR (`docs/repo-update-log.md` is the frozen pre-2026-06-13 archive)
-- Check map: `.agent/check-map.yml`
-- Coordination: `.agent/coordination/README.md`
-- PR process: `.github/PULL_REQUEST_TEMPLATE.md`
-- Agent scripts: `scripts/agent/`
-- Close guards: `scripts/close/`
-- Doc sweep: `scripts/doc-sweep/`
+- Document policy: `docs/agent-process/document-policy.md` - charters, lifecycle, placement rules.
+- Projects: `projects/<slug>/PLAN.md` - one capsule per active feature; see `docs/agent-process/project-capsules.md`.
+- Plans: `docs/plans/` - loose/cross-cutting plans; prefer a project capsule for feature work.
+- Agent process: `docs/agent-process/`.
+- Repo update log: `docs/repo-update-log/` - one fragment per PR; `docs/repo-update-log.md` is the frozen archive.
+- Check map: `.agent/check-map.yml`.
+- Coordination: `.agent/coordination/README.md`.
+- PR process: `.github/PULL_REQUEST_TEMPLATE.md`.
+- Agent scripts: `scripts/agent/`.
+- Close guards: `scripts/close/`.
+- Doc sweep: `scripts/doc-sweep/`.
 - Legacy plans: `docs/superpowers/plans/` is history only; do not add new implementation plans there.
 - Friction ledger: for a non-bug workflow hiccup, append one row to `.claude/friction.md`, do not fix it mid-task, and keep working; bugs/security or off-task defects still go to `.archon/anomalies-thispr.md`.
 
@@ -36,285 +40,194 @@ node <path-to-archon-setup>/bin/onboard.mjs <repo> --audit
 
 <!-- END MANAGED AGENT START MAP -->
 
-## Librarian wiki
-
-This repo's `docs/` tree is an **agent-maintained wiki** (the "Librarian" system), shipped in
-the template so the repo starts with it. The canonical navigation layer — `AGENTS.md` (this
-file), `llms.txt`, `docs/CANON.md`, `docs/LIBRARIAN.md`, and `docs/INDEX.md` — is the source
-of truth. Anything under `.claude/`, `.codex/`, `.gemini/` (and `CLAUDE.md`/`GEMINI.md`) is an
-**adapter only**; if an adapter or hook conflicts with the canon docs, **trust the docs and
-open an audit** in `docs/audits/`.
-
-- **Read the schema before any wiki maintenance:** [docs/LIBRARIAN.md](docs/LIBRARIAN.md) is
-  the contract (frontmatter schema, status/confidence vocab, link rules, workflows).
-  [docs/CANON.md](docs/CANON.md) is the ground-truth register — read it first.
-- **Tiers:** `docs/raw/` (immutable sources) → `docs/` (durable pages with frontmatter) →
-  `docs/memory/` (crystallized facts; machine-local junction, gitignored). Corrections go in
-  `docs/audits/`. The pre-existing template trees (`docs/adr/`, `docs/agent-process/`,
-  `docs/plans/`, `docs/superpowers/`) are not yet under the schema — bring them in
-  incrementally (see [docs/LIBRARIAN.md](docs/LIBRARIAN.md) "What is NOT a page").
-- **Operations** (zero-dependency Node; same output for every agent):
-  `npm run wiki:start` · `wiki:ingest -- <src>` · `wiki:query -- "<q>"` · `wiki:lint` ·
-  `wiki:crystallize` · `wiki:compact-save` · `wiki:doctor`. CI runs `wiki:doctor` +
-  `wiki:lint` on every `docs/**` PR (the durable gate); session hooks are convenience and
-  fail-open — they never commit.
-- **Keep the navigation front doors current.** `llms.txt` (agent front door) and `README.md`
-  (human front door) summarize canon, so they drift when canon moves. When a change updates
-  `docs/CANON.md`, `docs/project-status.md`, or release/deploy-status facts, re-sync **both**
-  in the same PR — `wiki:doctor` only checks that `llms.txt` lists the required first-reads,
-  not that the front doors are fresh. See [docs/LIBRARIAN.md](docs/LIBRARIAN.md) "Re-sync the
-  navigation front doors".
-
 ## Workflow
 
-1. **Issue first.** Create a GitHub issue with explicit `Acceptance Criteria` before branching. Use the `Task` issue form.
-2. **One issue → one active branch (in a linked worktree) → one PR per phase.** Branch name: `agent/<tool>/<issue>-<slug>` (e.g. `agent/claude/42-oauth-flow`); quick fixes without an issue use `agent/<tool>/<YYYY-MM-DD>-<slug>`. Create the branch with `git worktree add`, not `git switch -c` in the primary checkout — see "Checkout role / worktrees". A branch with a merged or closed PR is retired: do not commit, push, add docs/plans/handoffs, perform cleanup, or open another PR from it. Follow-up phases for the same issue must start from the default branch in a new phase-specific branch/worktree. Before reusing an existing issue branch, check `gh pr list --head <branch> --state all --json number,state,url,mergedAt`.
-3. **Never commit to `main`.** Branch protection enforces this. Repo-facing docs, planning notes, prompts, ADRs, and shared markdown use the same branch/PR path when they are committed to the repo.
-4. **Conventional Commits** for messages: `<type>(<scope>): <description>` where `<type>` is one of `feat fix refactor test docs style chore perf ci build revert`.
-5. **PR metadata must pass the shared contract before ready-for-review.** Non-doc PRs must use this exact body order: `## Summary`, `## Verification`, `### Verification Notes`, `## Docs / Changelog`, and an issue link (`Closes #N`, `Fixes #N`, or `Refs #N`). The PR title must use Conventional Commits. Each checked verification box must be backed by concrete command/check/manual evidence, and placeholders such as TODO/TBD/N/A must be gone. Doc-only PRs (every file matches `*.md`, `*.txt`, an image extension, or `.changelog/**`) skip the body ceremony but still need a valid title and branch. When `agent:start-task` creates `.pr-body.md`, keep using that file for `gh pr create --body-file` / `gh pr edit --body-file`; if it is missing, regenerate it from the committed `.github/PULL_REQUEST_TEMPLATE.md`, not from notes or memory.
-6. **Repo update log.** Every PR that changes code, config, behavior, protected docs, tracked workflows, or repository policy must add one entry as a **new file** `docs/repo-update-log/<YYYY-MM-DD>-<issue>-<slug>.md` before review — one file per PR, never appended to a shared log (a single shared file caused merge conflicts across concurrent PRs). Use the template and field list in [`docs/repo-update-log/README.md`](docs/repo-update-log/README.md): date, issue/PR, branch, changed paths, verification, and whether follow-up propagation is needed. The pre-2026-06-13 `docs/repo-update-log.md` is a frozen archive. Doc-only typo fixes may skip the fragment only when the PR body says why.
-7. **Plan/status artifact closeout.** Delivery is incomplete while any plan, task file, progress file, findings file, handoff, audit, roadmap/status tracker, or coordination note created or used by the lane still reads as active execution guidance. Before PR ready/merge, close it, narrow it to remaining scoped work, or mark it deprecated/superseded with the current source of truth. Do this in the same branch/PR for repo-facing artifacts.
+1. **Issue first.** Create or use a GitHub issue with explicit acceptance criteria before
+   branching. Use the Task issue form.
+2. **One issue -> one active branch -> one linked worktree -> one PR per phase.** Branch
+   name: `agent/<tool>/<issue>-<slug>`. Follow-up phases for the same issue start from
+   fresh `origin/main` in a new phase-specific branch/worktree.
+3. **Never commit feature work to `main`.** Repo-facing docs, plans, prompts, ADRs, and
+   shared markdown use the same branch/PR path when committed.
+4. **Retired branches stay retired.** Before reusing an issue branch, run
+   `gh pr list --head <branch> --state all --json number,state,url,mergedAt`; merged or
+   closed PR state means start a new branch/worktree.
+5. **Conventional commits.** Use `<type>(<scope>): <description>` with
+   `feat fix refactor test docs style chore perf ci build revert`.
+6. **PR bodies use the committed template.** If `.github/PULL_REQUEST_TEMPLATE.md` exists,
+   fill it through `npm run agent:pr-body -- <issue>` or the committed file; do not
+   freehand or leave scratch PR-body files in the worktree.
+7. **Repo update log required.** Code, config, behavior, protected docs, workflows, and
+   repository-policy PRs add one fragment at
+   `docs/repo-update-log/<YYYY-MM-DD>-<issue>-<slug>.md`.
+8. **Plan/status closeout required.** Any plan, progress file, handoff, audit, roadmap,
+   status tracker, or coordination note created or used by the lane must be closed,
+   narrowed, or marked superseded before review.
 
-## Checkout role / worktrees
+## Checkout Role / Worktrees
 
-This repo uses the **checkout-role** model, enforced by `.githooks/pre-commit`:
+The primary checkout stays on the default branch. Feature work happens in linked worktrees:
 
-- The **primary checkout** stays on the default branch. It is the stable owner/admin
-  lane and accepts only owner-maintenance commits (see below). It is **not** where
-  feature work is committed.
-- **Feature work happens in a linked worktree.** Create one per issue:
+```text
+git worktree add -b agent/<tool>/<issue>-<slug> ../<repo>-<issue>-<slug>
+```
 
-  ```
-  git worktree add -b agent/<tool>/<issue>-<slug> ../<repo>-<issue>-<slug>
-  ```
+Prefer repo helpers:
 
-  Commit, push, and open the PR from that folder. After the PR merges, retire the
-  worktree with **`npm run agent:prune`** (see below) — not bare `git worktree remove`.
+- `npm run agent:start-task -- <issue> [--agent <name>] [--slug <slug>]` - fetch default,
+  create the worktree, and record current task state.
+- `npm run agent:status` - branch, upstream, PR, issue, dirty state, claims, and next action.
+- `npm run agent:prune` - retire merged and clean agent worktrees using GitHub PR evidence.
+- `npm run agent:pr-body -- [issue]` - print the committed PR template with issue filled.
 
-- **Do not run `git switch -c` in the primary checkout.** A feature-branch commit
-  there is blocked and redirected to `git worktree add`.
-- Unsure where you are? Run `bash .githooks/scripts/checkout-doctor.sh`.
+Do not run `git switch -c` in the primary checkout. If unsure where you are, run
+`bash .githooks/scripts/checkout-doctor.sh`.
 
-### Agent lifecycle commands
+## Verification And Delivery
 
-Repo-owned helpers (zero-dep, `node`):
+- Treat `repo-required-gate / decision` as the stable branch-protection check. Do not make
+  path-filtered leaf workflows required.
+- Use `.agent/check-map.yml` for path-to-check expectations. If the repo stack changes,
+  update the check map and `repo-required-gate` caller in the same PR.
+- Run the repo's lint, typecheck, and test commands before review. Record exact commands and
+  results in PR verification notes.
+- Tick a verification checkbox only after the backing command or manual check actually
+  passed, or after marking it explicitly not relevant in the template.
+- If user-visible behavior changed, smoke-test it and record what was exercised.
+- Do not run `gh pr ready` directly. Use:
 
-- `npm run agent:start-task -- <issue> [--agent <name>] [--slug <slug>]` — fetch the
-  default branch, create `agent/<tool>/<issue>-<slug>` in a sibling worktree, and write
-  `.agent/current-task.json` (gitignored). Refuses if the checkout is dirty or off the
-  default branch, or if the issue already has a branch.
-- `npm run agent:pr-body -- [issue]` — print the committed `.github/PULL_REQUEST_TEMPLATE.md`
-  with `Closes #<issue>` filled in, to **stdout**. The issue defaults to `.agent/current-task.json`
-  then the branch name. Pipe it straight into a PR — `npm run agent:pr-body -- 58 | gh pr create --body-file -`
-  (or `gh pr edit <n> --body-file -`). Read the committed template directly rather than keeping a
-  scratch copy: the template is always present, CI auto-injects it on PR open, and no file is written
-  so the working tree stays clean for the close/preflight gates.
-- `npm run agent:status` — branch, default branch, upstream, PR, issue, dirty state,
-  worktree path, claims (if installed), and the next recommended action.
-- `npm run agent:prune` — **the way to retire finished worktrees.** Removes every retired +
-  clean agent worktree/branch in one sweep; never touches dirty work, locked worktrees, or
-  the primary/current checkout. A lane is retired only when **GitHub PR state** proves its PR
-  merged into the default branch **and** the worktree's local tip equals the merged PR head.
-  This covers merge, squash, and rebase lanes without relying on ancestry alone. A fresh
-  no-diff task branch may also be reachable from the default branch after it advances, so
-  ancestry without merged-PR proof is kept. An open PR, a different merge base, extra local
-  commits, no PR, or unavailable `gh` keep the lane. Preview first with
-  `npm run agent:prune -- --dry-run`, which prints every lane with a reason
-  (`github-pr` / `dirty` / `open-pr` / `tip-ahead-of-merged` / `no-pr` / `gh-unavailable` / …) and
-  changes nothing. Survives Windows `git worktree remove` failures: when a
-  worktree still holds ignored build residue (`node_modules/`, `dist/`) or long paths, bare
-  `git worktree remove` aborts with "Directory not empty" and strands a half-removed lane,
-  whereas `agent:prune` finishes the delete and skips any single un-removable lane instead
-  of aborting the batch. Idempotent.
+```powershell
+npm run agent:close-preflight -- --repo OWNER/REPO --pr <number>
+npm run agent:pr-ready -- --repo OWNER/REPO --pr <number>
+```
 
-Optional claim capabilities (#14) are reported as "not installed" when absent.
+### Local Delivery Guards
 
-Local delivery guards:
+When a push updates the remote branch, run close-scan after final verification and before
+the push so the marker binds to the exact `HEAD`:
 
-- `npm run close:scan:complete -- --repo OWNER/REPO --pr <number> --changelog-decision "<fragment-or-no-changelog>" --findings-decision "<decision>"` — run after final local verification and before pushing a delivery update. It runs local required-gate parity checks and writes the ignored `.agent/close-scan/complete.json` marker bound to the exact current `HEAD`.
-- `npm run close:ci:guard -- --repo OWNER/REPO --pr <number>` — run after pushing the exact final `HEAD` and before `agent:close-preflight`, `agent:pr-ready`, or merge actions. It verifies the close-scan marker, PR body evidence, local branch/upstream identity, and the `repo-required-gate / decision` check. Missing or unavailable CI is a failure, not a pass.
+```powershell
+npm run close:scan:complete -- --repo OWNER/REPO --pr <number> --changelog-decision "<fragment-or-no-changelog>" --findings-decision "<decision>"
+git push
+npm run close:ci:guard -- --repo OWNER/REPO --pr <number>
+```
+
+`close:ci:guard` must pass before `agent:close-preflight`, `agent:pr-ready`, or merge
+actions. Missing, pending, or unavailable required CI is not a pass.
+
+### Closeout Modes
+
+- Preparing for review and shipping are different states.
+- Use `close:review` for verify -> push -> PR body -> ready-for-review handoff.
+- Use `close:ship` only when the user says `/close`, `ship it`, `land it`, `merge to main`,
+  or equivalent delivery language.
+- Do not push directly to `main`, merge locally, or bypass review/check gates.
 
 ## Owner Maintenance Lane
 
-When the working tree contains only add-only safe maintenance files, agents must not invoke Issue-Admiral, Project-Captain, Project-Lieutenant, Release-Admiral, claim records, handoff blocks, or full CI. Either report `owner maintenance present, no action required` or, if explicitly asked to commit, commit directly on `main` with `docs(owner): ...` or `chore(owner): ...`.
-
-Safe owner-maintenance paths are:
+If the working tree contains only add-only safe maintenance files, agents may use the
+repo-defined owner-maintenance path instead of full issue/PR ceremony. Safe paths:
 
 - `docs/**`
 - image files (`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`)
 - `.changelog/**`
 
-The lane is otherwise add-only. If any unsafe file is staged, or any non-ledger file is modified, deleted, renamed, or copied, stop and report. Unsafe paths include `README.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.github/**`, `.githooks/**`, `.claude/**` (except the named append-log ledgers below), `.agent/schema/**`, `package*.json`, `src/**`, `scripts/**`, `docs/process/**`, and `docs/architecture/**`.
+The lane is add-only. Stop if any unsafe file is staged or if any non-ledger file is
+modified, deleted, renamed, or copied. Unsafe paths include `README.md`, `AGENTS.md`,
+`CLAUDE.md`, `GEMINI.md`, `.github/**`, `.githooks/**`, `.claude/**` except named ledgers,
+`.agent/schema/**`, `package*.json`, `src/**`, `scripts/**`, `docs/process/**`, and
+`docs/architecture/**`.
 
-### Append-log ledgers
+Append-log ledgers may be added or modified directly on `main` when every staged path is one
+of these files:
 
-A narrow, named set of agent-local note files may be **added or modified** directly on `main` — standing conventions write to them constantly, so a full issue → PR lane for each one-line update is friction with no safety benefit:
+- `.claude/noticed.md` - per-repo observation log.
+- `.claude/napkin.md` - curated runbook.
+- `.claude/friction.md` - structured friction ledger.
 
-- `.claude/noticed.md` — per-repo observation log (the `Observations` convention)
-- `.claude/napkin.md` — per-repo curated runbook (the napkin skill, curated each session)
-- `.claude/friction.md` — per-repo structured friction ledger for non-bug workflow hiccups
-
-These need no `(owner)` scope — any Conventional Commit subject works (e.g. `chore(noticed): flush observations`), and the issue-ref requirement is waived when every staged path is a ledger. Renames, copies, and deletes of a ledger still require the normal branch/PR lane. The allowlist lives in `.githooks/scripts/owner-maintenance.sh` (`owner_maintenance_is_append_log`); extend it only for a file a documented convention mandates frequent low-ceremony writes to.
-
-## Anomaly triage
-
-While working on a PR, you'll often notice off-task bugs, stale files, or tech debt that **don't belong in the current change** but shouldn't be lost. The convention: write a structured entry to `.archon/anomalies-thispr.md` on the PR branch. The caller workflow at `.github/workflows/anomaly-triage.yml` invokes [`ArchonVII/github-workflows`](https://github.com/ArchonVII/github-workflows) on every PR event and routes each entry — related entries become sticky PR review comments, unrelated entries become new GitHub issues. Re-runs are idempotent (each entry carries a fingerprint).
-
-### Entry format
-
-```markdown
-## <Short title — what's wrong>
-
-- **Severity:** low | medium | high | critical
-- **File:** path/to/file.ext (optional; helps the classifier)
-- **Related to PR:** yes | no | unknown (optional; default unknown)
-- **Downstream repo:** owner/repo (optional; only when the root cause lives in another repo)
-
-<One or two paragraphs explaining what's wrong, what you observed, and any fix
-hypothesis you have. Imagine a different agent or human picking this up cold.>
-```
-
-- **Title** uses `## ` so the workflow can split entries cleanly.
-- **Severity** is your best read. `medium` is fine when unsure.
-- **File** is one path; if multiple files are implicated, pick the most representative one.
-- **Related to PR** — say `yes` if your in-flight change touches the same code, `no` if the issue is wholly elsewhere, `unknown` if you're not sure. The workflow infers from the PR diff when set to `unknown`.
-- **Downstream repo** is only used when the anomaly's fix lives in a different repo (e.g. an upstream library you happen to call). The workflow will file the issue there if a `triage-token` secret is configured on this repo.
-
-### Rules
-
-- The file lives at `.archon/anomalies-thispr.md` on the PR branch. `.gitignore` should ignore `.archon/*` local state while keeping `!.archon/anomalies-thispr.md` trackable.
-- Append rather than overwrite — multiple entries are normal across a PR's commits.
-- Don't summarize the anomaly in your PR description. The triage workflow does that automatically in its summary comment.
-- If you notice something while working but realize it _is_ part of the PR's scope, fix it directly in the PR — don't write an anomaly entry for work you're about to do anyway.
-- Removing an entry from the file before merge cancels its routing (no issue gets filed). Use this to retract on second thought.
-
-### What the workflow does
-
-- Parses each `## <title>` block.
-- Classifies as related-to-PR (file in PR diff or `Related to PR: yes`) or unrelated.
-- **Related** → posts a sticky PR review comment with the entry body. Re-runs update the same comment.
-- **Unrelated** → opens a new GitHub issue in this repo (or `Downstream repo` if specified) with a back-link to this PR and the `auto-triaged` label.
-- Posts a single summary comment on the PR listing everything filed.
-
-Keep `.github/workflows/anomaly-triage.yml` aligned with [`github-workflows/examples/anomaly-triage.yml`](https://github.com/ArchonVII/github-workflows/blob/main/examples/anomaly-triage.yml).
-
-## Verification
-
-Before marking a PR ready for review:
-
-- Treat `repo-required-gate / decision` as the stable branch-protection check. Do not make path-filtered leaf workflows required.
-- Use `.agent/check-map.yml` to record repo-specific path-to-check expectations. If the repo stack changes, update both `.agent/check-map.yml` and `.github/workflows/repo-required-gate.yml` in the same PR.
-- Confirm every plan/status artifact created or used by the lane is closed, narrowed, deprecated/superseded, or explicitly not applicable.
-- Run the repo's lint, typecheck, and test commands. Record exact commands in `### Verification Notes`.
-- If the change is user-visible, smoke-test it. Record what you exercised.
-- Tick a `- [x]` box **only after** the command actually passed.
-- Do **not** run `gh pr ready` directly. Run the blessed wrapper so malformed PRs cannot trigger paid or expensive ready-for-review checks:
-
-  ```powershell
-  npm run agent:close-preflight -- --repo OWNER/REPO --pr <number>
-  npm run agent:pr-ready -- --repo OWNER/REPO --pr <number>
-  ```
-
-  If the npm wrapper scripts are missing, add the repo's portable wrapper
-  setup first. Do not substitute direct `gh pr ready` or machine-local
-  command paths.
-
-## Local delivery guards
-
-This repo includes local close-scan delivery guards. Keep them strict for pushes
-that would update the remote branch: verification and the close-scan completion
-marker must bind to the exact final `HEAD` after the last commit.
-
-Run `npm run close:scan:complete -- --repo OWNER/REPO --pr <number>
---changelog-decision "<fragment-or-no-changelog>" --findings-decision
-"<decision>"` after final local verification and before pushing. It writes the
-ignored `.agent/close-scan/complete.json` marker with changelog, findings, and
-verification decisions for the current `HEAD`.
-
-After pushing that exact `HEAD`, run `npm run close:ci:guard -- --repo
-OWNER/REPO --pr <number>` before `npm run agent:close-preflight`, `npm run
-agent:pr-ready`, or `gh pr merge`. The guard verifies local branch/upstream
-identity, PR body evidence, the fresh close-scan marker, and the
-`repo-required-gate / decision` check. If CI checks are missing, pending, or not
-green, the guard fails rather than pretending they ran.
-
-The guard still allows true no-op finalization pushes, where local `HEAD`
-already matches the upstream branch and no remote update or CI-triggering
-delivery action would occur. This keeps Copilot/Codex automatic cleanup pushes
-from failing after the branch is already synced, without creating a bypass for
-real changes.
-
-## Closeout
-
-- Preparing a PR for review and shipping it are different states.
-- Closeout includes plan/status artifact hygiene: no lane-created or lane-used
-  plan, task, progress, findings, handoff, audit, roadmap/status, or
-  coordination artifact may remain active-looking unless it has been narrowed to
-  still-open scoped work.
-- Use `close:review` for verify -> push -> PR body -> ready-for-review handoff.
-- Use `close:ship` only when the user explicitly says `/close`, `ship it`,
-  `land it`, `merge to main`, or equivalent delivery language.
-- Run `close:scan:complete` before a delivery `git push`, then run
-  `close:ci:guard` before `npm run agent:pr-ready` and `gh pr merge`.
-
-## CHANGELOG
-
-This repo uses **<Mode 1: direct edit / Mode 2: `.changelog/unreleased/` fragments>** — pick one and delete the other in initial setup.
-
-- **Mode 1:** Edit `CHANGELOG.md` under `## [Unreleased]` on the PR branch.
-- **Mode 2:** Add a file at `.changelog/unreleased/<issue>-<slug>.md`. See that directory's README.
-
-For PRs that don't warrant a CHANGELOG entry (refactor, tests, chore), apply the `no-changelog` label.
-
-## Commit hygiene
-
-- One logical unit per commit. If the message needs "and," split into two commits.
-- Stage specific files: `git add <path> <path>`. Never `git add -A` or `git add .` — that's how `.env` files get committed.
-- Don't bypass hooks (`--no-verify`, `--no-gpg-sign`). If a hook fails, fix the underlying issue.
-
-## Reference precision
-
-In durable written artifacts — decision logs, ADRs, PR bodies, `docs/repo-update-log/` entries, and verification notes — name git refs unambiguously. When a statement turns on the local-vs-remote distinction, write `origin/main` for the remote branch and "the local default branch" (or a specific local ref) for local state. Never write bare `main` when the local-vs-remote distinction is load-bearing: it reads as both and undermines the rule being recorded (e.g. "verify against `origin/main`").
-
-This generalizes: when a workflow rule turns on a distinction — ref, environment, scope, or time — use the fully-qualified term in the artifact, not the shorthand.
-
-## When stuck
-
-If the same approach fails twice, stop. Switch tactics, ask the user, or document what you tried in the issue.
+Renames, copies, and deletes of a ledger still require the normal branch/PR lane.
 
 ## Coordination
 
-This repo is **coordination-isolated**. It coordinates only itself.
+This repo is coordination-isolated. Do not read from or write to machine-global boards, and
+do not assume sibling repos exist. Use only `.agent/coordination/` for claims, locks,
+handoffs, or active boards. If claim acquisition fails, stop and report the conflict.
 
-- Do not read from or write to machine-global coordination boards.
-- Do not assume sibling repositories exist.
-- Do not reference another repo unless this repo explicitly documents that dependency.
+## Anomaly And Friction Ledgers
 
-When coordination is needed, use this repo's local coordination area: `.agent/coordination/`
-(see `.agent/coordination/README.md` for the convention). Active boards, claims, locks, or
-handoffs belong there — or in another repo-local location this repo documents. The active
-board template lives at `.agent/coordination/board.md` and is opt-in; delete it if this
-repo does not do active multi-agent coordination.
+- Off-task bugs, stale files, security concerns, or tech debt found during a PR go in
+  `.archon/anomalies-thispr.md` on the PR branch. The installed
+  `.github/workflows/anomaly-triage.yml` routes related entries to PR review comments and
+  unrelated entries to issues.
+- Use one `## <short title>` block per anomaly with severity, representative file when
+  useful, related-to-PR status, and downstream repo only when the fix lives elsewhere.
+- Non-bug workflow friction goes in `.claude/friction.md`; record the cost and keep moving.
 
-## Project capsules
+## Librarian Wiki
 
-Active feature work lives in `projects/<slug>/PLAN.md` — the guessable front door for one feature (why, plan, invariants, current state). Read a capsule's `PLAN.md` before touching that feature. Create one for work spanning more than one session or PR, or with owner-facing scope/invariants; one-off fixes don't need one. `docs/plans/` is loose/legacy — don't start new files there for feature work once `projects/` is in use. Full convention: `docs/agent-process/project-capsules.md`.
+The `docs/` tree is an agent-maintained wiki. `AGENTS.md`, `llms.txt`, `docs/CANON.md`,
+`docs/LIBRARIAN.md`, and `docs/INDEX.md` are the canonical navigation layer. Anything under
+`.claude/`, `.codex/`, `.gemini/`, plus `CLAUDE.md` and `GEMINI.md`, is an adapter only.
+
+- Before wiki maintenance, read `docs/LIBRARIAN.md` and `docs/CANON.md`.
+- `docs/raw/` is immutable intake; `docs/` holds durable pages; `docs/memory/` is a
+  machine-local junction; corrections go in `docs/audits/`.
+- Run wiki operations through `npm run wiki:start`, `wiki:ingest`, `wiki:query`,
+  `wiki:lint`, `wiki:crystallize`, `wiki:compact-save`, and `wiki:doctor`.
+- When `docs/CANON.md`, `docs/project-status.md`, or release/deploy-status facts change,
+  resync both `llms.txt` and relevant `README.md` status/overview prose in the same PR.
+
+## Project Capsules
+
+Active feature work that spans more than one session or one PR lives in
+`projects/<slug>/PLAN.md`. The PLAN owns summary and pointers only; it links out to specs,
+ADRs, research, issues, and PRs. One-off fixes do not need a capsule. Full convention:
+`docs/agent-process/project-capsules.md`.
 
 ## Doc Sweep-Up
 
 Agents recover and preserve docs across sessions. Run `scripts/doc-sweep/` at session
 boundaries; full spec: `docs/agent-process/doc-sweep.md`.
 
-- **sweep-on-open:** at session start, run `node scripts/doc-sweep/sweep.mjs --repo <repo>` to
-  surface add-only docs that prior/dead sessions stranded; commit the provably-safe ones
-  (`--apply`), leave+log the rest.
-- **flush-on-close:** before ending a session, commit your own pending add-only docs (after the
-  secret scan) so they are never stranded.
-- **Allow-list only:** new add-only docs under `docs/**` (except `docs/process/**`,
-  `docs/architecture/**`), `.changelog/**`, `.html-artifacts/**`, and image assets. Never sweep
-  code, CI, hooks, `.claude/`, `AGENTS.md`/`CLAUDE.md`/`README.md`, or `package*.json`.
-- **Liveness:** auto-commit only docs stranded on the primary default branch (stale >12h) OR a
-  worktree doc whose coordination claim is EXPIRED. Active claim → never touch. No claim, fresh
-  (<12h), detached HEAD, gitignored, symlink, or any ambiguity → leave + log, never force.
-- **Safety:** the sweep takes a lock and files its own claim; selective file-by-file staging
-  only; deterministic secret scan before any commit; never push recovery branches.
+- **sweep-on-open:** run `node scripts/doc-sweep/sweep.mjs --repo <repo>` to surface
+  add-only docs stranded by prior/dead sessions; commit only provably-safe ones with
+  `--apply`, and leave+log the rest.
+- **flush-on-close:** before ending a session, commit your own pending add-only docs after
+  the secret scan so they are never stranded.
+- **Allow-list only:** new add-only docs under `docs/**` except `docs/process/**` and
+  `docs/architecture/**`, `.changelog/**`, `.html-artifacts/**`, and image assets. Never
+  sweep code, CI, hooks, `.claude/`, `AGENTS.md`, `CLAUDE.md`, `README.md`, or manifests.
+- **Liveness:** auto-commit only default-branch docs stale over 12 hours or worktree docs
+  whose coordination claim is expired. Active claim means live; ambiguity means leave+log.
+- **Safety:** the sweep takes a lock, stages files selectively, runs a deterministic secret
+  scan before commit, and never pushes recovery branches.
+
+## Document Policy
+
+Use `docs/agent-process/document-policy.md` for document charters, status/lifecycle rules,
+placement priority, budgets, and doc-health duties. If a rule needs more than 10 lines in
+`AGENTS.md`, keep a short contract here and move the detail there.
+
+## CHANGELOG
+
+This repo uses **<Mode 1: direct edit / Mode 2: `.changelog/unreleased/` fragments>** -
+pick one and delete the other during initial setup. For PRs that do not warrant a
+CHANGELOG entry, apply the `no-changelog` label.
+
+## Commit Hygiene
+
+- Stage specific files: `git add <path> <path>`. Never use `git add -A`, `git add .`, or
+  `git add --all`.
+- Keep one logical unit per commit. If the message needs "and", split it.
+- Do not bypass hooks with `--no-verify` or `--no-gpg-sign`; fix the underlying failure.
+
+## Reference Precision
+
+In durable artifacts such as decision logs, ADRs, PR bodies, update-log fragments, and
+verification notes, name refs unambiguously. Use `origin/main` when remote-vs-local matters,
+and write "the local default branch" when that is what you mean.
+
+## When Stuck
+
+If the same approach fails twice, stop. Switch tactics, ask the user, or document what you
+tried in the issue.
