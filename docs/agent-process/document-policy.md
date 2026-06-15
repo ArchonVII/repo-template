@@ -1,0 +1,133 @@
+# Document Policy
+
+> **Status:** active
+> **Owner:** ecosystem
+> **Scope:** repo-local document control
+> **Source of truth:** yes
+> **Last reviewed:** 2026-06-15
+> **Supersedes:** none
+> **Superseded by:** none
+
+This file is the per-repo document-control contract. `AGENTS.md` carries the short
+agent-facing pointer; this file owns the full rules.
+
+## Binding Rules
+
+1. Every durable document answers one clear question and has one canonical home.
+2. The first screen of an agent-read document must contain binding rules or links to them.
+3. Long rules use a short `AGENTS.md` contract plus a detail doc in `docs/agent-process/`.
+4. Distributor-maintained sections use managed blocks.
+5. Docs over their charter budget move detail down the hierarchy instead of growing forever.
+6. Doc-health tools report drift; they do not rewrite durable docs.
+
+## Source-Of-Truth Hierarchy
+
+| Layer | Owns | Canonical location | Propagation rule |
+| --- | --- | --- | --- |
+| Org defaults | Issue templates, PR templates, human-facing starter policy | `ArchonVII/.github` | Repos inherit unless they define local overrides. |
+| Workflow provider | Reusable workflow bodies and example callers | `ArchonVII/github-workflows` | Consumers pin thin callers to a released ref. |
+| Repo scaffold | `AGENTS.md`, `.agent/**`, hooks, lifecycle scripts, baseline process docs | `ArchonVII/repo-template` | New and updated repos consume through template or snapshots. |
+| Integrator | Snapshots, onboarding, feature registry, audit/update catalog | `ArchonVII/archon-setup` | Refresh snapshots after provider changes; do not edit snapshots as source. |
+| Shared skills | Skill source, skill loading policy, repair targets | `ArchonVII/jma-skill-review` | Repair skill source first; do not copy runtime cache files into repos. |
+
+Edit the narrowest source of truth first, then propagate through the normal snapshot or
+consumer update path.
+
+## Document Charters
+
+| Document | Answers | Owner | Budget | Above-the-fold requirement | Hard exclusions |
+| --- | --- | --- | --- | --- | --- |
+| `README.md` | What is this and how do I run it? | human | 150 lines | One-sentence purpose, quickstart/status pointers | Architecture detail, process rules, historical logs |
+| `AGENTS.md` | How do agents work here? | ecosystem | 300 lines | Read-first list, Start Map, workflow guardrails | Tool quirks, full specs, project vision |
+| `CLAUDE.md` / `GEMINI.md` | What diverges for this tool only? | ecosystem | 25 lines | Pointer back to `AGENTS.md` plus any tool-specific delta | Universal rules, repo truth, duplicate workflow policy |
+| `VISION.md` | What experience are we building, and what is out of scope? | human | 120 lines | Experience, north star, scope, explicitly-not section | Implementation detail, task lists, status logs |
+| `docs/decisions/decision-log.md` | What did the owner decide, when? | human, agent-appended | append-only | Newest decision first with date, lane, one-line why | Rationale essays, technical ADR content |
+| `CHANGELOG.md` / `.changelog/**` | What shipped for users? | agents | release-mode specific | Current unreleased/release entry or fragment purpose | Operational update notes, internal-only maintenance |
+| `docs/repo-update-log/` | What changed operationally in this repo? | agents | one fragment per PR | Issue/PR, branch, changed paths, verification, propagation | User-facing release notes, shared append hotspot |
+| `ARCHITECTURE.md` / `docs/architecture/**` | Where do subsystems live and what boundaries matter? | agents | as needed | System map and boundary rules before rationale | Per-file documentation, transient plans |
+| `docs/plans/**` | What implementation plan is active or historical? | agents | as needed | Status, owner, source issue, next action, closeout state | Project vision, ADR replacement, stale active guidance |
+| `projects/<slug>/PLAN.md` | What is the front door for one feature? | agents | as needed | Current state, next safe action, blocker, invariants | Duplicate specs, code, generated artifacts |
+| `docs/adr/**` | What technical decision was accepted and why? | agents | as needed | Decision, status, context, consequences | Owner intent ledger, implementation task list |
+| `docs/research/**` | What evidence did we collect? | agents | as needed | Question, source set, conclusion confidence | Binding policy without promotion |
+| `.claude/noticed.md` | What observation should not be lost yet? | agents | append-log | New observation entry only | Durable policy, large research notes |
+| `.claude/napkin.md` | What repeatable runbook lesson should future sessions reuse? | agents | top 10 per category | Highest-priority reusable rules first | One-off session logs, stale mistake lists |
+| `.claude/friction.md` | What non-bug workflow hiccup cost time? | agents | append-log | Machine-parseable table header first | Bugs, security findings, mid-task fixes |
+
+When a repo has not adopted a future document yet, the charter still defines where that
+document belongs once introduced.
+
+## Lifecycle States
+
+| State | Meaning | Required handling |
+| --- | --- | --- |
+| `draft` | Being shaped; not binding yet | Keep in planning/research areas or a PR branch. |
+| `active` | Current operating guidance | Keep above-the-fold guidance fresh and linked from the Start Map when agent-read. |
+| `accepted` | Historical decision that is now binding | Use for ADRs and link any implementation docs that rely on it. |
+| `superseded` | Replaced by a newer source | Add `Superseded by` with a concrete path or URL. |
+| `archived` | Historical evidence only | Move out of active navigation and keep inbound links clear. |
+| `scratch` | Temporary and not durable policy | Keep untracked or outside durable docs; promote before relying on it. |
+
+### Status Header
+
+Durable `docs/**` files use this small header unless their file type already has a
+stronger format, such as ADRs, changelog fragments, repo-update-log fragments, or wiki
+frontmatter:
+
+```markdown
+> **Status:** draft | active | accepted | superseded | archived
+> **Owner:** human | agent | repo | ecosystem
+> **Scope:** repo-local | meta-layer | global-skill | workflow-provider
+> **Source of truth:** yes | no - see <path/link>
+> **Last reviewed:** YYYY-MM-DD
+> **Supersedes:** <path or none>
+> **Superseded by:** <path or none>
+```
+
+Do not force this header onto `README.md`, `CHANGELOG.md`, `AGENTS.md`, tool addenda, or
+`.github` templates unless the owning convention requires it.
+
+## Placement Priority
+
+`AGENTS.md` stays a contract, not a policy archive. Keep this order:
+
+1. Read First and Agent Start Map.
+2. Core workflow and worktree/branch guardrails.
+3. Delivery, verification, closeout, and PR readiness rules.
+4. Coordination, anomaly/friction ledgers, and owner-maintenance exceptions.
+5. Capability contracts that point to detail docs.
+6. Reference-only sections.
+
+Within any agent-read document:
+
+- Put binding action before background.
+- Link to the canonical home instead of copying a rule.
+- If a section needs more than 10 lines, keep no more than 5 lines in `AGENTS.md` and move
+  detail to `docs/agent-process/<topic>.md`.
+- Preserve managed block markers and update the writer in the same lane if a generated block
+  changes shape.
+- Prefer explicit paths over prose labels when pointing agents to work.
+
+## Doc-Health Duties
+
+Humans and agents may edit docs through the repo's normal branch/PR policy. Automated
+doc-health only reports:
+
+- Charter budget overruns.
+- Stale `Last reviewed` values.
+- Active plans or capsules that read as live after the lane is done.
+- Missing supersession links.
+- Dangling relative links.
+- Placeholder text in active docs.
+- Startup-baseline entries that disagree with the filesystem.
+
+Reports become issues, PR findings, or maintenance status. They do not auto-rewrite
+documents.
+
+## Closeout
+
+Before a PR is ready for review, every repo-facing plan, progress note, handoff, audit,
+roadmap/status tracker, or coordination note created or used by the lane must be closed,
+narrowed to still-open scope, or marked superseded with a current source of truth.
+
+Record document-policy changes in `docs/repo-update-log/` and mark whether propagation is
+pending in `.github`, `archon-setup`, `github-workflows`, skills, or consumer repos.

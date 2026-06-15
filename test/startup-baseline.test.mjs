@@ -8,10 +8,11 @@ const ROOT = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
 
 test('startup baseline contract names canonical startup files and legacy plan path', async () => {
   const baseline = JSON.parse(await readFile(join(ROOT, '.agent', 'startup-baseline.json'), 'utf8'));
-  assert.equal(baseline.version, '2026-06-13-repo-update-log-fragments');
+  assert.equal(baseline.version, '2026-06-15-document-policy');
   for (const path of [
     'AGENTS.md',
     'docs/plans/README.md',
+    'docs/agent-process/document-policy.md',
     '.agent/check-map.yml',
     '.agent/coordination/README.md',
     '.github/PULL_REQUEST_TEMPLATE.md',
@@ -54,8 +55,15 @@ test('AGENTS exposes the startup map before workflow details', async () => {
   assert.ok(workflowIndex > -1, 'AGENTS.md should include Workflow');
   assert.ok(startupIndex < workflowIndex, 'Agent Start Map should appear before workflow details');
   assert.match(body, /docs\/plans\//);
+  assert.match(body, /docs\/agent-process\/document-policy\.md/);
   assert.match(body, /scripts\/close\//);
   assert.match(body, /node <path-to-archon-setup>\/bin\/onboard\.mjs <repo> --audit/);
+});
+
+test('AGENTS stays within the document-policy line budget', async () => {
+  const body = await readFile(join(ROOT, 'AGENTS.md'), 'utf8');
+  const lineCount = body.split(/\r?\n/).length;
+  assert.ok(lineCount <= 300, `AGENTS.md should be <=300 lines; got ${lineCount}`);
 });
 
 test('AGENTS managed start map includes the friction ledger instruction', async () => {

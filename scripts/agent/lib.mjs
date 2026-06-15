@@ -3,7 +3,7 @@
 // unit-tested in test/agent/lib.test.mjs. Command shims (start-task/status/prune)
 // inject git/gh output and consume these.
 
-// Branch convention: agent/<tool>/<issue>-<slug>  (AGENTS.md:15)
+// Branch convention: agent/<tool>/<issue>-<slug> (see AGENTS.md "Workflow").
 export function sanitizeSlug(value) {
   const slug = String(value)
     .toLowerCase()
@@ -206,6 +206,7 @@ export function formatStartupMap(baseline, { repoPath = '<repo>', archonSetupCom
   const legacy = Array.isArray(baseline?.legacy) ? baseline.legacy : [];
   const lines = [
     'Agent startup map:',
+    '- Document policy: docs/agent-process/document-policy.md',
     '- Plans:          docs/plans/',
     '- Agent process:  docs/agent-process/',
     '- Repo update log: docs/repo-update-log/ (one file per PR)',

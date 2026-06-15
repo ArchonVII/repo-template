@@ -196,6 +196,7 @@ test('formatStartupMap renders canonical startup paths and repair action', () =>
   const out = formatStartupMap(baseline, { repoPath: '/repo', archonSetupCommand: 'node <path-to-archon-setup>/bin/onboard.mjs' });
   assert.match(out, /Agent startup map:/);
   assert.match(out, /Plans:\s+docs\/plans\//);
+  assert.match(out, /Document policy:\s+docs\/agent-process\/document-policy\.md/);
   assert.match(out, /Agent scripts:\s+scripts\/agent\//);
   assert.match(out, /Close guards:\s+scripts\/close\//);
   assert.match(out, /Legacy plans:\s+docs\/superpowers\/plans\/ \(history only\)/);

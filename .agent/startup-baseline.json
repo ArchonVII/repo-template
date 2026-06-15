@@ -1,8 +1,9 @@
 {
-  "version": "2026-06-13-repo-update-log-fragments",
+  "version": "2026-06-15-document-policy",
   "required": [
     "AGENTS.md",
     "docs/plans/README.md",
+    "docs/agent-process/document-policy.md",
     ".agent/check-map.yml",
     ".agent/coordination/README.md",
     ".github/PULL_REQUEST_TEMPLATE.md",
