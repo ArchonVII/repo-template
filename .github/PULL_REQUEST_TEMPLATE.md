@@ -37,6 +37,8 @@ TODO: Record the changelog fragment, direct CHANGELOG edit, docs update, or no-c
 
 Plan/status artifacts: TODO: closed, narrowed to remaining scoped work, marked deprecated/superseded with the current source of truth, or not applicable because none were created or used by this lane.
 
+Owner decisions this lane: appended / none
+
 ## Linked Issue
 
 TODO: Closes #___

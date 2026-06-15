@@ -56,6 +56,20 @@ consumer update path.
 When a repo has not adopted a future document yet, the charter still defines where that
 document belongs once introduced.
 
+## Owner Intent Layer
+
+`VISION.md` is human-owned. Agents may install or repair the template, but they do not fill
+it from inference. Keep it focused on experience, north star, scope, explicitly-not,
+current horizon, and drift tripwires; implementation detail, task lists, and status logs
+belong elsewhere. `Last reviewed` is stale after 90 days unless a repo-local policy sets a
+different cadence.
+
+`docs/decisions/decision-log.md` is the append-only owner-intent ledger, newest first.
+Entries stay to the title plus `Decision`, `Lane`, and `Why` one-liners. Use it for owner
+scope decisions, not technical ADR rationale. When a lane produces an owner scope decision,
+append it at closeout and record `Owner decisions this lane: appended` in the PR body;
+otherwise record `Owner decisions this lane: none`.
+
 ## Lifecycle States
 
 | State | Meaning | Required handling |

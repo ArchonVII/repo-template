@@ -46,7 +46,12 @@ export const NON_PAGE_PREFIXES = [
   'docs/adr/', 'docs/agent-process/', 'docs/plans/', 'docs/superpowers/',
 ];
 // Append-only logs + standalone template docs are not pages.
-export const NON_PAGE_FILES = ['docs/log.md', 'docs/repo-update-log.md', 'docs/template-library-inventory.md'];
+export const NON_PAGE_FILES = [
+  'docs/log.md',
+  'docs/repo-update-log.md',
+  'docs/decisions/decision-log.md',
+  'docs/template-library-inventory.md',
+];
 
 export function repoRoot() {
   try {
