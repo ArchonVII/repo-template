@@ -29,6 +29,7 @@ prefix it with the checkout root, for example
 | `templates/prompts/prompts.prompt-run-request.standard.md` | `prompts.prompt-run-request.standard` | Standard request to execute a prompt against input data. | Use after a prompt exists and an agent needs to run it with specific inputs, constraints, evaluation criteria, and return format. Prompt workflow order 2. |
 | `templates/prompts/prompts.prompt-run-report.standard.md` | `prompts.prompt-run-report.standard` | Report for a completed prompt execution. | Use after the prompt output is produced to summarize inputs, output, findings, issues, confidence, and follow-up. Prompt workflow order 3; MVP order 4. |
 | `templates/prompts/prompts.prompt-review.standard.md` | `prompts.prompt-review.standard` | Prompt review and revision report. | Use when evaluating or improving a prompt as a maintainable artifact. MVP order 5. |
+| `templates/prompts/prompts.prompt-batch.standard.md` | `prompts.prompt-batch.standard` | Multi-prompt batch dispatch with sequential numbering and nested sub-parts. | Use when dispatching two or more implementer prompts together (e.g. one per lane). Carries a count-bearing manifest so a missing or duplicated prompt is caught; sub-parts nest as `na`/`nb` inside one prompt. Prompt workflow order 4. |
 | `templates/reports/reports.findings-report.standard.md` | `reports.findings-report.standard` | Structured research, audit, inspection, or analysis report. | Use after an agent researches, inspects, audits, or analyzes something and needs to separate findings, evidence, interpretation, risks, and recommendation. MVP order 6. |
 | `templates/reports/reports.decision-memo.standard.md` | `reports.decision-memo.standard` | Decision memo with options and tradeoffs. | Use when a recommendation or final decision needs explicit options, risks, follow-up actions, and decision record. MVP order 11. |
 | `templates/github/github.issue.standard.md` | `github.issue.standard` | Task issue body. | Use before branching when work needs a clear problem statement, scope, acceptance criteria, verification, and risks. MVP order 9. |
@@ -71,6 +72,7 @@ prefix it with the checkout root, for example
 | `examples/agent-final-response.example.md` | Filled example of `agent.final-response.standard`. | Use as the reference for concise completed-work responses. |
 | `examples/prompt-builder.example.md` | Filled example of `prompts.prompt-builder.standard`. | Use as the reference for prompt authoring outputs. |
 | `examples/prompt-run-report.example.md` | Filled example of `prompts.prompt-run-report.standard`. | Use as the reference for reporting a prompt execution separately from the produced artifact. |
+| `examples/prompt-batch.example.md` | Filled example of `prompts.prompt-batch.standard` rendered in the `bbs-1998` style. | Use as the reference for a clearly-bounded, sequentially-numbered multi-prompt dispatch with nested sub-parts. |
 
 ## Candidate Templates To Add Later
 
@@ -107,6 +109,6 @@ existing templates are too broad or are causing avoidable friction.
 
 ## Expansion Rule
 
-Keep the system small and strict. Prefer the current 16 templates, 9 partials,
-3 styles, 2 schemas, and 3 examples until repeated use proves that one of the
+Keep the system small and strict. Prefer the current 17 templates, 9 partials,
+3 styles, 2 schemas, and 4 examples until repeated use proves that one of the
 candidate templates needs to become active.

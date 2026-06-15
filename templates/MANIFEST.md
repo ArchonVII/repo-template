@@ -27,6 +27,7 @@ quality_gate:
 | prompts.prompt-run-request.standard | Prompt Run Request | prompts | agent | active | Standard request to execute a prompt against inputs. |
 | prompts.prompt-run-report.standard | Prompt Run Report | prompts | user | active | Reports what happened during prompt execution. |
 | prompts.prompt-review.standard | Prompt Review | prompts | developer | active | Evaluates and revises a prompt as a maintainable artifact. |
+| prompts.prompt-batch.standard | Prompt Batch | prompts | agent | active | Dispatches multiple implementer prompts as one batch with sequential numbering and nested sub-parts. |
 | reports.findings-report.standard | Findings Report | reports | user | active | Structured research, audit, or inspection report. |
 | reports.decision-memo.standard | Decision Memo | reports | reviewer | active | Captures a decision, options, tradeoffs, and follow-up. |
 | github.issue.standard | Issue | github | developer | active | Task issue body with scope and acceptance criteria. |
