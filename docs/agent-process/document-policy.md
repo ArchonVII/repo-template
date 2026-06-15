@@ -107,6 +107,26 @@ Within any agent-read document:
   changes shape.
 - Prefer explicit paths over prose labels when pointing agents to work.
 
+## Authority & Freshness
+
+Authority comes from the charter a document serves, its lifecycle state, and its status
+header. A repo names only a small, explicit set of current-truth registers with the
+existing `Source of truth: yes` header. Everything else is navigation, decision history,
+evidence, or project-local context, and should point to the current-truth register instead
+of restating volatile facts.
+
+Front-door files such as `README.md`, `ROADMAP.md`, `docs/INDEX.md`, and `llms.txt` are
+navigation surfaces. They may link to current truth, but they do not duplicate volatile
+status. Before a front door labels a target current or authoritative, the target itself
+declares `Status: active` and a recent `Last reviewed:` value. If it does not, the front
+door labels it historical or contextual.
+
+Dated plan files under `docs/plans/<date>-*.md` are historical snapshots by default. A
+dated plan is active only when its own header declares `Status: active` and
+`Source of truth: yes`. For active per-feature work, `projects/<slug>/PLAN.md` is the
+front door. Once a project capsule exists, `docs/plans/**` is historical or fallback
+context for that feature.
+
 ## Doc-Health Duties
 
 Humans and agents may edit docs through the repo's normal branch/PR policy. Automated
