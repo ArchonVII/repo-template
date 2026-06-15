@@ -7,9 +7,10 @@ owner_maintenance_subject() {
     [[ "${subject}" =~ ^(docs|chore)\(owner\)!?:[[:space:]].+ ]]
 }
 
-# Append-log ledgers: agent-local note files that standing agent conventions
-# tell every session to write to frequently, so a full issue->PR lane (or an
-# audited bypass) for each one-line update is friction with no safety benefit.
+# Append-log ledgers: agent-local note files and owner-intent ledgers that
+# standing conventions tell agents or owners to write to frequently, so a full
+# issue->PR lane (or an audited bypass) for each one-line update is friction
+# with no safety benefit.
 # These named files may be Added OR Modified directly on main under the Owner
 # Maintenance Lane. The allowlist is explicit and narrow on purpose — add a path
 # only when a documented convention mandates frequent low-ceremony writes to it.
@@ -20,6 +21,8 @@ owner_maintenance_subject() {
 #                        session)
 #   .claude/friction.md — per-repo structured friction ledger (non-bug workflow
 #                         hiccups; one table row per event)
+#   docs/decisions/decision-log.md — append-only owner-intent ledger (newest
+#                                    decision first)
 #
 # Source: ArchonVII owner conventions; repo-template#50 (page-gm incident
 # gm-20260605-113318 — flushing .claude/noticed.md required a double bypass:
@@ -27,7 +30,7 @@ owner_maintenance_subject() {
 owner_maintenance_is_append_log() {
     local path="${1:-}"
     case "${path}" in
-        .claude/noticed.md|.claude/napkin.md|.claude/friction.md)
+        .claude/noticed.md|.claude/napkin.md|.claude/friction.md|docs/decisions/decision-log.md)
             return 0
             ;;
     esac

@@ -79,6 +79,52 @@ test('AGENTS stays within the document-policy line budget', async () => {
   assert.ok(lineCount <= 300, `AGENTS.md should be <=300 lines; got ${lineCount}`);
 });
 
+test('VISION template satisfies the owner-intent charter', async () => {
+  const body = await readFile(join(ROOT, 'VISION.md'), 'utf8');
+  const lineCount = body.split(/\r?\n/).length;
+  assert.ok(lineCount <= 120, `VISION.md should be <=120 lines; got ${lineCount}`);
+  assert.match(body, /^> \*\*Status:\*\* draft$/m);
+  assert.match(body, /^> \*\*Owner:\*\* human$/m);
+  assert.match(body, /^> \*\*Last reviewed:\*\* YYYY-MM-DD$/m);
+
+  const sections = [
+    '## Experience',
+    '## North Star',
+    '## Scope',
+    '### Must-Have',
+    '### Nice-To-Have',
+    '### Explicitly Not',
+    '## Current Horizon',
+    '## Drift Tripwires',
+  ];
+  let previous = -1;
+  for (const section of sections) {
+    const index = body.indexOf(section);
+    assert.ok(index > previous, `${section} should appear in charter order`);
+    previous = index;
+  }
+});
+
+test('decision log template satisfies the append-only owner-intent charter', async () => {
+  const body = await readFile(join(ROOT, 'docs', 'decisions', 'decision-log.md'), 'utf8');
+  assert.match(body, /^> \*\*Status:\*\* active$/m);
+  assert.match(body, /^> \*\*Owner:\*\* human, agent-appended$/m);
+  assert.match(body, /Append owner intent decisions below, newest first\./);
+  assert.match(body, /^## YYYY-MM-DD - <decision title>$/m);
+  assert.match(body, /^- \*\*Decision:\*\* <one line>$/m);
+  assert.match(body, /^- \*\*Lane:\*\* <issue\/PR URL>$/m);
+  assert.match(body, /^- \*\*Why:\*\* <one line>$/m);
+});
+
+test('AGENTS declares vision drift duties and stacked docs review scope', async () => {
+  const body = await readFile(join(ROOT, 'AGENTS.md'), 'utf8');
+  assert.match(body, /## Vision Drift Duties/);
+  assert.match(body, /read `VISION\.md` when present/);
+  assert.match(body, /Scope \/ explicitly-not/);
+  assert.match(body, /`docs\/decisions\/decision-log\.md`/);
+  assert.match(body, /For stacked docs PRs, review `origin\/main\.\.HEAD`, not only the narrow PR diff; guidance only, not a gate\./);
+});
+
 test('AGENTS managed start map includes the friction ledger instruction', async () => {
   const body = await readFile(join(ROOT, 'AGENTS.md'), 'utf8');
   const start = body.indexOf('<!-- BEGIN MANAGED AGENT START MAP -->');

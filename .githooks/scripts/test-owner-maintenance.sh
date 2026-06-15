@@ -134,6 +134,29 @@ run_in_tmp git add .claude/friction.md
 expect_success "pre-commit-ledger-friction-append" run_in_tmp "${pre_commit_hook}"
 expect_success "commit-msg-ledger-friction-append" run_in_tmp "${commit_msg_hook}" "$(message_file "chore(friction): log hook hiccup")"
 
+# The owner decision log is also a named append-log ledger: direct-main appends
+# pass with no bypass and no issue reference.
+reset_tmp_repo
+mkdir -p "${tmp}/repo/docs/decisions"
+printf '# Decision Log\n\n## 2026-06-12 - Seed\n- **Decision:** Seed\n- **Lane:** <issue>\n- **Why:** Seed\n' > "${tmp}/repo/docs/decisions/decision-log.md"
+run_in_tmp git add docs/decisions/decision-log.md
+run_in_tmp git commit -m "docs: seed decision log (#1)" --no-verify >/dev/null
+printf '\n## 2026-06-15 - Owner scope\n- **Decision:** Keep it narrow\n- **Lane:** https://github.com/ArchonVII/repo-template/issues/73\n- **Why:** Avoid drift\n' >> "${tmp}/repo/docs/decisions/decision-log.md"
+run_in_tmp git add docs/decisions/decision-log.md
+expect_success "pre-commit-ledger-decision-log-append" run_in_tmp "${pre_commit_hook}"
+expect_success "commit-msg-ledger-decision-log-append" run_in_tmp "${commit_msg_hook}" "$(message_file "docs(decisions): record owner scope")"
+
+# Other docs/decisions files are still normal docs: modifying them on main is
+# blocked by the owner-maintenance add-only rule.
+reset_tmp_repo
+mkdir -p "${tmp}/repo/docs/decisions"
+printf 'seed\n' > "${tmp}/repo/docs/decisions/notes.md"
+run_in_tmp git add docs/decisions/notes.md
+run_in_tmp git commit -m "docs: seed decision note (#1)" --no-verify >/dev/null
+printf 'modify\n' >> "${tmp}/repo/docs/decisions/notes.md"
+run_in_tmp git add docs/decisions/notes.md
+expect_failure "pre-commit-docs-decisions-nonledger-modify" run_in_tmp "${pre_commit_hook}"
+
 # A non-allowlisted .claude file is still blocked on main.
 reset_tmp_repo
 stage_file ".claude/settings.json" '{"x":1}'

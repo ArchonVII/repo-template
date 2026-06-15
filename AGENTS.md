@@ -65,6 +65,13 @@ node <path-to-archon-setup>/bin/onboard.mjs <repo> --audit
    status tracker, or coordination note created or used by the lane must be closed,
    narrowed, or marked superseded before review.
 
+## Vision Drift Duties
+
+- At plan time, read `VISION.md` when present and treat Scope / explicitly-not as owner intent.
+- If requested work conflicts with it, surface the conflict and cite the relevant `docs/decisions/decision-log.md` entry before proceeding.
+- At closeout, append owner scope decisions made during the lane to `docs/decisions/decision-log.md`; record none in the PR when none were made.
+- Keep detail in `docs/agent-process/document-policy.md`; do not turn `VISION.md` into implementation notes or status logs.
+
 ## Checkout Role / Worktrees
 
 The primary checkout stays on the default branch. Feature work happens in linked worktrees:
@@ -122,6 +129,7 @@ actions. Missing, pending, or unavailable required CI is not a pass.
 - Use `close:review` for verify -> push -> PR body -> ready-for-review handoff.
 - Use `close:ship` only when the user says `/close`, `ship it`, `land it`, `merge to main`,
   or equivalent delivery language.
+- For stacked docs PRs, review `origin/main..HEAD`, not only the narrow PR diff; guidance only, not a gate.
 - Do not push directly to `main`, merge locally, or bypass review/check gates.
 
 ## Owner Maintenance Lane
@@ -145,6 +153,7 @@ of these files:
 - `.claude/noticed.md` - per-repo observation log.
 - `.claude/napkin.md` - curated runbook.
 - `.claude/friction.md` - structured friction ledger.
+- `docs/decisions/decision-log.md` - owner intent decision log.
 
 Renames, copies, and deletes of a ledger still require the normal branch/PR lane.
 

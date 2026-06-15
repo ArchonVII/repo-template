@@ -59,6 +59,7 @@ test('isPage excludes non-page tiers and logs', () => {
   assert.equal(isPage('docs/log.md'), false); // ops log
   assert.equal(isPage('docs/repo-update-log.md'), false); // update log (frozen archive)
   assert.equal(isPage('docs/repo-update-log/2026-06-13-191-x.md'), false); // per-PR fragment
+  assert.equal(isPage('docs/decisions/decision-log.md'), false); // owner-intent ledger
   assert.equal(isPage('docs/template-library-inventory.md'), false); // standalone template doc
   assert.equal(isPage('README.md'), false); // root file, not under docs/
 });

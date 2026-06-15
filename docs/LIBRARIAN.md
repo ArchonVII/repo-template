@@ -56,8 +56,8 @@ namespace are assumed valid and are **not** resolved by `wiki:lint`.
 ### What is NOT a page
 
 `wiki:lint` skips these (no frontmatter required): `docs/raw/`, `docs/audits/`,
-`docs/memory/`, `docs/log.md`, `docs/repo-update-log.md`, and `docs/repo-update-log/` (the
-append-only update log and its per-PR fragments).
+`docs/memory/`, `docs/log.md`, `docs/repo-update-log.md`, `docs/repo-update-log/`, and
+`docs/decisions/decision-log.md` (append-only operational and owner-intent ledgers).
 
 The template also ships pre-existing doc trees that are **not yet under the wiki schema**:
 `docs/adr/`, `docs/agent-process/`, `docs/plans/`, and `docs/superpowers/`. They are listed
