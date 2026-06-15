@@ -115,8 +115,9 @@ Keep the primary checkout on '${branch}'. See AGENTS.md "Checkout role / worktre
 Owner Maintenance Lane direct commits are allowed only when every staged path
 is add-only and safe (docs/**, image files, or .changelog), or is a named
 append-log ledger (.claude/noticed.md, .claude/napkin.md,
-.claude/friction.md — these may also be modified). Other unsafe files, deletes,
-renames, and copies require the normal issue -> branch -> PR lifecycle.
+.claude/friction.md, docs/decisions/decision-log.md — these may also be
+modified). Other unsafe files, deletes, renames, and copies require the normal
+issue -> branch -> PR lifecycle.
 
 If you really need to commit here (e.g. Release-Admiral fixup, F11),
 bypass with an audit trail:
