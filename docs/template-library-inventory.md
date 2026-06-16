@@ -41,7 +41,8 @@ prefix it with the checkout root, for example
 | Path                                    | Partial ID               | Description                                          | Current use / order                                                                                       |
 | --------------------------------------- | ------------------------ | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `templates/_partials/header.md`         | `partial.header`         | Reusable metadata display block.                     | Use at the top of templates or rendered outputs when metadata should be visible.                          |
-| `templates/_partials/status-line.md`    | `partial.status-line`    | Compact status, confidence, and last-updated line.   | Use near the top of status, report, handoff, and progress-style outputs.                                  |
+| `templates/_partials/status-banner.md`  | `partial.status-banner`  | Lead message-protocol banner: one ask/state tag.     | Use as the first line of a turn-terminal message; see `docs/agent-process/message-protocol.md`.           |
+| `templates/_partials/status-line.md`    | `partial.status-line`    | Deprecated - superseded by `partial.status-banner`.  | Kept for back-compat; do not use in new templates.                                                        |
 | `templates/_partials/context.md`        | `partial.context`        | Context block for task or artifact background.       | Use before main content when the reader needs scope, source material, or prior state.                     |
 | `templates/_partials/assumptions.md`    | `partial.assumptions`    | Explicit assumptions block.                          | Use whenever assumptions affected the result or unresolved inputs were defaulted.                         |
 | `templates/_partials/evidence.md`       | `partial.evidence`       | Evidence block with source, support, and confidence. | Use in findings, QA, PR, research, and review outputs that make verifiable claims.                        |
@@ -109,6 +110,6 @@ existing templates are too broad or are causing avoidable friction.
 
 ## Expansion Rule
 
-Keep the system small and strict. Prefer the current 17 templates, 9 partials,
+Keep the system small and strict. Prefer the current 17 templates, 10 partials,
 3 styles, 2 schemas, and 4 examples until repeated use proves that one of the
 candidate templates needs to become active.

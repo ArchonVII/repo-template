@@ -65,6 +65,16 @@ node <path-to-archon-setup>/bin/onboard.mjs <repo> --audit
    status tracker, or coordination note created or used by the lane must be closed,
    narrowed, or marked superseded before review.
 
+## Message protocol
+
+Turn-terminal messages to the owner (the message that ends a turn or asks for input) open
+with one status tag, then a `For you` lane (the owner's action; omitted for state-only
+messages) and a `My work` lane. The tag vocabulary, the human/agent split, and the
+machine-backed `SAFE TO CLEAR` rule live in
+[`docs/agent-process/message-protocol.md`](docs/agent-process/message-protocol.md). Do not
+claim `SAFE TO CLEAR` with `marker=verified` unless the close-scan marker's HEAD matches the
+pushed HEAD.
+
 ## Vision Drift Duties
 
 - At plan time, read `VISION.md` when present and treat Scope / explicitly-not as owner intent.
