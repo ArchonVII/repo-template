@@ -39,7 +39,8 @@ quality_gate:
 | ID                     | Purpose                                              |
 | ---------------------- | ---------------------------------------------------- |
 | partial.header         | Reusable template header metadata display.           |
-| partial.status-line    | Status, confidence, and updated timestamp.           |
+| partial.status-banner  | Lead message-protocol banner: one ask/state tag for a turn-terminal message. |
+| partial.status-line    | Deprecated - superseded by partial.status-banner.    |
 | partial.context        | Relevant task or artifact context.                   |
 | partial.assumptions    | Explicit assumptions and their effect.               |
 | partial.evidence       | Evidence items with source, support, and confidence. |
