@@ -7,7 +7,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { extractMarkdownLinks, extractWikilinks, matchLink, isPage } from './lib.mjs';
+import { extractMarkdownLinks, extractWikilinks, matchLink, isPage, SCHEMA_VERSION, TYPE_VALUES } from './lib.mjs';
+
+test('SCHEMA_VERSION is a major.minor string', () => {
+  assert.match(SCHEMA_VERSION, /^\d+\.\d+$/);
+});
+
+test('TYPE_VALUES is a non-empty list including the template doc kinds', () => {
+  assert.ok(Array.isArray(TYPE_VALUES) && TYPE_VALUES.length > 0);
+  for (const v of ['register', 'index', 'status', 'adr', 'reference', 'runbook']) {
+    assert.ok(TYPE_VALUES.includes(v), `TYPE_VALUES should include '${v}'`);
+  }
+});
 
 test('extractMarkdownLinks pulls page targets and skips images/external/anchors', () => {
   const text = [
