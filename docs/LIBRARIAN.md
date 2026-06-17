@@ -88,6 +88,19 @@ contradicts: []
 - `wiki:lint` fails a page that is missing `summary` or `status`, or that uses a value
   outside the allowed sets. Missing `confidence`/`updated` are warnings.
 
+### Page `type` (optional)
+
+`type` is an optional routing/filtering axis (schema 1.1) — it lets an agent answer "show me
+all runbooks" or "all ADRs" without opening every page. Recommended values:
+
+> `register`, `index`, `status`, `design`, `adr`, `decision`, `plan`, `guide`, `runbook`,
+> `reference`, `spec`, `policy`
+
+The set is **recommended, not closed**: a producer may use another value and `wiki:lint`
+**warns** (never errors) on anything out-of-set, keeping the schema open the way OKF's `type`
+is. Omitting `type` is always fine. The authoritative list is `TYPE_VALUES` in
+[scripts/wiki/lib.mjs](../scripts/wiki/lib.mjs).
+
 ### Links — both styles are valid
 
 Pages render on GitHub, so **page bodies use standard Markdown links** `[text](other-page.md)`

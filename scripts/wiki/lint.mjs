@@ -12,7 +12,7 @@
 import {
   repoRoot, walkMarkdown, isPage, parseFrontmatter, stripCode,
   extractWikilinks, extractMarkdownLinks,
-  buildResolver, matchLink, STATUS_VALUES, CONFIDENCE_VALUES, parseFlags, toPosix,
+  buildResolver, matchLink, STATUS_VALUES, CONFIDENCE_VALUES, TYPE_VALUES, parseFlags, toPosix,
 } from './lib.mjs';
 import fs from 'node:fs';
 
@@ -44,6 +44,11 @@ for (const page of pages) {
     }
     if (!data.confidence) warnings.push(`${page.rel}: missing 'confidence'`);
     if (!data.updated) warnings.push(`${page.rel}: missing 'updated'`);
+    // `type` is optional (schema 1.1). An out-of-set value is allowed but unusual — warn,
+    // never error, so producer-defined kinds stay valid (see docs/LIBRARIAN.md "Page type").
+    if (data.type && !TYPE_VALUES.includes(data.type)) {
+      warnings.push(`${page.rel}: type '${data.type}' is outside the recommended set (allowed, but unusual)`);
+    }
   }
 
   const bodyNoCode = stripCode(text);

@@ -30,6 +30,14 @@ export const SCHEMA_VERSION = '1.1';
 export const STATUS_VALUES = ['CANON', 'CURRENT', 'APPROVED', 'EXPERIMENTAL', 'PROPOSED', 'DEPRECATED', 'SUPERSEDED'];
 export const CONFIDENCE_VALUES = ['EXTRACTED', 'INFERRED', 'AMBIGUOUS', 'UNVERIFIED'];
 
+// Recommended values for the optional page `type` field — a routing/filtering axis (e.g.
+// "show me all runbooks"). RECOMMENDED, not closed: producers may use other values and
+// consumers tolerate them — wiki:lint WARNS on an out-of-set value, never errors. The set
+// covers the template's own doc kinds (CANON=register, INDEX=index, project-status=status,
+// docs/adr/=adr, docs/plans/=plan, …). Added in schema 1.1. Source: docs/LIBRARIAN.md "Page
+// type (optional)"; modeled on OKF's required `type` key, made optional + soft here.
+export const TYPE_VALUES = ['register', 'index', 'status', 'design', 'adr', 'decision', 'plan', 'guide', 'runbook', 'reference', 'spec', 'policy'];
+
 // The canonical first-reads every agent must be pointed at — source: llms.txt / AGENTS.md.
 export const REQUIRED_FIRST_READS = ['AGENTS.md', 'docs/CANON.md', 'docs/LIBRARIAN.md', 'docs/INDEX.md', 'docs/project-status.md'];
 
