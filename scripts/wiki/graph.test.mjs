@@ -78,3 +78,19 @@ test('renderHtml renders node details via textContent, not innerHTML (no markup 
   // The old unsafe pattern — user data concatenated into an innerHTML assignment — must be gone.
   assert.ok(!/innerHTML\s*=[^\n]*d\.(path|status|type)/.test(html), 'user data must not flow into innerHTML');
 });
+
+test('buildModel never emits an edge whose endpoint is not a node (superseded-by to a non-page)', () => {
+  // A page superseded-by a markdown file that RESOLVES in the vault but is not a wiki page
+  // (e.g. docs/raw/...): the reversed supersedes edge would pass that non-page as source.
+  const res2 = {
+    byRel: new Set([...resolver.byRel, 'docs/raw/note.md', 'docs/raw/note']),
+    byBasename: new Map([...resolver.byBasename, ['note', ['docs/raw/note.md']]]),
+    root: resolver.root,
+  };
+  const ents = [{ rel: 'docs/x.md', data: { status: 'SUPERSEDED', 'superseded-by': ['[[note]]'] }, body: '' }];
+  const { nodes, edges } = buildModel(ents, res2);
+  const ids = new Set(nodes.map((n) => n.id));
+  for (const e of edges) {
+    assert.ok(ids.has(e.source) && ids.has(e.target), `edge endpoint must be a node: ${e.source} -> ${e.target}`);
+  }
+});

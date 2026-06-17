@@ -54,7 +54,10 @@ export function buildModel(entries, resolver) {
   const edges = [];
   const addEdge = (source, target, kind) => {
     if (source === target) return;       // no self-loops
-    if (!pageRels.has(target)) return;   // only edges between pages
+    // Validate BOTH endpoints: the superseded-by fold passes a resolved link as the source,
+    // which can be a resolved-but-non-page markdown file (e.g. docs/raw/...). Without checking
+    // source too, the edge would reference a node that does not exist and break the render.
+    if (!pageRels.has(source) || !pageRels.has(target)) return; // only edges between known pages
     const key = `${source}|${target}|${kind}`;
     if (seen.has(key)) return;
     seen.add(key);
