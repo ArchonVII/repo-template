@@ -280,3 +280,13 @@ missing frontmatter, and one-sided supersession; triage contradictions into audi
   experiment, and proposal into one narrative — that is what the status labels are for.
 - **Ask before you fossilize.** If information is ambiguous, mark it `AMBIGUOUS` or open an
   audit rather than promoting it to `CANON`.
+
+### Reading vs. authoring (robustness)
+
+The wiki **fails closed when written, but reads open.** *Authoring* and *CI* are strict:
+`wiki:lint` and `wiki:doctor` exit non-zero on a broken link, a missing `summary`/`status`, or
+a drifted contract, so defects are fixed at the source rather than propagated. But an agent
+merely *consuming* the wiki to answer a question should be **tolerant** — a broken link, a
+missing optional field, or an unknown `type` must never block a read; degrade gracefully and
+note the gap (open an audit if it matters). This is OKF's robustness rule applied to a
+governed repo: **producers conform, consumers tolerate.**
