@@ -40,11 +40,11 @@ document, what to defer, what is experimental, and what conflicts with existing 
 
 ## The three tiers (unified)
 
-| Tier | Location | Ownership | Rule |
-|------|----------|-----------|------|
-| Sources | `docs/raw/` | human-curated | **Immutable.** The Librarian reads, never rewrites. |
-| Pages | `docs/` (design docs, ADRs, guides, …) | Librarian-maintained | Durable wiki pages with full frontmatter. |
-| Facts | `docs/memory/` | Librarian-maintained (junction) | Crystallized facts. Governed by the memory rules in the user's `CLAUDE.md`; this schema treats memory as the facts tier and does not duplicate those rules. |
+| Tier    | Location                               | Ownership                       | Rule                                                                                                                                                        |
+| ------- | -------------------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sources | `docs/raw/`                            | human-curated                   | **Immutable.** The Librarian reads, never rewrites.                                                                                                         |
+| Pages   | `docs/` (design docs, ADRs, guides, …) | Librarian-maintained            | Durable wiki pages with full frontmatter.                                                                                                                   |
+| Facts   | `docs/memory/`                         | Librarian-maintained (junction) | Crystallized facts. Governed by the memory rules in the user's `CLAUDE.md`; this schema treats memory as the facts tier and does not duplicate those rules. |
 
 Supporting surfaces: `docs/audits/` (human corrections → `archive/` once resolved),
 `docs/log.md` (append-only ops log, gitignored), [docs/CANON.md](CANON.md) (the
@@ -118,7 +118,7 @@ source: "[[okf-review]]"             # a wikilink
 
 If `source` is present and points at a local target, `wiki:lint` resolves it and **warns** on a
 broken target (provenance rot) — never an error. External and memory-tier sources pass as-is,
-and omitting `source` is fine. (A future *major* bump may expect `source` on `EXTRACTED` pages;
+and omitting `source` is fine. (A future _major_ bump may expect `source` on `EXTRACTED` pages;
 it stays optional throughout 1.x to remain backward-compatible — see "Schema versioning".)
 
 ### Links — both styles are valid
@@ -193,19 +193,20 @@ consumer meeting a newer minor should degrade gracefully, not refuse the wiki.)
 
 All operations are shared scripts (`scripts/wiki/*.mjs`, zero-dependency Node) and accept
 `--agent claude|codex|gemini|manual|ci`. Output is identical regardless of caller. (Pass
-positional args after `--`, e.g. `npm run wiki:ingest -- docs/raw/notes.md`.) Four are
+positional args after `--`, e.g. `npm run wiki:ingest -- docs/raw/notes.md`.) Five are
 fully deterministic; three are **orchestrators** that prepare work and hand the semantic
 pass to you (the agent) — a script never fabricates LLM extraction.
 
-| Command | Kind | Contract |
-|---------|------|----------|
-| `wiki:start` | deterministic | Print the required reading order, open audits, the `docs/raw/` queue, and a page-health count. Informational; always exits 0. |
-| `wiki:doctor` | deterministic | The navigation checksum (see below). Non-zero on any failure. |
-| `wiki:lint` | deterministic | Frontmatter validity, broken Markdown/wikilinks, missing summaries, one-sided supersession, orphans (warn). Non-zero on errors. |
-| `wiki:compact-save` | deterministic | Append a handoff marker to `docs/log.md` and print a crystallization reminder before context compression. Fail-open. |
-| `wiki:ingest <path>` | orchestrator | Validate a `docs/raw/` source, run a secret/PII scan, print the checklist and likely-impacted pages. You then extract durable claims per this schema. |
-| `wiki:query "<q>"` | orchestrator | Scan CANON + pages for the query terms and print candidate pages. You synthesize a cited answer; good answers are filed back as a new page. |
-| `wiki:crystallize` | orchestrator | List the branch's work-chain (recent commits) and print the checklist. You write durable facts to `docs/memory/` and unresolved questions to `docs/audits/`. Fail-open. |
+| Command              | Kind          | Contract                                                                                                                                                                                                                  |
+| -------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `wiki:start`         | deterministic | Print the required reading order, open audits, the `docs/raw/` queue, and a page-health count. Informational; always exits 0.                                                                                             |
+| `wiki:doctor`        | deterministic | The navigation checksum (see below). Non-zero on any failure.                                                                                                                                                             |
+| `wiki:lint`          | deterministic | Frontmatter validity, broken Markdown/wikilinks, missing summaries, one-sided supersession, orphans (warn). Non-zero on errors.                                                                                           |
+| `wiki:compact-save`  | deterministic | Append a handoff marker to `docs/log.md` and print a crystallization reminder before context compression. Fail-open.                                                                                                      |
+| `wiki:graph`         | deterministic | Render the pages tier as an interactive graph — nodes by `status`, edges colored by typed relation, every `contradicts` pair flagged — to a self-contained HTML file in the gitignored `.html-artifacts/`. Informational. |
+| `wiki:ingest <path>` | orchestrator  | Validate a `docs/raw/` source, run a secret/PII scan, print the checklist and likely-impacted pages. You then extract durable claims per this schema.                                                                     |
+| `wiki:query "<q>"`   | orchestrator  | Scan CANON + pages for the query terms and print candidate pages. You synthesize a cited answer; good answers are filed back as a new page.                                                                               |
+| `wiki:crystallize`   | orchestrator  | List the branch's work-chain (recent commits) and print the checklist. You write durable facts to `docs/memory/` and unresolved questions to `docs/audits/`. Fail-open.                                                   |
 
 ### The navigation checksum (`wiki:doctor`)
 
@@ -221,7 +222,7 @@ pass to you (the agent) — a script never fabricates LLM extraction.
   calls a `wiki:*` command that does not exist.
 
 > The `llms.txt` check is **presence-only** — it verifies the required first-reads are
-> *listed*, not that `llms.txt` (or `README.md`) content is *current* against canon, and it
+> _listed_, not that `llms.txt` (or `README.md`) content is _current_ against canon, and it
 > does not inspect `README.md` at all. Keeping the navigation front doors fresh is therefore
 > a workflow step (see "Re-sync the navigation front doors" below), not something this
 > checksum enforces.
@@ -283,10 +284,10 @@ missing frontmatter, and one-sided supersession; triage contradictions into audi
 
 ### Reading vs. authoring (robustness)
 
-The wiki **fails closed when written, but reads open.** *Authoring* and *CI* are strict:
+The wiki **fails closed when written, but reads open.** _Authoring_ and _CI_ are strict:
 `wiki:lint` and `wiki:doctor` exit non-zero on a broken link, a missing `summary`/`status`, or
 a drifted contract, so defects are fixed at the source rather than propagated. But an agent
-merely *consuming* the wiki to answer a question should be **tolerant** — a broken link, a
+merely _consuming_ the wiki to answer a question should be **tolerant** — a broken link, a
 missing optional field, or an unknown `type` must never block a read; degrade gracefully and
 note the gap (open an audit if it matters). This is OKF's robustness rule applied to a
 governed repo: **producers conform, consumers tolerate.**

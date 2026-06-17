@@ -21,6 +21,7 @@
     "wiki:lint": "node scripts/wiki/lint.mjs",
     "wiki:crystallize": "node scripts/wiki/crystallize.mjs",
     "wiki:compact-save": "node scripts/wiki/compact-save.mjs",
-    "wiki:doctor": "node scripts/wiki/doctor.mjs"
+    "wiki:doctor": "node scripts/wiki/doctor.mjs",
+    "wiki:graph": "node scripts/wiki/graph.mjs"
   }
 }

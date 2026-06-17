@@ -200,7 +200,8 @@ The `docs/` tree is an agent-maintained wiki. `AGENTS.md`, `llms.txt`, `docs/CAN
 - `docs/raw/` is immutable intake; `docs/` holds durable pages; `docs/memory/` is a
   machine-local junction; corrections go in `docs/audits/`.
 - Run wiki operations through `npm run wiki:start`, `wiki:ingest`, `wiki:query`,
-  `wiki:lint`, `wiki:crystallize`, `wiki:compact-save`, and `wiki:doctor`.
+  `wiki:lint`, `wiki:crystallize`, `wiki:compact-save`, `wiki:doctor`, and `wiki:graph`
+  (the last renders the wiki as a graph to `.html-artifacts/wiki-graph.html`).
 - When `docs/CANON.md`, `docs/project-status.md`, or release/deploy-status facts change,
   resync both `llms.txt` and relevant `README.md` status/overview prose in the same PR.
 
