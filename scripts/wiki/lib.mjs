@@ -17,6 +17,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
+// The Librarian schema version this tooling implements. `<major>.<minor>`: a minor bump is a
+// backward-compatible addition (new optional key, new recommended vocabulary); a major bump is
+// a breaking change (renaming/removing a required key, changing required semantics). It is an
+// informational drift signal — many repos inherit this schema via a pinned snapshot and fall
+// behind — surfaced by wiki:doctor; it is never a gate. Source: docs/LIBRARIAN.md "Schema
+// versioning" (this repo); modeled on OKF's `okf_version`
+// (https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md).
+export const SCHEMA_VERSION = '1.1';
+
 // Allowed label vocabularies — source: docs/LIBRARIAN.md "Page frontmatter".
 export const STATUS_VALUES = ['CANON', 'CURRENT', 'APPROVED', 'EXPERIMENTAL', 'PROPOSED', 'DEPRECATED', 'SUPERSEDED'];
 export const CONFIDENCE_VALUES = ['EXTRACTED', 'INFERRED', 'AMBIGUOUS', 'UNVERIFIED'];

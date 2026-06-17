@@ -128,6 +128,34 @@ page; the link trail is the version history. `wiki:lint` flags one-sided superse
 graph. Use `contradicts` to make a known conflict explicit rather than letting two pages
 drift apart silently — that is what `wiki:lint` and the audit loop resolve.
 
+## Schema versioning
+
+This schema carries a version — `SCHEMA_VERSION` in
+[scripts/wiki/lib.mjs](../scripts/wiki/lib.mjs), printed by `wiki:doctor`. It is
+`<major>.<minor>`:
+
+- **Minor** — a backward-compatible addition: a new **optional** key, a new recommended
+  vocabulary value, a new conventional section. A repo on an older minor stays valid; a minor
+  bump never makes `wiki:lint` start failing.
+- **Major** — a breaking change: renaming or removing a required key, or changing required
+  semantics. These need a coordinated migration.
+
+**Why version a schema?** This wiki ships in `repo-template` and is inherited by every repo
+scaffolded from it — usually through a **pinned snapshot that lags the source**. The version is
+the drift signal: compare a repo's `wiki:doctor` version against the template to see how far
+behind its Librarian schema has fallen. (Same idea as OKF's `okf_version`; and as in OKF, a
+consumer meeting a newer minor should degrade gracefully, not refuse the wiki.)
+
+### Changelog
+
+- **1.1** (2026-06-17) — Introduced schema versioning, and added two **optional** page keys:
+  `type` (a routing/filtering axis — see "Page type") and `source` (a provenance pointer — see
+  "Source provenance"). Fully backward-compatible: both keys are optional, and out-of-set or
+  broken values **warn**, never error.
+- **1.0** — The original Librarian schema (required frontmatter, the status/confidence
+  vocabularies, typed relations, and the operations documented in this file), shipped to the
+  template in #95.
+
 ## Operations (`npm run wiki:*`)
 
 All operations are shared scripts (`scripts/wiki/*.mjs`, zero-dependency Node) and accept

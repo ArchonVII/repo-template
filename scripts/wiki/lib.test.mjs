@@ -7,7 +7,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { extractMarkdownLinks, extractWikilinks, matchLink, isPage } from './lib.mjs';
+import { extractMarkdownLinks, extractWikilinks, matchLink, isPage, SCHEMA_VERSION } from './lib.mjs';
+
+test('SCHEMA_VERSION is a major.minor string', () => {
+  assert.match(SCHEMA_VERSION, /^\d+\.\d+$/);
+});
 
 test('extractMarkdownLinks pulls page targets and skips images/external/anchors', () => {
   const text = [
