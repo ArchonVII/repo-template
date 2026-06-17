@@ -132,7 +132,7 @@ drift apart silently — that is what `wiki:lint` and the audit loop resolve.
 
 All operations are shared scripts (`scripts/wiki/*.mjs`, zero-dependency Node) and accept
 `--agent claude|codex|gemini|manual|ci`. Output is identical regardless of caller. (Pass
-positional args after `--`, e.g. `npm run wiki:ingest -- docs/raw/notes.md`.) Four are
+positional args after `--`, e.g. `npm run wiki:ingest -- docs/raw/notes.md`.) Five are
 fully deterministic; three are **orchestrators** that prepare work and hand the semantic
 pass to you (the agent) — a script never fabricates LLM extraction.
 
@@ -142,6 +142,7 @@ pass to you (the agent) — a script never fabricates LLM extraction.
 | `wiki:doctor` | deterministic | The navigation checksum (see below). Non-zero on any failure. |
 | `wiki:lint` | deterministic | Frontmatter validity, broken Markdown/wikilinks, missing summaries, one-sided supersession, orphans (warn). Non-zero on errors. |
 | `wiki:compact-save` | deterministic | Append a handoff marker to `docs/log.md` and print a crystallization reminder before context compression. Fail-open. |
+| `wiki:graph` | deterministic | Render the pages tier as an interactive graph — nodes by `status`, edges colored by typed relation, every `contradicts` pair flagged — to a self-contained HTML file in the gitignored `.html-artifacts/`. Informational. |
 | `wiki:ingest <path>` | orchestrator | Validate a `docs/raw/` source, run a secret/PII scan, print the checklist and likely-impacted pages. You then extract durable claims per this schema. |
 | `wiki:query "<q>"` | orchestrator | Scan CANON + pages for the query terms and print candidate pages. You synthesize a cited answer; good answers are filed back as a new page. |
 | `wiki:crystallize` | orchestrator | List the branch's work-chain (recent commits) and print the checklist. You write durable facts to `docs/memory/` and unresolved questions to `docs/audits/`. Fail-open. |

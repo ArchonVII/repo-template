@@ -25,7 +25,7 @@ export const CONFIDENCE_VALUES = ['EXTRACTED', 'INFERRED', 'AMBIGUOUS', 'UNVERIF
 export const REQUIRED_FIRST_READS = ['AGENTS.md', 'docs/CANON.md', 'docs/LIBRARIAN.md', 'docs/INDEX.md', 'docs/project-status.md'];
 
 // The shared operation surface — source: docs/LIBRARIAN.md "Operations".
-export const WIKI_COMMANDS = ['start', 'ingest', 'query', 'lint', 'crystallize', 'compact-save', 'doctor'];
+export const WIKI_COMMANDS = ['start', 'ingest', 'query', 'lint', 'crystallize', 'compact-save', 'doctor', 'graph'];
 
 // Directories never walked for wiki content (build / vcs / editor state).
 const DIR_EXCLUDES = new Set([
