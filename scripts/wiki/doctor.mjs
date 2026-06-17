@@ -12,7 +12,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { repoRoot, readIfExists, REQUIRED_FIRST_READS, WIKI_COMMANDS, parseFlags } from './lib.mjs';
+import { repoRoot, readIfExists, REQUIRED_FIRST_READS, WIKI_COMMANDS, SCHEMA_VERSION, parseFlags } from './lib.mjs';
 
 const root = repoRoot();
 parseFlags(process.argv.slice(2)); // accept --agent etc.; doctor output is caller-independent
@@ -76,6 +76,7 @@ for (const rel of hookConfigs) {
 
 // --- Report ---
 console.log('wiki:doctor — navigation checksum');
+console.log(`  Librarian schema v${SCHEMA_VERSION}`); // informational drift signal, not a gate
 console.log(`  passed: ${ok.length}`);
 if (errors.length) {
   console.error(`  FAILED: ${errors.length}`);

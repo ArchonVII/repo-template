@@ -88,6 +88,39 @@ contradicts: []
 - `wiki:lint` fails a page that is missing `summary` or `status`, or that uses a value
   outside the allowed sets. Missing `confidence`/`updated` are warnings.
 
+### Page `type` (optional)
+
+`type` is an optional routing/filtering axis (schema 1.1) — it lets an agent answer "show me
+all runbooks" or "all ADRs" without opening every page. Recommended values:
+
+> `register`, `index`, `status`, `design`, `adr`, `decision`, `plan`, `guide`, `runbook`,
+> `reference`, `spec`, `policy`
+
+The set is **recommended, not closed**: a producer may use another value and `wiki:lint`
+**warns** (never errors) on anything out-of-set, keeping the schema open the way OKF's `type`
+is. Omitting `type` is always fine. The authoritative list is `TYPE_VALUES` in
+[scripts/wiki/lib.mjs](../scripts/wiki/lib.mjs).
+
+### Source provenance (optional)
+
+`source` (schema 1.1) points at where a page's claims came from — a `docs/raw/` file, a commit,
+or an external URL. It pairs with `confidence`: a page marked `EXTRACTED` can name the exact
+source an auditor can re-check. Write it as a bare path, a URL, or a quoted wikilink — **not** a
+Markdown link:
+
+```yaml
+source: docs/raw/okf-review.md      # a repo path
+# or
+source: "https://example.com/spec"  # an external URL
+# or
+source: "[[okf-review]]"             # a wikilink
+```
+
+If `source` is present and points at a local target, `wiki:lint` resolves it and **warns** on a
+broken target (provenance rot) — never an error. External and memory-tier sources pass as-is,
+and omitting `source` is fine. (A future *major* bump may expect `source` on `EXTRACTED` pages;
+it stays optional throughout 1.x to remain backward-compatible — see "Schema versioning".)
+
 ### Links — both styles are valid
 
 Pages render on GitHub, so **page bodies use standard Markdown links** `[text](other-page.md)`
@@ -127,6 +160,34 @@ page; the link trail is the version history. `wiki:lint` flags one-sided superse
 `relates / depends-on / contradicts` express a typed edge between pages on top of the flat
 graph. Use `contradicts` to make a known conflict explicit rather than letting two pages
 drift apart silently — that is what `wiki:lint` and the audit loop resolve.
+
+## Schema versioning
+
+This schema carries a version — `SCHEMA_VERSION` in
+[scripts/wiki/lib.mjs](../scripts/wiki/lib.mjs), printed by `wiki:doctor`. It is
+`<major>.<minor>`:
+
+- **Minor** — a backward-compatible addition: a new **optional** key, a new recommended
+  vocabulary value, a new conventional section. A repo on an older minor stays valid; a minor
+  bump never makes `wiki:lint` start failing.
+- **Major** — a breaking change: renaming or removing a required key, or changing required
+  semantics. These need a coordinated migration.
+
+**Why version a schema?** This wiki ships in `repo-template` and is inherited by every repo
+scaffolded from it — usually through a **pinned snapshot that lags the source**. The version is
+the drift signal: compare a repo's `wiki:doctor` version against the template to see how far
+behind its Librarian schema has fallen. (Same idea as OKF's `okf_version`; and as in OKF, a
+consumer meeting a newer minor should degrade gracefully, not refuse the wiki.)
+
+### Changelog
+
+- **1.1** (2026-06-17) — Introduced schema versioning, and added two **optional** page keys:
+  `type` (a routing/filtering axis — see "Page type") and `source` (a provenance pointer — see
+  "Source provenance"). Fully backward-compatible: both keys are optional, and out-of-set or
+  broken values **warn**, never error.
+- **1.0** — The original Librarian schema (required frontmatter, the status/confidence
+  vocabularies, typed relations, and the operations documented in this file), shipped to the
+  template in #95.
 
 ## Operations (`npm run wiki:*`)
 
@@ -219,3 +280,13 @@ missing frontmatter, and one-sided supersession; triage contradictions into audi
   experiment, and proposal into one narrative — that is what the status labels are for.
 - **Ask before you fossilize.** If information is ambiguous, mark it `AMBIGUOUS` or open an
   audit rather than promoting it to `CANON`.
+
+### Reading vs. authoring (robustness)
+
+The wiki **fails closed when written, but reads open.** *Authoring* and *CI* are strict:
+`wiki:lint` and `wiki:doctor` exit non-zero on a broken link, a missing `summary`/`status`, or
+a drifted contract, so defects are fixed at the source rather than propagated. But an agent
+merely *consuming* the wiki to answer a question should be **tolerant** — a broken link, a
+missing optional field, or an unknown `type` must never block a read; degrade gracefully and
+note the gap (open an audit if it matters). This is OKF's robustness rule applied to a
+governed repo: **producers conform, consumers tolerate.**
