@@ -49,6 +49,15 @@ for (const page of pages) {
     if (data.type && !TYPE_VALUES.includes(data.type)) {
       warnings.push(`${page.rel}: type '${data.type}' is outside the recommended set (allowed, but unusual)`);
     }
+    // `source` (optional, schema 1.1): a provenance pointer (path / URL / wikilink). If present
+    // and local, it must resolve; external (http) and memory-tier sources pass as-is. A broken
+    // local source is provenance rot — warn, never error (docs/LIBRARIAN.md "Source provenance").
+    if (data.source) {
+      const tgt = String(data.source).replace(/\[\[|\]\]/g, '').split('|')[0].split('#')[0].trim();
+      if (tgt && matchLink(tgt, page.rel, resolver) === null) {
+        warnings.push(`${page.rel}: 'source' does not resolve: ${tgt}`);
+      }
+    }
   }
 
   const bodyNoCode = stripCode(text);

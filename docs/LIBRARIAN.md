@@ -101,6 +101,26 @@ The set is **recommended, not closed**: a producer may use another value and `wi
 is. Omitting `type` is always fine. The authoritative list is `TYPE_VALUES` in
 [scripts/wiki/lib.mjs](../scripts/wiki/lib.mjs).
 
+### Source provenance (optional)
+
+`source` (schema 1.1) points at where a page's claims came from — a `docs/raw/` file, a commit,
+or an external URL. It pairs with `confidence`: a page marked `EXTRACTED` can name the exact
+source an auditor can re-check. Write it as a bare path, a URL, or a quoted wikilink — **not** a
+Markdown link:
+
+```yaml
+source: docs/raw/okf-review.md      # a repo path
+# or
+source: "https://example.com/spec"  # an external URL
+# or
+source: "[[okf-review]]"             # a wikilink
+```
+
+If `source` is present and points at a local target, `wiki:lint` resolves it and **warns** on a
+broken target (provenance rot) — never an error. External and memory-tier sources pass as-is,
+and omitting `source` is fine. (A future *major* bump may expect `source` on `EXTRACTED` pages;
+it stays optional throughout 1.x to remain backward-compatible — see "Schema versioning".)
+
 ### Links — both styles are valid
 
 Pages render on GitHub, so **page bodies use standard Markdown links** `[text](other-page.md)`
