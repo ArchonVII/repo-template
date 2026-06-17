@@ -193,10 +193,24 @@ export function renderHtml(model, meta) {
 
   cy.on('tap', 'node', function (evt) {
     var d = evt.target.data();
-    document.getElementById('info').innerHTML =
-      '<code>' + d.path + '</code><br>status: <b>' + d.status + '</b>' +
-      (d.type ? '<br>type: <b>' + d.type + '</b>' : '') +
-      '<br>degree: ' + evt.target.degree();
+    var info = document.getElementById('info');
+    info.textContent = '';
+    // Build the panel from text nodes, never innerHTML: a page-supplied path or type value
+    // (type is warn-only, so it can be any string) must not inject markup into this artifact.
+    var code = document.createElement('code');
+    code.textContent = d.path;
+    info.appendChild(code);
+    var line = function (label, value) {
+      info.appendChild(document.createElement('br'));
+      info.appendChild(document.createTextNode(label));
+      var b = document.createElement('b');
+      b.textContent = value;
+      info.appendChild(b);
+    };
+    line('status: ', d.status);
+    if (d.type) line('type: ', d.type);
+    info.appendChild(document.createElement('br'));
+    info.appendChild(document.createTextNode('degree: ' + evt.target.degree()));
   });
 </script>
 </body>

@@ -70,3 +70,11 @@ test('renderHtml embeds the payload and the renderer, with no unfired interpolat
   assert.ok(html.includes('docs/a.md'));
   assert.ok(!html.includes('${'), 'no template literal should leak into the output');
 });
+
+test('renderHtml renders node details via textContent, not innerHTML (no markup injection)', () => {
+  const html = renderHtml(buildModel(entries, resolver), { generatedAt: '2026-06-17', agent: 'manual' });
+  // Page-supplied path/status/type (type is warn-only, so arbitrary) must go through text nodes.
+  assert.ok(html.includes('code.textContent = d.path'), 'path must be set via textContent');
+  // The old unsafe pattern — user data concatenated into an innerHTML assignment — must be gone.
+  assert.ok(!/innerHTML\s*=[^\n]*d\.(path|status|type)/.test(html), 'user data must not flow into innerHTML');
+});
