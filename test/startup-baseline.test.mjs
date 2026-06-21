@@ -18,6 +18,7 @@ test('startup baseline contract names canonical startup files and legacy plan pa
     '.agent/coordination/README.md',
     '.github/PULL_REQUEST_TEMPLATE.md',
     '.github/workflows/anomaly-triage.yml',
+    '.github/workflows/repo-update-log-fragment.yml',
     'docs/repo-update-log/README.md',
     'package.json',
     'scripts/agent/lib.mjs',
@@ -149,6 +150,12 @@ test('anomaly triage contract uses the canonical ledger path and installed calle
   const workflow = await readFile(join(ROOT, '.github', 'workflows', 'anomaly-triage.yml'), 'utf8');
   assert.match(workflow, /uses: ArchonVII\/github-workflows\/\.github\/workflows\/anomaly-triage\.yml@v1/);
   assert.match(workflow, /\.archon\/anomalies-thispr\.md/);
+});
+
+test('repo update log fragment guard caller is installed', async () => {
+  const workflow = await readFile(join(ROOT, '.github', 'workflows', 'repo-update-log-fragment.yml'), 'utf8');
+  assert.match(workflow, /uses: ArchonVII\/github-workflows\/\.github\/workflows\/repo-update-log-fragment\.yml@v1/);
+  assert.match(workflow, /workflow-library-ref: v1/);
 });
 
 test('gitignore keeps archon local state ignored while allowing the anomaly ledger', async () => {

@@ -9,6 +9,7 @@
     ".agent/coordination/README.md",
     ".github/PULL_REQUEST_TEMPLATE.md",
     ".github/workflows/anomaly-triage.yml",
+    ".github/workflows/repo-update-log-fragment.yml",
     "docs/repo-update-log/README.md",
     "package.json",
     "scripts/agent/lib.mjs",
