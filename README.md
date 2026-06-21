@@ -52,11 +52,12 @@ and the Owner Maintenance Lane contract in [`AGENTS.md`](AGENTS.md)):
   and commits scoped entirely to `docs/scratch/**`; `docs(owner):` /
   `chore(owner):` messages are exempt only when every staged path is
   add-only Owner Maintenance Lane content.
-- **`pre-commit`** — rejects direct commits to the default branch.
-  Exempt during in-progress rebase / merge / cherry-pick. Also allows
-  Owner Maintenance Lane commits when every staged path is add-only and
-  safe (`docs/**`, image files, or `.changelog/**`; explicit unsafe paths
-  such as `docs/process/**` and `docs/architecture/**` still require PRs).
+- **`pre-commit`** — rejects commits where a staged path still has unstaged
+  worktree changes, then rejects direct commits to the default branch. Exempt
+  during in-progress rebase / merge / cherry-pick. Also allows Owner
+  Maintenance Lane commits when every staged path is add-only and safe
+  (`docs/**`, image files, or `.changelog/**`; explicit unsafe paths such as
+  `docs/process/**` and `docs/architecture/**` still require PRs).
 
 Install after cloning:
 
@@ -72,6 +73,9 @@ Overrides (each leaves an audit trail via the env-var name itself):
 ```bash
 # Commit on main anyway (logged to .agent/bypass.log):
 ALLOW_MAIN_COMMIT=1 git commit ...
+
+# Commit an intentional partial file snapshot (logged to .agent/bypass.log):
+ALLOW_PARTIAL_COMMIT=1 git commit ...
 
 # Skip the issue-ref requirement:
 ALLOW_NO_ISSUE_REF=1 git commit ...
