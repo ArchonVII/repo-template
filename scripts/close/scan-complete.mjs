@@ -11,6 +11,7 @@ import {
   buildCloseScanMarker,
   classifyCloseScanScope,
   evaluateChangelogDecision,
+  evaluateRepoUpdateLogDecision,
   extractChangelogFragment,
   isSubstantiveDecision,
   listHookShellFiles,
@@ -232,6 +233,16 @@ function runLocalChecks({ root, pr, files, scope, changelogDecision }) {
     name: 'pr-contract',
     ok: contract.ok,
     summary: formatPrContractResult(contract),
+  });
+
+  const repoUpdateLog = evaluateRepoUpdateLogDecision({
+    files,
+    body: pr.body,
+  });
+  localChecks.push({
+    name: 'repo-update-log',
+    ok: repoUpdateLog.ok,
+    summary: repoUpdateLog.ok ? 'Repo update log decision accepted.' : repoUpdateLog.failures.join(' '),
   });
 
   const changelog = evaluateChangelogDecision({

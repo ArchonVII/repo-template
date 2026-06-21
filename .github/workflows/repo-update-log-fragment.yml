@@ -1,0 +1,20 @@
+# Caller for the reusable repo-update-log-fragment guard in
+# ArchonVII/github-workflows. Repos that use `docs/repo-update-log/`
+# fragments should keep this as a non-required leaf workflow; the stable
+# branch-protection surface remains `repo-required-gate / decision`.
+
+name: Repo Update Log Fragment
+
+on:
+  pull_request:
+    types: [opened, synchronize, edited, reopened, ready_for_review]
+
+permissions:
+  pull-requests: read
+  contents: read
+
+jobs:
+  check:
+    uses: ArchonVII/github-workflows/.github/workflows/repo-update-log-fragment.yml@v1
+    with:
+      workflow-library-ref: v1

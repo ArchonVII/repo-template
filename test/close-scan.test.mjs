@@ -8,6 +8,7 @@ import {
   classifyCloseScanScope,
   evaluateChangelogDecision,
   evaluateCloseScanMarker,
+  evaluateRepoUpdateLogDecision,
   evaluateRequiredChecks,
 } from '../scripts/close/lib.mjs';
 import {
@@ -31,6 +32,7 @@ test('classifyCloseScanScope requires local parity checks for code and workflow 
   assert.equal(result.requiresChangelog, true);
   assert.deepEqual(result.requiredChecks.map((check) => check.name), [
     'pr-contract',
+    'repo-update-log',
     'changelog',
     'node-test',
     'actionlint',
@@ -39,7 +41,7 @@ test('classifyCloseScanScope requires local parity checks for code and workflow 
   ]);
 });
 
-test('classifyCloseScanScope treats docs-only changes as PR contract only', () => {
+test('classifyCloseScanScope treats docs-only changes as PR contract plus repo-update-log check', () => {
   const result = classifyCloseScanScope({
     files: ['docs/plans/README.md', '.changelog/unreleased/28-close-scan-local-guard.md'],
     labels: [],
@@ -48,7 +50,61 @@ test('classifyCloseScanScope treats docs-only changes as PR contract only', () =
 
   assert.equal(result.docsOnly, true);
   assert.equal(result.requiresChangelog, false);
-  assert.deepEqual(result.requiredChecks.map((check) => check.name), ['pr-contract']);
+  assert.deepEqual(result.requiredChecks.map((check) => check.name), ['pr-contract', 'repo-update-log']);
+});
+
+test('evaluateRepoUpdateLogDecision requires fragments for code changes', () => {
+  const result = evaluateRepoUpdateLogDecision({
+    files: ['scripts/close/lib.mjs'],
+    body: '## Docs / Changelog\n\nChangelog fragment added.',
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.failures[0], /repo-update-log/i);
+
+  assert.equal(evaluateRepoUpdateLogDecision({
+    files: [
+      'scripts/close/lib.mjs',
+      'docs/repo-update-log/2026-06-20-111-close-scan.md',
+    ],
+    body: '## Docs / Changelog\n\nRepo update log fragment added.',
+  }).ok, true);
+});
+
+test('evaluateRepoUpdateLogDecision permits ledger-only backfills without a second fragment', () => {
+  const result = evaluateRepoUpdateLogDecision({
+    files: [
+      'docs/repo-update-log/2026-06-20-244-coi-extraction.md',
+      'docs/repo-update-log/2026-06-20-245-field-extraction.md',
+    ],
+    body: 'Backfill pointer-only operational ledger fragments.',
+  });
+
+  assert.equal(result.ok, true);
+});
+
+test('evaluateRepoUpdateLogDecision requires a body note for unprotected doc-only skips', () => {
+  assert.equal(evaluateRepoUpdateLogDecision({
+    files: ['docs/plans/operator-copy.md'],
+    body: 'Repo-update-log not required: doc-only typo fix.',
+  }).ok, true);
+
+  const missing = evaluateRepoUpdateLogDecision({
+    files: ['docs/plans/operator-copy.md'],
+    body: 'Small wording cleanup.',
+  });
+  assert.equal(missing.ok, false);
+  assert.match(missing.failures[0], /doc-only/i);
+});
+
+test('evaluateRepoUpdateLogDecision still requires fragments for protected docs', () => {
+  const missing = evaluateRepoUpdateLogDecision({
+    files: ['AGENTS.md'],
+    body: 'Repo-update-log not required: doc-only typo fix.',
+  });
+
+  assert.equal(missing.ok, false);
+  assert.match(missing.failures[0], /repo-update-log/i);
 });
 
 test('evaluateChangelogDecision requires an explicit fragment or no-changelog label for non-doc changes', () => {

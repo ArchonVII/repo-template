@@ -7,7 +7,31 @@ export const DEFAULT_MARKER_PATH = '.agent/close-scan/complete.json';
 const DOC_EXTENSIONS_RE = /\.(md|txt|png|jpg|jpeg|gif|svg|webp|bmp|ico|avif)$/i;
 const DOC_PREFIXES = ['.changelog/'];
 const CHANGELOG_FRAGMENT_RE = /\.changelog\/unreleased\/[^/\s]+\.md\b/i;
+const REPO_UPDATE_LOG_FRAGMENT_RE = /^docs\/repo-update-log\/(?!README\.md$)[^/]+\.md$/i;
 const PLACEHOLDER_RE = /\b(TODO|TBD|FIXME|PLACEHOLDER|NOT YET|NONE YET|N\/A)\b/i;
+const DOC_ONLY_REPO_LOG_SKIP_RE = /\b(repo[- ]?update[- ]?log|update[- ]?log|ledger)\b[\s\S]{0,160}\b(not required|not needed|skipped|skip|omitted|doc[- ]only typo)\b|\bdoc[- ]only typo\b[\s\S]{0,160}\b(repo[- ]?update[- ]?log|update[- ]?log|ledger)\b/i;
+const PROTECTED_REPO_LOG_PATHS = [
+  '.agent/',
+  '.github/',
+  '.githooks/',
+  'AGENTS.md',
+  'CLAUDE.md',
+  'GEMINI.md',
+  'ARCHITECTURE.md',
+  'CHANGELOG.md',
+  'DESIGN.md',
+  'README.md',
+  'TODO.md',
+  'VISION.md',
+  'llms.txt',
+  'docs/CANON.md',
+  'docs/INDEX.md',
+  'docs/LIBRARIAN.md',
+  'docs/project-status.md',
+  'docs/repo-update-log/README.md',
+  'docs/agent-process/',
+  'docs/decisions/',
+];
 const DEPENDENCY_FILES = new Set([
   'package.json',
   'package-lock.json',
@@ -36,6 +60,10 @@ export function classifyCloseScanScope({ files = [], labels = [], stack = 'minim
   const requiresChangelog = !docsOnly;
   const requiredChecks = [{ name: 'pr-contract', reason: 'PR metadata contract' }];
 
+  requiredChecks.push({
+    name: 'repo-update-log',
+    reason: 'Applicable PRs must add a docs/repo-update-log fragment or record an allowed doc-only skip',
+  });
   if (requiresChangelog) {
     requiredChecks.push({ name: 'changelog', reason: 'Non-doc changes must record a changelog decision' });
   }
@@ -93,6 +121,41 @@ export function evaluateChangelogDecision({ requiresChangelog, labels = [], chan
   return {
     ok: false,
     failures: ['Changelog decision must name a `.changelog/unreleased/*.md` fragment or cite the `no-changelog` label.'],
+  };
+}
+
+export function evaluateRepoUpdateLogDecision({ files = [], body = '' } = {}) {
+  const normalizedFiles = files.map(normalizePath).filter(Boolean);
+  const ledgerFragments = normalizedFiles.filter(isRepoUpdateLogFragment);
+  const ledgerOnly = normalizedFiles.length > 0 && normalizedFiles.every(isRepoUpdateLogFragment);
+  const docsOnly = normalizedFiles.length > 0 && normalizedFiles.every(isDocOnlyFile);
+  const protectedFiles = normalizedFiles.filter(isRepoUpdateLogProtectedPath);
+
+  if (normalizedFiles.length === 0) {
+    return { ok: false, failures: ['No PR files were available to evaluate for the repo update log.'] };
+  }
+
+  if (ledgerOnly) {
+    return { ok: true, failures: [] };
+  }
+
+  if (ledgerFragments.length > 0) {
+    return { ok: true, failures: [] };
+  }
+
+  if (docsOnly && protectedFiles.length === 0) {
+    if (DOC_ONLY_REPO_LOG_SKIP_RE.test(String(body || ''))) {
+      return { ok: true, failures: [] };
+    }
+    return {
+      ok: false,
+      failures: ['Doc-only PRs without a repo update log fragment must state why the fragment is not required in the PR body.'],
+    };
+  }
+
+  return {
+    ok: false,
+    failures: ['This PR requires an added `docs/repo-update-log/*.md` repo update log fragment.'],
   };
 }
 
@@ -272,6 +335,17 @@ function isPolicyPath(file) {
     || file === 'GEMINI.md'
     || file.startsWith('.agent/')
     || file.startsWith('.github/');
+}
+
+function isRepoUpdateLogFragment(file) {
+  return REPO_UPDATE_LOG_FRAGMENT_RE.test(normalizePath(file));
+}
+
+function isRepoUpdateLogProtectedPath(file) {
+  const normalized = normalizePath(file);
+  return PROTECTED_REPO_LOG_PATHS.some((entry) => (
+    entry.endsWith('/') ? normalized.startsWith(entry) : normalized === entry
+  ));
 }
 
 function isCodePath(file) {
