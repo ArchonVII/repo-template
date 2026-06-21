@@ -2,14 +2,17 @@
 #
 # pre-commit — Repo-template baseline (F18, ArchonVII/repo-template#16).
 #
-# Single purpose: block direct commits to the default branch, except for the
-# narrow Owner Maintenance Lane.
+# Single purpose: keep commits reviewable:
+#   - block commits where a staged path also has unstaged worktree changes;
+#   - block direct commits to the default branch, except for the narrow Owner
+#     Maintenance Lane.
 #
 # This hook gates on the *branch*, not on individual commands. The branch
 # check is unambiguous and has no echo/find/printf bypass.
 #
 # Bypass (logged to .agent/bypass.log so it leaves an audit trail):
 #
+#   ALLOW_PARTIAL_COMMIT=1 git commit ...
 #   ALLOW_MAIN_COMMIT=1 git commit ...
 #
 # Rebase / merge / cherry-pick states are exempt — we don't want to
@@ -27,6 +30,44 @@ source "${hook_dir}/scripts/owner-maintenance.sh"
 # shellcheck source=.githooks/scripts/checkout-role.sh
 source "${hook_dir}/scripts/checkout-role.sh"
 
+log_pre_commit_bypass() {
+    local kind="$1"
+    local detail="${2:-}"
+    local repo_root
+    repo_root="$(git rev-parse --show-toplevel)"
+    local agent_dir="${repo_root}/.agent"
+    mkdir -p "${agent_dir}"
+
+    # Best-effort forensic metadata — none of these are fatal if missing.
+    local ts who branch_name head_sha diff_stat
+    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    who="$(git config user.email 2>/dev/null || echo unknown)"
+    branch_name="$(git symbolic-ref --short -q HEAD || echo HEAD)"
+    head_sha="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    diff_stat="$(git diff --cached --shortstat 2>/dev/null || echo '(no stat)')"
+
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "${ts}" "${kind}" "${who}" "${branch_name}" "${head_sha}" "${diff_stat}" "${detail}" \
+        >> "${agent_dir}/bypass.log"
+}
+
+staged_paths_with_unstaged_changes() {
+    local path
+    declare -A staged_paths=()
+
+    while IFS= read -r -d '' path; do
+        [[ -n "${path}" ]] || continue
+        staged_paths["${path}"]=1
+    done < <(git diff --cached --name-only -z --diff-filter=ACMRTD 2>/dev/null || true)
+
+    while IFS= read -r -d '' path; do
+        [[ -n "${path}" ]] || continue
+        if [[ -n "${staged_paths[${path}]+x}" ]]; then
+            printf '%s\n' "${path}"
+        fi
+    done < <(git diff --name-only -z --diff-filter=ACMRTD 2>/dev/null || true)
+}
+
 # --- Detect in-progress git operations and skip the branch check -------
 # During rebase/merge/cherry-pick, HEAD may transiently be on the default branch
 # though the user isn't authoring a fresh commit there.
@@ -39,6 +80,34 @@ done
 # git-rebase also uses these directory markers depending on mode.
 if [[ -d "${git_dir}/rebase-merge" ]] || [[ -d "${git_dir}/rebase-apply" ]]; then
     exit 0
+fi
+
+# --- Staged/worktree overlap guard ------------------------------------
+# If a path is staged and still dirty in the worktree, the commit snapshot is
+# stale relative to disk. This catches format-on-edit and lint-fix output before
+# a commit object exists.
+overlap_paths="$(staged_paths_with_unstaged_changes)"
+if [[ -n "${overlap_paths}" ]]; then
+    if [[ "${ALLOW_PARTIAL_COMMIT:-0}" == "1" ]]; then
+        overlap_one_line="$(printf '%s' "${overlap_paths}" | tr '\n' ',' | sed 's/,$//')"
+        log_pre_commit_bypass "ALLOW_PARTIAL_COMMIT" "${overlap_one_line}"
+        echo "[pre-commit] ALLOW_PARTIAL_COMMIT=1 — staged/worktree overlap bypass logged to .agent/bypass.log" >&2
+    else
+        cat >&2 <<EOF
+[pre-commit] Refusing to commit: staged path(s) still have unstaged worktree changes.
+
+These paths are staged, but the files on disk differ from the staged snapshot:
+$(printf '%s\n' "${overlap_paths}" | sed 's/^/  - /')
+
+This often means a formatter or fixer ran after staging. Re-run formatting if
+needed, then re-stage the path(s) before committing:
+  git add -- <path>
+
+For an intentional partial commit, override with an audit trail:
+  ALLOW_PARTIAL_COMMIT=1 git commit ...
+EOF
+        exit 1
+    fi
 fi
 
 # --- Branch check ------------------------------------------------------
@@ -62,17 +131,7 @@ fi
 default_branch="$(checkout_default_branch)"
 if checkout_is_primary && [[ "${branch}" != "${default_branch}" ]]; then
     if [[ "${ALLOW_PRIMARY_FEATURE_COMMIT:-0}" == "1" ]]; then
-        repo_root="$(git rev-parse --show-toplevel)"
-        mkdir -p "${repo_root}/.agent"
-        # Best-effort forensic metadata — same field set as the ALLOW_MAIN_COMMIT
-        # bypass so a single parser reads both lines. None of these are fatal.
-        ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        who="$(git config user.email 2>/dev/null || echo unknown)"
-        head_sha="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-        diff_stat="$(git diff --cached --shortstat 2>/dev/null || echo '(no stat)')"
-        printf '%s\tALLOW_PRIMARY_FEATURE_COMMIT\t%s\t%s\t%s\t%s\n' \
-            "${ts}" "${who}" "${branch}" "${head_sha}" "${diff_stat}" \
-            >> "${repo_root}/.agent/bypass.log"
+        log_pre_commit_bypass "ALLOW_PRIMARY_FEATURE_COMMIT"
         echo "[pre-commit] ALLOW_PRIMARY_FEATURE_COMMIT=1 — bypass logged to .agent/bypass.log" >&2
     else
         cat >&2 <<EOF
@@ -129,25 +188,7 @@ EOF
 fi
 
 # --- Bypass: log the override to .agent/bypass.log ---------------------
-# .agent/ is the convention named by F9/F11/F12/F16/F17. We create it
-# on demand so the hook doesn't fail in repos that haven't set it up.
-repo_root="$(git rev-parse --show-toplevel)"
-agent_dir="${repo_root}/.agent"
-mkdir -p "${agent_dir}"
-log_file="${agent_dir}/bypass.log"
-
-# Best-effort metadata — none of these are fatal if missing.
-ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-who="$(git config user.email 2>/dev/null || echo unknown)"
-head_sha="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-
-# Commit message file is $1 only for commit-msg; pre-commit doesn't get
-# it. Best we can do is peek at staged diff stats for context.
-diff_stat="$(git diff --cached --shortstat 2>/dev/null || echo '(no stat)')"
-
-printf '%s\tALLOW_MAIN_COMMIT\t%s\t%s\t%s\t%s\n' \
-    "${ts}" "${who}" "${branch}" "${head_sha}" "${diff_stat}" \
-    >> "${log_file}"
+log_pre_commit_bypass "ALLOW_MAIN_COMMIT"
 
 echo "[pre-commit] ALLOW_MAIN_COMMIT=1 — bypass logged to .agent/bypass.log" >&2
 exit 0

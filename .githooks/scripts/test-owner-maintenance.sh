@@ -46,6 +46,17 @@ expect_failure() {
     fi
 }
 
+expect_stderr_contains() {
+    local label="$1"
+    local needle="$2"
+    if ! grep -Fq "${needle}" "${tmp}/${label}.err"; then
+        echo "FAIL expected stderr for ${label} to contain: ${needle}" >&2
+        echo "--- stderr ---" >&2
+        cat "${tmp}/${label}.err" >&2 || true
+        exit 1
+    fi
+}
+
 reset_tmp_repo() {
     rm -rf "${tmp}/repo"
     mkdir -p "${tmp}/repo"
@@ -64,6 +75,23 @@ reset_tmp_repo
 stage_file "docs/research/agent-note.md"
 expect_success "commit-msg-owner-docs" run_in_tmp "${commit_msg_hook}" "$(message_file "docs(owner): add research note")"
 expect_success "pre-commit-owner-docs" run_in_tmp "${pre_commit_hook}"
+
+reset_tmp_repo
+stage_file "docs/research/formatted.md" "staged"
+printf 'formatter output\n' >> "${tmp}/repo/docs/research/formatted.md"
+expect_failure "pre-commit-staged-worktree-overlap" run_in_tmp "${pre_commit_hook}"
+expect_stderr_contains "pre-commit-staged-worktree-overlap" "staged path(s) still have unstaged worktree changes"
+expect_stderr_contains "pre-commit-staged-worktree-overlap" "docs/research/formatted.md"
+
+reset_tmp_repo
+stage_file "docs/research/intentional-partial.md" "staged"
+printf 'intentional follow-up\n' >> "${tmp}/repo/docs/research/intentional-partial.md"
+expect_success "pre-commit-staged-worktree-overlap-bypass" env ALLOW_PARTIAL_COMMIT=1 bash -c "cd '${tmp}/repo' && '${pre_commit_hook}'"
+expect_stderr_contains "pre-commit-staged-worktree-overlap-bypass" "ALLOW_PARTIAL_COMMIT=1"
+if ! grep -Fq "ALLOW_PARTIAL_COMMIT" "${tmp}/repo/.agent/bypass.log"; then
+    echo "FAIL expected ALLOW_PARTIAL_COMMIT to be logged" >&2
+    exit 1
+fi
 
 reset_tmp_repo
 stage_file "docs/archon/specs/capture-pane.md"

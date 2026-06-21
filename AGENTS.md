@@ -252,6 +252,9 @@ CHANGELOG entry, apply the `no-changelog` label.
 
 - Stage specific files: `git add <path> <path>`. Never use `git add -A`, `git add .`, or
   `git add --all`.
+- If a formatter or fixer changes a staged file, re-stage that path before committing.
+  `.githooks/pre-commit` blocks same-file staged plus unstaged drift; use
+  `ALLOW_PARTIAL_COMMIT=1` only for an intentional partial snapshot with audit logging.
 - Keep one logical unit per commit. If the message needs "and", split it.
 - Do not bypass hooks with `--no-verify` or `--no-gpg-sign`; fix the underlying failure.
 
