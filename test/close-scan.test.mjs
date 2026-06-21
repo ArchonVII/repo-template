@@ -14,6 +14,7 @@ import {
 import {
   checkHookSyntax,
   parseNameStatus,
+  toBashPath,
 } from '../scripts/close/scan-complete.mjs';
 
 test('classifyCloseScanScope requires local parity checks for code and workflow changes', () => {
@@ -289,4 +290,32 @@ test('checkHookSyntax passes when every hook file is syntactically valid', () =>
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('toBashPath passes non-absolute args (e.g. the -n flag) through unchanged', () => {
+  // The `-n` flag and other relative/non-drive args must never be path-rewritten,
+  // otherwise `bash -n <hook>` would receive a mangled flag (repo-template#104).
+  assert.equal(toBashPath('-n'), '-n');
+  assert.equal(toBashPath('pre-commit'), 'pre-commit');
+  assert.equal(toBashPath('./scripts/x.sh'), './scripts/x.sh');
+});
+
+test('toBashPath converts a Windows-absolute path to a POSIX form bash can open', () => {
+  // Locks the cygpath-vs-/mnt branch: with cygpath present (Git Bash) the result
+  // is `/c/...`; without it (pure WSL / CI Linux) it is `/mnt/c/...`. Either way
+  // the output must be a rooted POSIX path with a lowercase drive and no Windows
+  // backslashes left in it (repo-template#104).
+  const out = toBashPath('C:\\GitHub\\repo-template\\.githooks\\pre-commit');
+  assert.match(out, /^\//, 'must be a rooted POSIX path');
+  assert.ok(!out.includes('\\'), 'must not contain Windows backslashes');
+  assert.ok(!/^[A-Za-z]:/.test(out), 'must not retain the Windows drive prefix');
+  assert.match(out, /\/c\//, 'drive must be lowercased and slash-delimited');
+  assert.ok(out.endsWith('/.githooks/pre-commit'), 'must preserve the path tail');
+});
+
+test('toBashPath yields either the cygpath /c/ form or the /mnt/ fallback', () => {
+  // cygpath presence is environment-dependent (Git Bash has it, CI Linux does not),
+  // so assert only the two legitimate outputs for the same input (repo-template#104).
+  const out = toBashPath('C:\\a\\b');
+  assert.ok(out === '/c/a/b' || out === '/mnt/c/a/b', `unexpected conversion: ${out}`);
 });

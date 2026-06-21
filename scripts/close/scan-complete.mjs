@@ -177,15 +177,48 @@ function resolveCommand(command, args) {
     return { command: 'cmd.exe', args: ['/d', '/s', '/c', ['npm', ...args].map(quoteCmdArg).join(' ')] };
   }
   if (process.platform === 'win32' && command === 'bash') {
-    return { command, args: args.map(toWslPathIfWindowsAbsolute) };
+    return { command, args: args.map(toBashPath) };
   }
   return { command, args };
 }
 
-function toWslPathIfWindowsAbsolute(value) {
+// Cache the cygpath-availability probe so the per-file loop in checkHookSyntax
+// does not re-shell-out once per hook. `undefined` = not yet probed.
+let cygpathAvailable;
+
+// Probe once whether `cygpath` exists on PATH. It ships with Git Bash/MSYS
+// (the default `bash` on Windows) and is absent under pure WSL. `cygpath -w .`
+// is a cheap no-op that succeeds only when the tool is present.
+function hasCygpath() {
+  if (cygpathAvailable === undefined) {
+    try {
+      execFileSync('cygpath', ['-w', '.'], { stdio: 'ignore' });
+      cygpathAvailable = true;
+    } catch {
+      cygpathAvailable = false;
+    }
+  }
+  return cygpathAvailable;
+}
+
+// Convert a Windows-absolute path to the POSIX form the active `bash` expects.
+// Git Bash/MSYS (the default Windows bash) wants `/c/...`, while WSL wants
+// `/mnt/c/...` - the old hardcoded `/mnt/` rewrite false-failed `bash -n` on
+// every hook under Git Bash (repo-template#104). Prefer `cygpath -u` (yields
+// the correct Git Bash form) and fall back to the `/mnt/<drive>/` rewrite only
+// when cygpath is absent (pure WSL). Non-absolute args (e.g. the `-n` flag)
+// pass through unchanged.
+function toBashPath(value) {
   const text = String(value);
   const match = /^([A-Za-z]):[\\/](.*)$/.exec(text);
   if (!match) return text;
+  if (hasCygpath()) {
+    try {
+      return execFileSync('cygpath', ['-u', text], { encoding: 'utf8' }).trim();
+    } catch {
+      // Fall through to the WSL-style rewrite if this one path fails to convert.
+    }
+  }
   return `/mnt/${match[1].toLowerCase()}/${match[2].replace(/\\/g, '/')}`;
 }
 
@@ -365,7 +398,7 @@ function main() {
 
 // Export the scope-derivation and hook-syntax helpers so they can be unit-tested
 // without invoking `main()`. Mirrors the entry-point guard in pr-contract.mjs.
-export { checkHookSyntax, parseNameStatus };
+export { checkHookSyntax, parseNameStatus, toBashPath };
 
 if (process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
   main();
