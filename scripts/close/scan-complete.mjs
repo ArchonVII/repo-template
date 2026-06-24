@@ -131,6 +131,18 @@ function stackFromRequiredGate(root) {
   return match ? match[1] : 'minimal';
 }
 
+function hasNpmScript(root, name) {
+  const pkgPath = join(root, 'package.json');
+  if (!existsSync(pkgPath)) return false;
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+    const script = pkg && pkg.scripts ? pkg.scripts[name] : undefined;
+    return typeof script === 'string' && script.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function runExternalCheck(name, command, args, summary) {
   const resolved = resolveCommand(command, args);
   try {
@@ -291,7 +303,20 @@ function runLocalChecks({ root, pr, files, scope, changelogDecision }) {
   });
 
   if (scope.requiredChecks.some((check) => check.name === 'node-test')) {
-    localChecks.push(runExternalCheck('node-test', 'npm', ['test'], '`npm test` passed.'));
+    // A baseline'd repo has no `test` script (the required gate leaves
+    // npm-test-script empty and node-ci runs `npm run --if-present`), so running
+    // `npm test` unconditionally would fail the local close-scan with a missing-
+    // script error even though CI is green. Skip-as-green when no test script
+    // exists, staying consistent with the gate (#121, archon-setup#282).
+    localChecks.push(
+      hasNpmScript(root, 'test')
+        ? runExternalCheck('node-test', 'npm', ['test'], '`npm test` passed.')
+        : {
+            name: 'node-test',
+            ok: true,
+            summary: 'No `test` script in package.json; node-test skipped (matches the gate\'s `npm run --if-present`).',
+          },
+    );
   }
 
   if (scope.requiredChecks.some((check) => check.name === 'actionlint')) {
