@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeSlug, buildBranchName, parseIssueFromBranch, populatePrBodyTemplate, parseGitStatusPorcelain, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, classifyPrMergeSignal, classifyPruneRetirement, inferNextAction, formatStatusReport, detectClaimsInstalled, checkStartupReadiness, formatStartupMap, primaryRootFromCommonDir } from '../../scripts/agent/lib.mjs';
+import { sanitizeSlug, buildBranchName, parseIssueFromBranch, filterIssueBranches, populatePrBodyTemplate, parseGitStatusPorcelain, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, classifyPrMergeSignal, classifyPruneRetirement, inferNextAction, formatStatusReport, detectClaimsInstalled, checkStartupReadiness, formatStartupMap, primaryRootFromCommonDir } from '../../scripts/agent/lib.mjs';
 
 test('sanitizeSlug lowercases, hyphenates, trims, caps at 6 words', () => {
   assert.equal(sanitizeSlug('Add OAuth Flow!'), 'add-oauth-flow');
@@ -21,6 +21,37 @@ test('parseIssueFromBranch extracts the issue number or null', () => {
   assert.equal(parseIssueFromBranch('agent/codex/27-agent-lifecycle'), '27');
   assert.equal(parseIssueFromBranch('main'), null);
   assert.equal(parseIssueFromBranch('agent/claude/2026-06-01-quick-fix'), '2026');
+});
+
+test('filterIssueBranches detects a retired remote-tracking head the local-only scan would miss (archon-setup#295)', () => {
+  // A merged/retired PR: the local head was pruned, but origin still carries the
+  // branch. The remote-tracking ref must normalize to the bare agent branch and
+  // be detected so its name is not reused.
+  const refs = [
+    'agent/claude/40-other-task',          // local head, different issue
+    'origin/main',                          // remote default — must be ignored
+    'origin/agent/codex/27-old-slug',       // retired remote head for issue 27
+    'origin/HEAD',                          // symbolic remote ref — ignored
+  ];
+  assert.deepEqual(filterIssueBranches(refs, 27), ['agent/codex/27-old-slug']);
+});
+
+test('filterIssueBranches de-duplicates a branch present both locally and on the remote', () => {
+  const refs = [
+    'agent/claude/27-feature',
+    'origin/agent/claude/27-feature',
+  ];
+  assert.deepEqual(filterIssueBranches(refs, 27), ['agent/claude/27-feature']);
+});
+
+test('filterIssueBranches does not match a different issue or a substring prefix', () => {
+  const refs = [
+    'agent/claude/270-bigger-number',  // 270 must not match issue 27
+    'origin/agent/codex/3-small',
+  ];
+  assert.deepEqual(filterIssueBranches(refs, 27), []);
+  assert.deepEqual(filterIssueBranches([], 27), []);
+  assert.deepEqual(filterIssueBranches(null, 27), []);
 });
 
 test('populatePrBodyTemplate fills a TODO linked issue placeholder', () => {
