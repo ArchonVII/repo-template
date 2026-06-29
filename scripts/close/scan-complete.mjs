@@ -131,16 +131,29 @@ function stackFromRequiredGate(root) {
   return match ? match[1] : 'minimal';
 }
 
-function hasNpmScript(root, name) {
-  const pkgPath = join(root, 'package.json');
-  if (!existsSync(pkgPath)) return false;
+// Decide whether the local node-test check should RUN `npm test` or SKIP green,
+// from the package.json state. The original `hasNpmScript` swallowed JSON.parse
+// errors and returned false, so a PRESENT-BUT-UNPARSEABLE package.json was treated
+// the same as ABSENT and node-test was recorded green-by-skip — masking the real
+// gate, whose `npm run --if-present test` exits EJSONPARSE and FAILS. Distinguish:
+//   - absent              → skip green (matches the gate's `npm run --if-present`)
+//   - unparseable         → RUN `npm test` so the parse error surfaces as the gate sees it
+//   - present, has `test` → RUN `npm test`
+//   - present, no `test`  → skip green
+// Pure + injectable for unit tests (archon-setup#286).
+function decideNodeTest({ exists, readPackageJson }) {
+  if (!exists) return { run: false, reason: 'no-package-json' };
+  let pkg;
   try {
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-    const script = pkg && pkg.scripts ? pkg.scripts[name] : undefined;
-    return typeof script === 'string' && script.trim().length > 0;
+    pkg = readPackageJson();
   } catch {
-    return false;
+    return { run: true, reason: 'unparseable-package-json' };
   }
+  const script = pkg && pkg.scripts ? pkg.scripts.test : undefined;
+  if (typeof script === 'string' && script.trim().length > 0) {
+    return { run: true, reason: 'has-test-script' };
+  }
+  return { run: false, reason: 'no-test-script' };
 }
 
 function runExternalCheck(name, command, args, summary) {
@@ -307,14 +320,23 @@ function runLocalChecks({ root, pr, files, scope, changelogDecision }) {
     // npm-test-script empty and node-ci runs `npm run --if-present`), so running
     // `npm test` unconditionally would fail the local close-scan with a missing-
     // script error even though CI is green. Skip-as-green when no test script
-    // exists, staying consistent with the gate (#121, archon-setup#282).
+    // exists, staying consistent with the gate (#121, archon-setup#282). But a
+    // PRESENT-BUT-UNPARSEABLE package.json must RUN `npm test` so the EJSONPARSE
+    // the gate would hit surfaces locally instead of green-by-skip (archon-setup#286).
+    const pkgPath = join(root, 'package.json');
+    const decision = decideNodeTest({
+      exists: existsSync(pkgPath),
+      readPackageJson: () => JSON.parse(readFileSync(pkgPath, 'utf8')),
+    });
     localChecks.push(
-      hasNpmScript(root, 'test')
+      decision.run
         ? runExternalCheck('node-test', 'npm', ['test'], '`npm test` passed.')
         : {
             name: 'node-test',
             ok: true,
-            summary: 'No `test` script in package.json; node-test skipped (matches the gate\'s `npm run --if-present`).',
+            summary: decision.reason === 'no-package-json'
+              ? 'No package.json; node-test skipped (matches the gate\'s `npm run --if-present`).'
+              : 'No `test` script in package.json; node-test skipped (matches the gate\'s `npm run --if-present`).',
           },
     );
   }
@@ -423,7 +445,7 @@ function main() {
 
 // Export the scope-derivation and hook-syntax helpers so they can be unit-tested
 // without invoking `main()`. Mirrors the entry-point guard in pr-contract.mjs.
-export { checkHookSyntax, parseNameStatus, toBashPath };
+export { checkHookSyntax, parseNameStatus, toBashPath, decideNodeTest };
 
 if (process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
   main();

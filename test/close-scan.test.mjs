@@ -13,6 +13,7 @@ import {
 } from '../scripts/close/lib.mjs';
 import {
   checkHookSyntax,
+  decideNodeTest,
   parseNameStatus,
   toBashPath,
 } from '../scripts/close/scan-complete.mjs';
@@ -290,6 +291,44 @@ test('checkHookSyntax passes when every hook file is syntactically valid', () =>
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('decideNodeTest distinguishes absent / unparseable / present package.json (archon-setup#286)', () => {
+  const throwing = () => { throw new SyntaxError('Unexpected token } in JSON'); };
+
+  // Absent package.json → skip green (matches the gate's `npm run --if-present`).
+  assert.deepEqual(decideNodeTest({ exists: false, readPackageJson: throwing }), {
+    run: false,
+    reason: 'no-package-json',
+  });
+
+  // Present but MALFORMED → must RUN npm test so the EJSONPARSE surfaces exactly
+  // as the required gate sees it, instead of being masked green-by-skip.
+  assert.deepEqual(decideNodeTest({ exists: true, readPackageJson: throwing }), {
+    run: true,
+    reason: 'unparseable-package-json',
+  });
+
+  // Present, no `test` script → skip green (baseline'd repo).
+  assert.deepEqual(decideNodeTest({ exists: true, readPackageJson: () => ({ scripts: { build: 'x' } }) }), {
+    run: false,
+    reason: 'no-test-script',
+  });
+  assert.deepEqual(decideNodeTest({ exists: true, readPackageJson: () => ({}) }), {
+    run: false,
+    reason: 'no-test-script',
+  });
+  // Whitespace-only test script is treated as absent.
+  assert.deepEqual(decideNodeTest({ exists: true, readPackageJson: () => ({ scripts: { test: '   ' } }) }), {
+    run: false,
+    reason: 'no-test-script',
+  });
+
+  // Present WITH a real `test` script → run.
+  assert.deepEqual(decideNodeTest({ exists: true, readPackageJson: () => ({ scripts: { test: 'node --test' } }) }), {
+    run: true,
+    reason: 'has-test-script',
+  });
 });
 
 test('toBashPath passes non-absolute args (e.g. the -n flag) through unchanged', () => {
