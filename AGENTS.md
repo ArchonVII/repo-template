@@ -7,10 +7,11 @@ apply to every tool live here.
 ## Read First
 
 - `README.md` - what this project is and how to run it.
-- `docs/CANON.md` - current truth, intended state, and locked decisions.
-- `docs/LIBRARIAN.md` - wiki schema and operations.
-- `docs/INDEX.md` - map of durable docs.
-- `ARCHITECTURE.md` - subsystem ownership when the repo has one.
+- `ARCHITECTURE.md` - subsystem ownership, when the repo has one.
+- When the repo runs the Librarian wiki (see "Librarian Wiki"): `docs/INDEX.md`
+  (map of durable docs), `docs/CANON.md` (current truth and locked decisions),
+  and `docs/LIBRARIAN.md` (wiki schema and operations). Repos onboarded without
+  the wiki feature skip these.
 
 <!-- BEGIN MANAGED AGENT START MAP -->
 
@@ -19,8 +20,7 @@ apply to every tool live here.
 Agents should not spend time rediscovering process files. Start here:
 
 - Document policy: `docs/agent-process/document-policy.md` - charters, lifecycle, placement rules.
-- Projects: `projects/<slug>/PLAN.md` - one capsule per active feature; see `docs/agent-process/project-capsules.md`.
-- Plans: `docs/plans/` - loose/cross-cutting plans; prefer a project capsule for feature work.
+- Plans: `docs/plans/` - dated plan files for feature and cross-cutting work; one file per plan.
 - Agent process: `docs/agent-process/`.
 - Repo update log: `docs/repo-update-log/` - one fragment per PR; `docs/repo-update-log.md` is the frozen archive.
 - Check map: `.agent/check-map.yml`.
@@ -192,6 +192,11 @@ handoffs, or active boards. If claim acquisition fails, stop and report the conf
 
 ## Librarian Wiki
 
+**Applies only when the repo installs the Librarian wiki feature** - the `wiki:*`
+npm scripts plus `docs/CANON.md`, `docs/LIBRARIAN.md`, `docs/INDEX.md`, and
+`docs/raw/`. Repos onboarded without it have none of these paths; skip this
+section and keep durable docs under `docs/` directly.
+
 The `docs/` tree is an agent-maintained wiki. `AGENTS.md`, `llms.txt`, `docs/CANON.md`,
 `docs/LIBRARIAN.md`, and `docs/INDEX.md` are the canonical navigation layer. Anything under
 `.claude/`, `.codex/`, `.gemini/`, plus `CLAUDE.md` and `GEMINI.md`, is an adapter only.
@@ -206,6 +211,11 @@ The `docs/` tree is an agent-maintained wiki. `AGENTS.md`, `llms.txt`, `docs/CAN
   resync both `llms.txt` and relevant `README.md` status/overview prose in the same PR.
 
 ## Project Capsules
+
+**Applies only when the repo adopts project capsules** - `projects/<slug>/PLAN.md`
+plus `docs/agent-process/project-capsules.md`. Repos onboarded without the capsule
+feature track multi-session feature work under `docs/plans/` instead; skip this
+section.
 
 Active feature work that spans more than one session or one PR lives in
 `projects/<slug>/PLAN.md`. The PLAN owns summary and pointers only; it links out to specs,
