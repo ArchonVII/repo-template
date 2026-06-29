@@ -1,0 +1,8 @@
+## 2026-06-29 - doc-sweep preserves staged candidates + rejects placeholders; agent-pr-ready gates on close ci:guard
+
+- **Issue/PR:** #130 (upstream of the rest of ArchonVII/archon-setup#295)
+- **Branch:** agent/claude/130-doc-sweep-pr-ready-robustness
+- **Changed paths:** scripts/doc-sweep/git.mjs, scripts/doc-sweep/git.test.mjs, scripts/agent-pr-ready.mjs, .changelog/unreleased/130-doc-sweep-pr-ready-robustness.md, docs/repo-update-log/2026-06-29-130-doc-sweep-pr-ready-robustness.md
+- **What changed:** Three Codex P2 robustness fixes on baseline scripts. (1) `commitFileGuarded` captures `isStagedAdd` before touching the index and, on hook rejection, re-stages a pre-staged candidate instead of unstaging it — preserving the author's "git add = save my work" signal. (2) Added `isPlaceholderDoc` and a placeholder gate after the secret scan: empty/whitespace/lone-scaffold-token docs are left+logged (reason `placeholder`), never swept. (3) `agent-pr-ready.mjs` now spawns `scripts/close/ci-guard.mjs` for the current HEAD before `gh pr ready` and refuses promotion unless it passes, with a `--skip-ci-guard` opt-out for the AGENTS.md run-once-per-HEAD flow.
+- **Verification:** `npm test` (node --test) green 152/152; `node --test scripts/doc-sweep/git.test.mjs` 24/24 incl. new placeholder-gate, staged-preservation, and `isPlaceholderDoc` cases; `node --check scripts/doc-sweep/git.mjs scripts/agent-pr-ready.mjs`. The agent-pr-ready gate is integration-level (spawns ci-guard); the doc-sweep changes carry unit coverage.
+- **Propagation:** pending ArchonVII/archon-setup snapshot refresh (gated follow-up) to ship to onboarded/new repos.
