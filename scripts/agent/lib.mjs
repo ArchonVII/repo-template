@@ -26,6 +26,28 @@ export function parseIssueFromBranch(branch) {
   return match ? match[1] : null;
 }
 
+// start-task collision scan (archon-setup#295): given the short names of candidate
+// refs — BOTH local heads (refs/heads/agent) AND remote-tracking refs
+// (refs/remotes/*) — return the distinct agent branches that belong to
+// <issueNumber>. After a merged/retired PR the local agent/<tool>/<issue>-<slug>
+// head is often pruned while the branch still exists on origin, so a local-only
+// scan would miss it and let a retired name be silently reused. Remote-tracking
+// shorthand ("origin/agent/...") is normalized to the bare "agent/..." branch and
+// de-duplicated against the local heads.
+export function filterIssueBranches(refShortNames, issueNumber) {
+  const re = new RegExp(`^agent/[^/]+/${issueNumber}-`);
+  const out = new Set();
+  for (const raw of refShortNames ?? []) {
+    const name = String(raw).trim();
+    if (!name) continue;
+    // Strip a leading remote name only when the remainder is an agent branch,
+    // so "origin/agent/claude/27-x" -> "agent/claude/27-x" but "origin/main" is left alone.
+    const bare = name.replace(/^[^/]+\/(?=agent\/)/, '');
+    if (re.test(bare)) out.add(bare);
+  }
+  return [...out];
+}
+
 const ISSUE_LINK_RE = /\b(?:Closes|Fixes|Refs)\s+#\d+\b/i;
 const ISSUE_PLACEHOLDER_RES = [
   /^TODO:\s*(?:Closes|Fixes|Refs)\s+#(?:___|<[^>\r\n]+>)\s*$/im,
