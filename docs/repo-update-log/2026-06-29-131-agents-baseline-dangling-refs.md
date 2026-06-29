@@ -1,0 +1,8 @@
+## 2026-06-29 - Gate baseline AGENTS.md wiki/capsule guidance; drop dangling Start Map Projects line
+
+- **Issue/PR:** #131 (upstream of ArchonVII/archon-setup#290)
+- **Branch:** agent/claude/131-agents-baseline-dangling-refs
+- **Changed paths:** AGENTS.md, test/agents-baseline-refs.test.mjs, .changelog/unreleased/131-agents-baseline-dangling-refs.md, docs/repo-update-log/2026-06-29-131-agents-baseline-dangling-refs.md
+- **What changed:** `AGENTS.md` ships verbatim as the onboarding baseline, but its "Read First" list, "Librarian Wiki" section, "Project Capsules" section, and the managed Start Map `Projects:` line referenced infra (`docs/CANON.md`, `docs/LIBRARIAN.md`, `docs/INDEX.md`, `wiki:*` scripts, `docs/raw/`, `projects/<slug>/PLAN.md`, `docs/agent-process/project-capsules.md`) that a non-wiki onboarded repo never installs, so they dangled and misrouted agent sessions. Read First now gates the three wiki docs behind "When the repo runs the Librarian wiki"; the Librarian Wiki and Project Capsules sections each open with an "Applies only when ..." gate; and the managed block drops the `Projects:` line (the `Plans:` line is reworded to not depend on capsules). repo-template itself still installs these features, so the gated guidance stays accurate here.
+- **Verification:** `npm test` (node --test) green, including the new `test/agents-baseline-refs.test.mjs` and the existing AGENTS startup-baseline assertions; `AGENTS.md` stays within the <=300-line budget.
+- **Propagation:** pending ArchonVII/archon-setup snapshot refresh (gated follow-up) to ship the de-dangled baseline to onboarded/new repos.
