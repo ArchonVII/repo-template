@@ -149,6 +149,18 @@ export function commitFileGuarded(wt, rel, captured, message, scan, { allowMainC
     return { committed: false, reason: 'secret-scan' };
   }
 
+  // Step 2b — Placeholder gate (archon-setup#295). Never sweep a stub doc (empty /
+  // whitespace / a lone scaffold token like TODO); committing one strands a
+  // placeholder on the default branch or a PR branch. Leave + log instead.
+  if (isPlaceholderDoc(absPath)) {
+    return { committed: false, reason: 'placeholder' };
+  }
+
+  // Capture whether the AUTHOR already had this path staged as an add, BEFORE we
+  // touch the index. On hook rejection we must not discard that "git add = save my
+  // work" signal by unstaging the file (archon-setup#295).
+  const wasStagedAdd = isStagedAdd(wt, rel);
+
   // Step 3 — Selective, file-by-file staging then commit (spec §4.5 H4 / L1).
   // --only commits exactly the given path regardless of what else is in the index,
   // preventing a clobber of another agent's pre-staged work (C1 fix).
@@ -157,12 +169,60 @@ export function commitFileGuarded(wt, rel, captured, message, scan, { allowMainC
     git(wt, ['add', '--', rel]);                              // exactly one path, never -A or '.'
     git(wt, ['commit', '-m', message, '--only', '--', rel], env); // path-scoped; hooks/signing run
   } catch {
-    // Hook rejection or git failure → restore a clean index, then leave + log (spec §4.5 L1).
-    try { git(wt, ['reset', '-q', '--', rel]); } catch { /* best-effort unstage */ }
+    // Hook rejection or git failure → leave + log (spec §4.5 L1), never --no-verify.
+    if (wasStagedAdd) {
+      // The author had this staged before the sweep; preserve it so the candidate
+      // survives for the next session instead of being silently unstaged.
+      try { git(wt, ['add', '--', rel]); } catch { /* best-effort restage */ }
+    } else {
+      // We staged a previously-untracked file; restore the clean index.
+      try { git(wt, ['reset', '-q', '--', rel]); } catch { /* best-effort unstage */ }
+    }
     return { committed: false, reason: 'hook-rejected' };
   }
 
   return { committed: true };
+}
+
+/**
+ * isStagedAdd(wt, rel) → boolean
+ *
+ * True iff `rel` is currently staged as an ADD in the index (git diff --cached
+ * --diff-filter=A). Used to decide whether a hook-rejected sweep should preserve
+ * the author's pre-existing staging rather than unstage it (archon-setup#295).
+ */
+function isStagedAdd(wt, rel) {
+  try {
+    return splitNul(git(wt, ['diff', '--cached', '--name-only', '--diff-filter=A', '-z', '--', rel])).includes(rel);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * isPlaceholderDoc(absPath) → boolean
+ *
+ * A "placeholder" doc has no durable content worth recovering: it is empty,
+ * whitespace-only, or its entire body is a single scaffold token (TODO/TBD/FIXME/
+ * WIP/placeholder/stub, optionally written as a markdown heading or bullet). Such
+ * files must NOT be auto-swept (archon-setup#295). A read failure fails closed —
+ * we never commit a file we cannot read. A doc that merely MENTIONS a token in real
+ * prose is preserved: only a whole-body single-token match counts.
+ */
+export function isPlaceholderDoc(absPath) {
+  let text;
+  try {
+    text = readFileSync(absPath, 'utf8');
+  } catch {
+    return true; // unreadable → fail closed: do not sweep
+  }
+  // Collapse markdown heading/list/emphasis markers + whitespace, leaving the
+  // substantive body to test against the scaffold-token set.
+  const stripped = text.replace(/[#>*_`\-\s]+/g, ' ').trim().toLowerCase();
+  if (stripped === '') return true; // empty / whitespace / markers only
+  // Source: archon-setup#295 placeholder-token list (scaffold stubs).
+  const PLACEHOLDER_TOKENS = new Set(['todo', 'tbd', 'fixme', 'wip', 'placeholder', 'stub']);
+  return PLACEHOLDER_TOKENS.has(stripped);
 }
 
 // ─── §4.5 Sweep lock (H5) ────────────────────────────────────────────────────

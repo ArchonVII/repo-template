@@ -13,6 +13,7 @@ import {
   enumerateIgnored,
   statSig,
   commitFileGuarded,
+  isPlaceholderDoc,
   acquireLock,
   releaseLock,
   LOCK_TTL_MS,
@@ -271,6 +272,59 @@ test('commitFileGuarded: hook rejection → not committed, index clean, reason h
   const status = execFileSync('git', ['-C', repo, 'status', '--porcelain', '--', 'docs/blocked.md'], { encoding: 'utf8' });
   assert.ok(status.trim().startsWith('??'),
     `file must be untracked again (unstaged) after rejection; status=${JSON.stringify(status)}`);
+});
+
+// ─── archon-setup#295: placeholder gate + staged-candidate preservation ──────
+
+test('commitFileGuarded: a placeholder doc is left + logged, never swept (reason placeholder)', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'docs/stub.md', '# TODO\n'); // lone scaffold token → placeholder
+  const captured = statSig(repo, 'docs/stub.md');
+
+  const result = commitFileGuarded(repo, 'docs/stub.md', captured, 'docs(sweep): recover stub.md (#92)', () => true);
+
+  assert.equal(result.committed, false, 'a placeholder doc must not be committed');
+  assert.equal(result.reason, 'placeholder', `reason should be placeholder; got ${result.reason}`);
+  // No sweep commit was created; the file stays untracked for human review.
+  const status = execFileSync('git', ['-C', repo, 'status', '--porcelain', '--', 'docs/stub.md'], { encoding: 'utf8' });
+  assert.ok(status.trim().startsWith('??'), `placeholder must remain untracked; status=${JSON.stringify(status)}`);
+});
+
+test('commitFileGuarded: hook rejection PRESERVES a pre-staged add-only candidate', () => {
+  const repo = makeTempRepo();
+  installRejectingHook(repo);
+  writeInRepo(repo, 'docs/saved.md', 'real durable content\n');
+  // Author staged it ("git add = save my work") BEFORE the sweep ran.
+  execFileSync('git', ['-C', repo, 'add', '--', 'docs/saved.md'], { encoding: 'utf8' });
+  const captured = statSig(repo, 'docs/saved.md');
+
+  const result = commitFileGuarded(repo, 'docs/saved.md', captured, 'docs(sweep): recover saved.md (#92)', () => true);
+
+  assert.equal(result.committed, false, 'hook must reject the commit');
+  assert.equal(result.reason, 'hook-rejected', `reason should be hook-rejected; got ${result.reason}`);
+  // The pre-staged add must SURVIVE — not be unstaged — so the work is not lost.
+  const status = execFileSync('git', ['-C', repo, 'status', '--porcelain', '--', 'docs/saved.md'], { encoding: 'utf8' });
+  assert.ok(
+    status.includes('A  docs/saved.md') || status.includes('A docs/saved.md'),
+    `pre-staged candidate must remain staged after hook rejection; status=${JSON.stringify(status)}`,
+  );
+});
+
+test('isPlaceholderDoc: classifies empty/whitespace/single-token stubs vs real prose', () => {
+  const repo = makeTempRepo();
+  const abs = (rel, content) => { writeInRepo(repo, rel, content); return join(repo, rel); };
+
+  assert.equal(isPlaceholderDoc(abs('docs/empty.md', '')), true, 'empty is placeholder');
+  assert.equal(isPlaceholderDoc(abs('docs/ws.md', '   \n\t\n')), true, 'whitespace-only is placeholder');
+  assert.equal(isPlaceholderDoc(abs('docs/todo.md', '# TODO\n')), true, 'lone TODO heading is placeholder');
+  assert.equal(isPlaceholderDoc(abs('docs/tbd.md', 'TBD')), true, 'lone TBD is placeholder');
+  assert.equal(isPlaceholderDoc(abs('docs/real.md', 'Real durable content here.\n')), false, 'real prose is not placeholder');
+  assert.equal(
+    isPlaceholderDoc(abs('docs/todo-prose.md', 'TODO: wire up the parser and document the flags.\n')),
+    false,
+    'a doc that mentions TODO in real prose is preserved',
+  );
+  assert.equal(isPlaceholderDoc(join(repo, 'docs', 'does-not-exist.md')), true, 'unreadable fails closed');
 });
 
 test('commitFileGuarded: allowMainCommit override lets a hook-gated commit through', () => {
