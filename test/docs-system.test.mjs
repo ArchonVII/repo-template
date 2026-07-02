@@ -14,7 +14,7 @@ import {
 } from '../scripts/docs/lib.mjs';
 import { collectIndexDocs, displayStatus, renderIndexBlock, runIndex } from '../scripts/docs/index.mjs';
 import { renderNavBlock, renderReadmeStatusBlock } from '../scripts/docs/nav.mjs';
-import { buildStatusModel, renderStatusMarkdown } from '../scripts/docs/status.mjs';
+import { GH_LIST_LIMIT, buildStatusModel, renderStatusMarkdown, runStatus } from '../scripts/docs/status.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
@@ -293,6 +293,47 @@ test('status model must not drop findings from the live doc-health producer', ()
   const model = buildStatusModel({ prs: [], issues: [], docHealth: report, now: 'x' });
   assert.equal(model.docWarningCount, report.summary.warnings);
   assert.equal(model.docWarningCount + model.docErrorCount, report.summary.findings);
+});
+
+// gh must run against the requested root, not the caller's cwd, and must ask
+// for more than the CLI's 30-item default so counts are exact (#144 review
+// round 3). The exec seam exists so this wiring is testable without spawning gh.
+test('runStatus scopes gh snapshots to the target root and lifts the list limit', () => {
+  const root = tempRoot();
+  try {
+    mkdirSync(join(root, 'docs'), { recursive: true });
+    const calls = [];
+    const fakeExec = (cmd, args, opts) => {
+      calls.push({ cmd, args, opts });
+      return '[]';
+    };
+    runStatus({ root, now: 'x', exec: fakeExec });
+    assert.equal(calls.length, 2, 'expected exactly the pr and issue snapshots');
+    for (const call of calls) {
+      assert.equal(call.cmd, 'gh');
+      assert.equal(call.opts.cwd, root, 'gh must resolve the repo from the requested root');
+      const limitAt = call.args.indexOf('--limit');
+      assert.notEqual(limitAt, -1, 'list calls must not rely on the 30-item default');
+      assert.equal(call.args[limitAt + 1], String(GH_LIST_LIMIT));
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('runStatus flags a snapshot that fills the list limit as truncated', () => {
+  const root = tempRoot();
+  try {
+    mkdirSync(join(root, 'docs'), { recursive: true });
+    const full = JSON.stringify(
+      Array.from({ length: GH_LIST_LIMIT }, (_, i) => ({ number: i + 1, title: 't', isDraft: false, url: 'u' }))
+    );
+    const { model } = runStatus({ root, now: 'x', exec: () => full });
+    assert.ok(model.prsError, 'a limit-filling PR snapshot must not present its count as exact');
+    assert.ok(model.issuesError, 'a limit-filling issue snapshot must not present its count as exact');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('status render surfaces gh snapshot failures instead of reporting zero open work', () => {

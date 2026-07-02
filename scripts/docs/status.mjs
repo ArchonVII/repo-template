@@ -72,9 +72,17 @@ export function renderStatusMarkdown(model) {
   return lines.join('\n');
 }
 
-function ghJson(args) {
+// gh pr/issue list default to 30 items (gh CLI manual); an unqualified list
+// would render truncated arrays as exact counts. 1000 is far above any open
+// set in this ecosystem, and a snapshot that fills it exactly is flagged as
+// truncated in runStatus rather than presented as exact (#144 review).
+export const GH_LIST_LIMIT = 1000;
+
+function ghJson(args, { cwd, exec = execFileSync } = {}) {
   try {
-    return JSON.parse(execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
+    // cwd pins gh's repo resolution to the requested root — without it a
+    // `--repo <elsewhere>` run would snapshot the caller's checkout instead.
+    return JSON.parse(exec('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], cwd }));
   } catch (err) {
     // The dashboard degrades rather than dies when gh is unavailable — it is a
     // read surface, not a gate. The failure is surfaced in the output.
@@ -115,14 +123,25 @@ function docHealthJson(root) {
   }
 }
 
-export function runStatus({ root, now = new Date().toISOString() }) {
-  const prs = ghJson(['pr', 'list', '--json', 'number,title,isDraft,url']);
-  const issues = ghJson(['issue', 'list', '--json', 'number,title,labels,url']);
+// A snapshot that fills GH_LIST_LIMIT exactly is (almost certainly) truncated;
+// reporting it as an exact count is the same lie as the 30-item default.
+function snapshotError(result) {
+  if (!Array.isArray(result)) return result?.__error ?? 'gh returned unexpected output';
+  if (result.length === GH_LIST_LIMIT) return `snapshot truncated at ${GH_LIST_LIMIT} items`;
+  return null;
+}
+
+export function runStatus({ root, now = new Date().toISOString(), exec = execFileSync }) {
+  const gh = { cwd: root, exec };
+  const prs = ghJson(['pr', 'list', '--limit', String(GH_LIST_LIMIT), '--json', 'number,title,isDraft,url'], gh);
+  const issues = ghJson(['issue', 'list', '--limit', String(GH_LIST_LIMIT), '--json', 'number,title,labels,url'], gh);
+  const prsError = snapshotError(prs);
+  const issuesError = snapshotError(issues);
   const model = buildStatusModel({
-    prs: Array.isArray(prs) ? prs : [],
-    issues: Array.isArray(issues) ? issues : [],
-    prsError: Array.isArray(prs) ? null : (prs?.__error ?? 'gh returned unexpected output'),
-    issuesError: Array.isArray(issues) ? null : (issues?.__error ?? 'gh returned unexpected output'),
+    prs: !prsError ? prs : [],
+    issues: !issuesError ? issues : [],
+    prsError,
+    issuesError,
     docHealth: docHealthJson(root),
     now,
   });
