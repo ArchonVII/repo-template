@@ -167,6 +167,21 @@ export function parseDocMap(text) {
     throw new Error(`doc-map line ${lineNo}: unhandled content in section "${section}"`);
   }
 
+  // Scalar list fields (owns: scripts/**) are valid YAML — normalize them
+  // ONCE here so no consumer can crash on .join/.map over a string
+  // (#146 round 15; same lesson as scripts/close/lib.mjs toGlobList).
+  const toArray = (v) => (Array.isArray(v) ? v : typeof v === 'string' && v.trim() ? [v.trim()] : []);
+  for (const entry of map.checked) {
+    entry.owns = toArray(entry.owns);
+    entry.checks = toArray(entry.checks);
+  }
+  for (const entry of map.human) {
+    entry.heal_when = toArray(entry.heal_when);
+  }
+  for (const entry of map.generated) {
+    entry.inputs = toArray(entry.inputs);
+  }
+
   // generated[].class is schema, not decoration: a typo like 'commited' would
   // silently drop the entry from every consumer and disable the
   // generated-block gate (#146 round 13) — fail closed instead.

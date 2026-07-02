@@ -544,3 +544,33 @@ test('docs:render refuses unknown committed block ids', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// #146 round 15: scalar list fields (owns: scripts/**) are valid YAML that
+// every consumer must survive — normalize them ONCE in the parser instead of
+// per-consumer (renderNavBlock crashed on doc.owns.join before this).
+test('parseDocMap normalizes scalar list fields to arrays', () => {
+  const map = parseDocMap([
+    'version: 1',
+    'generated:',
+    '  - path: llms.txt',
+    '    class: committed',
+    '    generator: docs:render',
+    '    block: nav',
+    '    inputs: docs/CANON.md',
+    'checked:',
+    '  - path: docs/CANON.md',
+    '    owns: scripts/**',
+    '    checks: links',
+    'human:',
+    '  - path: docs/guides/**',
+    '    heal_when: scripts/**',
+  ].join('\n'));
+  assert.deepEqual(map.checked[0].owns, ['scripts/**']);
+  assert.deepEqual(map.checked[0].checks, ['links']);
+  assert.deepEqual(map.human[0].heal_when, ['scripts/**']);
+  assert.deepEqual(map.generated[0].inputs, ['docs/CANON.md']);
+
+  // The nav renderer consumes the parsed map directly — scalar owns must not
+  // crash it (doc.owns.join is not a function, pre-fix).
+  assert.doesNotThrow(() => renderNavBlock(map, 'summary'));
+});
