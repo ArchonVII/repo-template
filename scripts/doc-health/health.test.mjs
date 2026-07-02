@@ -754,3 +754,46 @@ test('checkRepo: gitignored top-level dirs are exempt from code-root coverage', 
   assert.ok(!unmapped.includes('target'), `ignored target/ must not need a mapping; got ${unmapped}`);
   assert.ok(unmapped.includes('src'), 'tracked unmapped roots still block');
 });
+
+// #146 round 10: only the nav block needs CANON's summary — a status-only
+// consumer with no docs/CANON.md must not fail on a read the declared
+// surface never required.
+test('CLI status-only render check does not require docs/CANON.md', () => {
+  const repo = makeTempRepo();
+  execFileSync('git', ['-C', repo, 'rm', '-q', 'docs/CANON.md'], { encoding: 'utf8' });
+  writeInRepo(repo, 'README.md', [
+    '# Project',
+    '',
+    '<!-- BEGIN ARCHONVII MANAGED BLOCK: status -->',
+    'stale placeholder',
+    '<!-- END ARCHONVII MANAGED BLOCK: status -->',
+    '',
+  ].join('\n'));
+  writeInRepo(repo, '.agent/doc-map.yml', [
+    'version: 1',
+    'generated:',
+    '  - path: README.md',
+    '    class: committed',
+    '    generator: docs:render',
+    '    block: status',
+    'code_roots:',
+    '  docs: self',
+    '',
+  ].join('\n'));
+  commitAll(repo, 'chore: status-only consumer without CANON (#0)');
+
+  let stdout = '';
+  try {
+    stdout = execFileSync(process.execPath, [
+      join('scripts', 'doc-health', 'health.mjs'),
+      '--repo', repo, '--json', '--now', NOW_ISO,
+    ], { cwd: process.cwd(), encoding: 'utf8' });
+  } catch (err) {
+    stdout = err.stdout;
+  }
+  const report = JSON.parse(stdout);
+  assert.ok(
+    !report.findings.some((f) => f.code === 'generated-block-check-failed' && /CANON/.test(f.message)),
+    `status-only check must not read CANON; got ${JSON.stringify(report.findings.filter((f) => f.code.startsWith('generated-block')))}`
+  );
+});

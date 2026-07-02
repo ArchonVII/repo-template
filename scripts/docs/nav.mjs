@@ -47,9 +47,12 @@ export function renderReadmeStatusBlock(docMap) {
 // markers it never promised (repo-template#146 round 6). Default: both.
 export function runNav({ root, check = false, surfaces = ['nav', 'status'] }) {
   const docMap = readDocMap(root);
-  const canon = parseDocMetadata(readText(join(root, 'docs', 'CANON.md')));
   let changed = false;
   if (surfaces.includes('nav')) {
+    // Only the nav block consumes CANON's summary — a status-only consumer
+    // without docs/CANON.md must not fail on a read its declared surface
+    // never required (repo-template#146 round 10).
+    const canon = parseDocMetadata(readText(join(root, 'docs', 'CANON.md')));
     changed = applyGeneratedFile({
       path: join(root, 'llms.txt'),
       blockId: 'nav',
