@@ -1,0 +1,108 @@
+# .agent/doc-map.yml — the diff->doc ownership spine (L0) of the self-maintaining docs system.
+# Sibling of .agent/check-map.yml. Full contract: docs/agent-process/doc-system.md.
+# Source: ArchonVII/repo-template#124 (red-teamed design, 2026-06-27).
+#
+# The docs-gate and the generators read ONLY this to decide what to regenerate / check / heal on a
+# change set, so there is no full-repo doc grep in the PR-time hot path (token discipline). The map
+# scopes the EXPENSIVE/LLM ops (L3 heal, closeout flagging); the free deterministic Node checks run
+# on the changed docs the map points at.
+version: 1
+
+# GENERATED: machine truth in, doc out; never hand-edited. Classified by INPUT VOLATILITY — this
+# split is the load-bearing design decision (a doc may only be committed+drift-gated when its inputs
+# are in the diff and stable at HEAD; volatile-input docs are rendered, not gated):
+#   class: committed -> regenerated INTO the PR via `npm run docs:render`; drift-gated (blocking).
+#   class: rendered  -> produced post-merge / on-read; NEVER committed or gated (inputs are live gh
+#                       state, so committing would false-fail a merge when the world moved with no diff).
+#   class: release   -> folded ONLY at release-cut from immutable git history (no per-PR changelog edits).
+generated:
+  - path: docs/INDEX.md
+    class: committed
+    generator: docs:render        # scripts/docs/index.mjs — walks docs/**/*.md frontmatter
+    block: index-pages            # ARCHONVII managed block id within the file
+    inputs: ["docs/**/*.md"]
+  - path: llms.txt
+    class: committed
+    generator: docs:render        # scripts/docs/nav.mjs — nav front door derived from CANON + this map
+    block: nav
+    inputs: ["docs/CANON.md", ".agent/doc-map.yml"]
+  - path: README.md
+    class: committed
+    generator: docs:render        # scripts/docs/nav.mjs — README "## Status" managed block
+    block: status
+    inputs: ["docs/CANON.md", ".agent/doc-map.yml"]
+  - path: docs/STATUS.md          # created with the status generator (S1 cont.); replaces hand-kept docs/project-status.md
+    class: rendered
+    generator: docs:status        # scripts/docs/status.mjs — in-flight PRs/issues, roadmap %, doc-health summary
+    inputs: ["gh:prs", "gh:issues", "doc-health"]
+  - path: CHANGELOG.md
+    class: release
+    generator: docs:changelog     # scripts/docs/changelog.mjs — Conventional Commits since last tag, at release-cut
+    inputs: ["git:log"]
+
+# CHECKED: human-authored, machine-VERIFIED. Re-checked only when a changed path matches `owns`.
+# `checks` names deterministic rules in scripts/doc-health. The BLOCKING subset at PR time is
+# links + path-refs + required-existence + generated-block-clean + coverage; everything else
+# (last-reviewed, placeholders, stale-terms, closed-issue-refs, supersession) is WARNING-only and
+# flows to the dashboard, so ordinary prose ("deferred", "pending", "#NN") never red-lights a PR.
+# The last-reviewed budget is inherited from scripts/doc-health config (CHARTER_BUDGETS) — not
+# duplicated here.
+checked:
+  - path: docs/CANON.md
+    owns: ["scripts/**", "schemas/**", "docs/adr/**"]
+    checks: [links, path-refs, last-reviewed, placeholders]
+  - path: docs/LIBRARIAN.md
+    owns: ["scripts/wiki/**"]
+    checks: [links, path-refs]
+  - path: docs/adr/**
+    owns: ["scripts/**"]
+    checks: [links, supersession]
+  - path: docs/agent-process/doc-system.md   # the consolidated contract for THIS system (created in S1)
+    owns: ["scripts/docs/**", "scripts/doc-health/**", "scripts/close/**", ".agent/doc-map.yml"]
+    checks: [links, path-refs]
+  - path: docs/agent-process/doc-sweep.md
+    owns: ["scripts/doc-sweep/**"]
+    checks: [links, path-refs]
+  - path: docs/template-library-inventory.md
+    owns: ["templates/**", "styles/**", "examples/**", "schemas/**"]
+    checks: [links, path-refs]
+
+# HUMAN: authorial prose. `heal_when` globs are the code areas whose change can make this doc's prose
+# wrong; at heal time ONLY docs whose heal_when matched the diff are queued for the bounded same-PR
+# L3 heal (the agent that wrote the code fixes the prose, for owner review at merge). Never `src/**`-
+# style blanket globs that would re-fan the whole doc set. VISION is never auto-healed (owner Q2/Q3,
+# 2026-06-27). docs/guides and docs/architecture are forward-looking (no entries yet; globs match nothing today).
+human:
+  - path: VISION.md
+    heal_when: []                 # owner intent only; never inferred or rewritten
+  - path: docs/decisions/decision-log.md
+    heal_when: []                 # append-only owner ledger; existence/format checked only
+  - path: docs/guides/**
+    heal_when: ["scripts/**"]
+  - path: docs/architecture/**
+    heal_when: ["scripts/**", "schemas/**"]
+
+# REQUIRED: the base floor every repo must carry. Owner 2026-06-27: VISION is OPT-IN (engines stay
+# lean), so it is NOT in the base — it and LIBRARIAN/wiki/project-capsules are added per selected
+# feature. The onboarding + .agent/startup-baseline.json `required` set is GENERATED from this list
+# so onboarding can never reference a doc it does not install (fixes ArchonVII/archon-setup#290).
+required:
+  base:
+    - AGENTS.md
+    - .agent/doc-map.yml
+    - docs/CANON.md
+    - docs/INDEX.md
+    - docs/agent-process/doc-system.md
+
+# COVERAGE: every top-level code root must be owned by at least one `checked` doc above, OR listed
+# here as intentionally unmapped. The coverage check BLOCKS when a NEW top-level root appears unmapped
+# — this is the keystone-rot guard (the one thing that silently rots if left to humans).
+code_roots:
+  scripts: docs/CANON.md
+  schemas: docs/CANON.md
+  templates: docs/template-library-inventory.md
+  styles: docs/template-library-inventory.md
+  examples: docs/template-library-inventory.md
+  docs: self                      # docs document themselves
+  test: unmapped_ok               # tests are self-documenting
+  projects: unmapped_ok           # project capsules are feature-scoped, not base docs

@@ -15,6 +15,8 @@
     "agent:prune": "node scripts/agent/prune.mjs",
     "agent:start-task": "node scripts/agent/start-task.mjs",
     "agent:pr-body": "node scripts/agent/pr-body.mjs",
+    "docs:render": "node scripts/docs/render.mjs",
+    "docs:status": "node scripts/docs/status.mjs",
     "wiki:start": "node scripts/wiki/start.mjs",
     "wiki:ingest": "node scripts/wiki/ingest.mjs",
     "wiki:query": "node scripts/wiki/query.mjs",
