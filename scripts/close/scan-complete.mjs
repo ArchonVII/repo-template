@@ -17,6 +17,7 @@ import {
   listHookShellFiles,
   listWorkflowFiles,
   markerPath,
+  parseRequiredGateCheckName,
   writeCloseScanMarker,
 } from './lib.mjs';
 
@@ -262,7 +263,9 @@ function validatePolicyFiles(root) {
   const failures = [];
   if (!/^version: [0-9]+/m.test(body)) failures.push('missing `version: <number>`');
   if (!/^required_gate:/m.test(body)) failures.push('missing `required_gate:`');
-  if (!/^\s+check_name: repo-required-gate \/ decision/m.test(body)) failures.push('missing required gate check name');
+  // Any declared gate is valid — repos may gate on e.g. `ci-success` instead of
+  // the repo-template default (#142, archon-setup#302).
+  if (!parseRequiredGateCheckName(body)) failures.push('missing required gate check name (`required_gate.check_name`)');
   return {
     name: 'policy-validation',
     ok: failures.length === 0,
@@ -445,7 +448,7 @@ function main() {
 
 // Export the scope-derivation and hook-syntax helpers so they can be unit-tested
 // without invoking `main()`. Mirrors the entry-point guard in pr-contract.mjs.
-export { checkHookSyntax, parseNameStatus, toBashPath, decideNodeTest };
+export { checkHookSyntax, parseNameStatus, toBashPath, decideNodeTest, validatePolicyFiles };
 
 if (process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
   main();

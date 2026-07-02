@@ -4,6 +4,37 @@ import { dirname, join, relative } from 'node:path';
 export const DEFAULT_REQUIRED_GATE = 'repo-required-gate / decision';
 export const DEFAULT_MARKER_PATH = '.agent/close-scan/complete.json';
 
+// #142 (archon-setup#302): the close guard and policy scan must honor the gate
+// the repo declares in .agent/check-map.yml (`required_gate.check_name`) instead
+// of assuming DEFAULT_REQUIRED_GATE. The check-map is deliberately simple YAML,
+// so a scoped regex read keeps repo-template at zero runtime deps (same approach
+// scan-complete already uses for the version/required_gate presence checks).
+export function parseRequiredGateCheckName(body) {
+  const text = String(body || '');
+  // Capture only the indented lines immediately under `required_gate:` so a
+  // `check_name:` beneath some other top-level block never counts as the gate.
+  const block = text.match(/^required_gate:[ \t]*\r?\n((?:[ \t]+\S.*\r?\n?)*)/m);
+  if (!block) return null;
+  const name = block[1].match(/^[ \t]+check_name:[ \t]*(.+?)[ \t]*\r?$/m);
+  if (!name) return null;
+  let value = name[1].trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
+    (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
+  ) {
+    value = value.slice(1, -1).trim();
+  }
+  return value || null;
+}
+
+export function readRequiredGateCheckName(root) {
+  try {
+    return parseRequiredGateCheckName(readFileSync(join(root, '.agent', 'check-map.yml'), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
 const DOC_EXTENSIONS_RE = /\.(md|txt|png|jpg|jpeg|gif|svg|webp|bmp|ico|avif)$/i;
 const DOC_PREFIXES = ['.changelog/'];
 const CHANGELOG_FRAGMENT_RE = /\.changelog\/unreleased\/[^/\s]+\.md\b/i;

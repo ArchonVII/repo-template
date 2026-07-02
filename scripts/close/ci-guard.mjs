@@ -10,6 +10,7 @@ import {
   evaluateRequiredChecks,
   markerPath,
   readCloseScanMarker,
+  readRequiredGateCheckName,
 } from './lib.mjs';
 
 function parseArgs(argv) {
@@ -138,9 +139,11 @@ function main() {
   } catch (err) {
     checksLoadFailure = `Could not load PR checks from GitHub: ${err.message}`;
   }
+  // Gate resolution order (#142): explicit flag > the repo's declared gate in
+  // .agent/check-map.yml > the repo-template default.
   const requiredCheck = evaluateRequiredChecks({
     checkRuns: checks,
-    requiredCheckName: args['required-check'] || DEFAULT_REQUIRED_GATE,
+    requiredCheckName: args['required-check'] || readRequiredGateCheckName(root) || DEFAULT_REQUIRED_GATE,
   });
   const failures = [
     ...markerResult.failures,
