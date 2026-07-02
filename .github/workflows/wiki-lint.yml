@@ -30,6 +30,12 @@ on:
       - 'scripts/wiki/**'
       - 'package.json'
 
+# Superseded runs on the same PR are pure spend — cancel them; push runs on
+# main are never cancelled (#140).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   wiki:
     runs-on: ubuntu-latest

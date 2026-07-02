@@ -3,7 +3,11 @@ name: Repo Required Gate
 on:
   pull_request:
     branches: [main]
-    types: [opened, edited, synchronize, reopened, ready_for_review]
+    # labeled/unlabeled are required for the `ci:full` escape hatch; the
+    # concurrency group + job `if:` below keep non-ci:full label churn from
+    # starting or cancelling real gate runs (#140; mirrors the recommended
+    # caller in github-workflows examples/repo-required-gate.yml).
+    types: [opened, edited, synchronize, reopened, ready_for_review, labeled, unlabeled]
   merge_group:
 
 permissions:
@@ -11,11 +15,31 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: repo-required-gate-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: >-
+    repo-required-gate-${{ github.event.pull_request.number || github.ref }}-${{
+      github.event_name == 'pull_request' &&
+      (github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
+      github.event.label.name != 'ci:full' &&
+      format('label-skip-{0}', github.event.label.name) ||
+      'gate'
+    }}
+  cancel-in-progress: >-
+    ${{
+      github.event_name == 'pull_request' &&
+      (
+        (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+        github.event.label.name == 'ci:full'
+      )
+    }}
 
 jobs:
   repo-required-gate:
+    if: >-
+      ${{
+        github.event_name != 'pull_request' ||
+        (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+        github.event.label.name == 'ci:full'
+      }}
     uses: ArchonVII/github-workflows/.github/workflows/repo-required-gate.yml@v1
     with:
       stack: node

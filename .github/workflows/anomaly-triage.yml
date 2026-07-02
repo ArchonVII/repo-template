@@ -17,6 +17,15 @@ name: Anomaly triage
 on:
   pull_request:
     types: [opened, ready_for_review, synchronize]
+    # The reusable is an idempotent no-op when the anomaly file is absent, so
+    # only trigger when the PR diff actually contains it (#140).
+    paths:
+      - ".archon/anomalies-thispr.md"
+
+# Superseded runs on the same PR are pure spend — cancel them (#140).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   triage:
