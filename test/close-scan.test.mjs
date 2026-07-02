@@ -195,11 +195,25 @@ test('parseRequiredGateCheckName reads the declared gate out of a check-map body
   );
   // A '#' with no preceding whitespace is part of the value, not a comment.
   assert.equal(parseRequiredGateCheckName('required_gate:\n  check_name: gate#1\n'), 'gate#1');
+
+  // A trailing comment on the section header itself is valid YAML and must not
+  // hide the block (#142 review round 2).
+  assert.equal(
+    parseRequiredGateCheckName('required_gate: # aggregate gate\n  check_name: ci-success\n'),
+    'ci-success'
+  );
+  assert.equal(
+    parseRequiredGateCheckName('version: 1\r\nrequired_gate:  # gate\r\n  check_name: ci-success\r\n'),
+    'ci-success'
+  );
 });
 
 test('parseRequiredGateCheckName returns null when the gate is not declared', () => {
   assert.equal(parseRequiredGateCheckName('version: 1\ndefaults:\n  stack: node\n'), null);
   assert.equal(parseRequiredGateCheckName('required_gate:\n  workflow: .github/workflows/x.yml\n'), null);
+  // An inline scalar is not the declared block shape — only a trailing comment
+  // may follow the header.
+  assert.equal(parseRequiredGateCheckName('required_gate: ci-success\n'), null);
   assert.equal(parseRequiredGateCheckName('required_gate:\n  check_name: ""\n'), null);
   // check_name under a DIFFERENT block must not count as the required gate.
   assert.equal(parseRequiredGateCheckName('other_block:\n  check_name: not-the-gate\n'), null);

@@ -30,7 +30,9 @@ export function parseRequiredGateCheckName(body) {
   const text = String(body || '');
   // Capture only the indented lines immediately under `required_gate:` so a
   // `check_name:` beneath some other top-level block never counts as the gate.
-  const block = text.match(/^required_gate:[ \t]*\r?\n((?:[ \t]+\S.*\r?\n?)*)/m);
+  // The header may carry a trailing YAML comment (`required_gate: # gate`);
+  // anything else after the colon is an inline scalar, not the block shape.
+  const block = text.match(/^required_gate:[ \t]*(?:#.*)?\r?\n((?:[ \t]+\S.*\r?\n?)*)/m);
   if (!block) return null;
   const name = block[1].match(/^[ \t]+check_name:[ \t]*(.+?)[ \t]*\r?$/m);
   if (!name) return null;
