@@ -70,3 +70,6 @@ progress.md
 # Crystallized-facts tier is a machine-local junction; the ops log is append-only/local.
 docs/memory/
 docs/log.md
+
+# rendered-class dashboard (docs:status) — volatile inputs, never committed (#124)
+docs/STATUS.md
