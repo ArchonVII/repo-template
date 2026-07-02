@@ -434,7 +434,9 @@ test('checkRepo: path-refs verify backtick repo paths in declaring docs, exempti
     'and `docs/project-status.md` exists.',
     'Prose examples must not block (#146 review): git ranges `origin/main...branch` and',
     '`origin/main..HEAD`, bare dirs `dir/`, cross-repo refs `repo-template/AGENTS.md`,',
-    'and GitHub slugs `ArchonVII/repo-template` are not repo paths here.',
+    'and GitHub slugs `ArchonVII/repo-template` are not repo paths here. Directory',
+    'mentions like the optional runtime `docs/some-runtime-claims/` are layout',
+    'descriptions, not file claims — never existence-checked (#146 round 3).',
   ].join('\n')));
   writeInRepo(repo, 'scripts/real-root-marker.mjs', 'export {};\n');
   commitAll(repo, 'docs: path refs (#0)');

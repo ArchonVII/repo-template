@@ -134,10 +134,11 @@ changed (`--changed <path>` / `--changed-from <git-ref>`); doc-path hits escalat
 file granularity (one ADR changing never weaponizes rot in a sibling), and
 pre-existing rot elsewhere never blocks a PR that didn't touch it. Path-refs exempt
 doc-map `rendered`/`release` paths, gitignored runtime paths (`git check-ignore`),
-tokens with git-range/`dir/`-style shapes, and anything not anchored at a real
-top-level root of this repo. The writing convention that follows: **backtick a repo
-path only if it exists at HEAD** — historical or cross-repo mentions go in italics,
-not backticks. The CLI exits `1` when blocking findings exist, `0` for warnings-only —
+git-range shapes, directory mentions (a trailing `/` describes layout — often an
+optional runtime dir — and is never existence-checked), and anything not anchored at
+a real top-level root of this repo. The writing convention that follows: **backtick a
+repo file path only if it exists at HEAD** — historical or cross-repo mentions go in
+italics, and directory references keep their trailing slash. The CLI exits `1` when blocking findings exist, `0` for warnings-only —
 the exact contract P1 wires under `repo-required-gate / decision`.
 
 ## What blocks at PR time

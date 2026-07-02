@@ -292,7 +292,12 @@ export function extractPathRefTokens(text) {
       if (!token.includes('/') || token.includes('..')) continue;
       if (/[\s*?{}[\]<>:]/.test(token)) continue;
       if (token.startsWith('/') || token.startsWith('#') || token.startsWith('--')) continue;
-      const segments = token.replace(/\/$/, '').split('/');
+      // Trailing slash = a directory MENTION describing layout — often an
+      // optional runtime dir (.agent/coordination/claims/) that legitimately
+      // does not exist on a clean checkout. Only file references are
+      // existence-checked (#146 review round 3).
+      if (token.endsWith('/')) continue;
+      const segments = token.split('/');
       if (segments.length < 2) continue;
       if (!segments.every((seg) => /^[\w.@-]+$/.test(seg))) continue;
       seen.add(token);
