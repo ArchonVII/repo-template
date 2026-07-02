@@ -1,0 +1,9 @@
+{
+  "file": "scripts/pr-contract.mjs",
+  "upstreamRepo": "ArchonVII/github-workflows",
+  "upstreamPath": "scripts/pr-contract.mjs",
+  "upstreamRef": "PR #100 (substance-only contract, #99)",
+  "sha256LfNormalized": "90ffcb6c1445f53f572945a5770402e6d2644ff26bec7ffcb2d760a74c5a780e",
+  "capturedAt": "2026-07-01",
+  "refreshHowTo": "Copy the file byte-for-byte from the upstream repo, recompute the LF-normalized sha256 (node -e \"...createHash('sha256')...\"), and update this manifest in the same commit. Never hand-edit the vendored file; fix upstream first."
+}

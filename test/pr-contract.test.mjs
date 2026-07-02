@@ -53,13 +53,27 @@ describe("validatePrContract", () => {
     assert.ok(result.errors.some((error) => error.code === "invalid_title" && error.path === "title"));
   });
 
-  it("requires exact heading order for non-doc PRs", () => {
+  it("still fails a renamed section heading — via the substance check, with a heading advisory (#138)", () => {
     const body = validBody.replace("### Verification Notes", "### Notes From Verification");
 
     const result = validatePrContract(input({ body }));
 
     assert.equal(result.ok, false);
-    assert.ok(result.errors.some((error) => error.code === "missing_heading" && error.path === "body"));
+    assert.ok(result.errors.some((error) => error.code === "empty_verification_notes" && error.path === "body"));
+    assert.ok(result.warnings.some((warning) => warning.code === "missing_heading" && warning.path === "body"));
+  });
+
+  it("accepts a plain-bullet verification item with no checkbox or evidence block (#138)", () => {
+    const body = validBody.replace(
+      ["- [x] npm test", "", "```evidence", "command: npm test", "location: local", "result: passed", "timestamp: 2026-05-31T20:00:00Z", "```"].join("\n"),
+      "- Ran `npm test` in the lane worktree: full suite green.",
+    );
+
+    const result = validatePrContract(input({ body }));
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.facts.verificationItemCount, 1);
   });
 
   it("rejects placeholder scaffolds even when they contain checked boxes", () => {
@@ -90,8 +104,9 @@ describe("validatePrContract", () => {
     assert.equal(result.ok, false);
     assert.ok(codes.includes("placeholder_text"));
     assert.ok(codes.includes("generic_verification"));
-    assert.ok(codes.includes("unchecked_required_box"));
     assert.ok(codes.includes("missing_issue_link"));
+    // Unchecked boxes are advisory under the substance-only contract (#138).
+    assert.ok(result.warnings.some((warning) => warning.code === "unchecked_verification_item"));
   });
 
   it("allows docs-only PRs to skip body ceremony while keeping title and branch checks", () => {

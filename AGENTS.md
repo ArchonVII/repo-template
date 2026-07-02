@@ -109,8 +109,15 @@ Do not run `git switch -c` in the primary checkout. If unsure where you are, run
   update the check map and `repo-required-gate` caller in the same PR.
 - Run the repo's lint, typecheck, and test commands before review. Record exact commands and
   results in PR verification notes.
-- Tick a verification checkbox only after the backing command or manual check actually
-  passed, or after marking it explicitly not relevant in the template.
+- `## Verification` needs at least one substantive item — a plain bullet or a checkbox —
+  recording what was actually run or checked (substance-only contract, gw#99). Placeholders
+  and generic claims ("tests pass", "CI green") fail; a bullet with the real command and
+  result passes. Evidence blocks are the recommended shape and are validated when present;
+  their absence is advisory. If you do tick a checkbox, tick it only after the backing
+  command or manual check actually passed.
+- Validate a drafted body BEFORE creating the PR — same validator CI runs, zero paid
+  re-runs on formatting: `npm run pr:contract -- --body-file - --title "<title>" --branch
+  <branch>` (body on stdin).
 - If user-visible behavior changed, smoke-test it and record what was exercised.
 - Do not run `gh pr ready` directly. Use:
 
