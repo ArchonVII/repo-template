@@ -127,6 +127,11 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
     }
   }
 
+  const resolveDocRels = (entryPath) => {
+    if (!/[*?{[]/.test(entryPath)) return textByRel.has(entryPath) ? [entryPath] : [];
+    const re = docMapGlobToRegExp(entryPath);
+    return mdFiles.map((f) => f.rel).filter((rel) => re.test(rel));
+  };
   const codeRoots = docMap.code_roots || {};
   const mappedRoots = new Set(Object.keys(codeRoots));
   for (const dir of topLevelDirs(root)) {
@@ -158,6 +163,15 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
       });
       continue;
     }
+    if (resolveDocRels(entry.path).length === 0) {
+      addFinding(findings, {
+        severity: 'blocking',
+        code: 'code-root-mapping-invalid',
+        path: rootDir,
+        message: `code_roots maps ${rootDir} to ${value}, but that checked doc resolves to no markdown file.`,
+      });
+      continue;
+    }
     const rootFiles = allRels.filter((rel) => rel.startsWith(`${rootDir}/`));
     if (rootFiles.length === 0) continue; // empty root: nothing to rot yet
     const owns = toList(entry.owns).map(docMapGlobToRegExp);
@@ -177,11 +191,7 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
   // pre-existing rot in a sibling ADR blocking — while an owns hit escalates
   // every doc of the entry (the changed code may invalidate any of them).
   const checked = (docMap.checked || []).filter((doc) => doc?.path);
-  const resolveDocRels = (entryPath) => {
-    if (!/[*?{[]/.test(entryPath)) return textByRel.has(entryPath) ? [entryPath] : [];
-    const re = docMapGlobToRegExp(entryPath);
-    return mdFiles.map((f) => f.rel).filter((rel) => re.test(rel));
-  };
+
   const changedSet = new Set(changedPaths);
   const escalatedLinkRels = new Set();
   const escalatedPathRefRels = new Set();
@@ -710,14 +720,22 @@ async function loadRenderCheckForCli(repoRoot, docMap) {
   const runners = [];
   const blocks = new Set();
   for (const entry of committed) {
-    const expected = entry.block ? KNOWN_BLOCK_SURFACES[entry.block] : undefined;
+    // No block id → unverifiable committed surface; omitting block: must not
+    // silently disable the gate (#146 round 8).
+    if (!entry.block) {
+      runners.push(() => {
+        throw new Error(`committed generated entry ${entry.path || '(no path)'} declares no block id — unverifiable`);
+      });
+      continue;
+    }
+    const expected = KNOWN_BLOCK_SURFACES[entry.block];
     if (expected && entry.path !== expected) {
       runners.push(() => {
         throw new Error(`doc-map declares block ${entry.block} at ${entry.path}, but its checker manages ${expected}`);
       });
       continue;
     }
-    if (entry.block) blocks.add(entry.block);
+    blocks.add(entry.block);
   }
   try {
     if (blocks.has('index-pages')) {

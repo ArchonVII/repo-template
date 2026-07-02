@@ -681,3 +681,60 @@ test('CLI fails closed when a declared generated path mismatches its block surfa
   assert.ok(failed, 'mismatched path must fail closed');
   assert.match(failed.message, /NO_SUCH_INDEX/);
 });
+
+// #146 round 8, part 1: a committed entry with NO block id is unverifiable —
+// omitting block: must not silently disable the generated-block gate.
+test('CLI fails closed when a committed entry omits its block id', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, '.agent/doc-map.yml', [
+    'version: 1',
+    'generated:',
+    '  - path: docs/INDEX.md',
+    '    class: committed',
+    '    generator: docs:render',
+    'code_roots:',
+    '  docs: self',
+    '',
+  ].join('\n'));
+  commitAll(repo, 'chore: committed entry without block (#0)');
+
+  let code = 0;
+  let stdout = '';
+  try {
+    stdout = execFileSync(process.execPath, [
+      join('scripts', 'doc-health', 'health.mjs'),
+      '--repo', repo, '--json', '--now', NOW_ISO,
+    ], { cwd: process.cwd(), encoding: 'utf8' });
+  } catch (err) {
+    code = err.status;
+    stdout = err.stdout;
+  }
+  assert.equal(code, 1);
+  const report = JSON.parse(stdout);
+  const failed = report.findings.find((f) => f.code === 'generated-block-check-failed');
+  assert.ok(failed, 'blockless committed entry must fail closed');
+  assert.match(failed.message, /docs\/INDEX\.md/);
+});
+
+// #146 round 8, part 2: a code_roots mapping to a checked entry whose own
+// path resolves to no file satisfies coverage while re-triggering nothing —
+// the mapped doc must actually exist.
+test('checkRepo: code_roots mapping to a nonexistent checked doc blocks', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'src/index.mjs', 'export {};\n');
+  commitAll(repo, 'feat: src root (#0)');
+
+  const report = checkRepo(repo, {
+    now: NOW,
+    docMap: {
+      ...L2_DOC_MAP,
+      // Same typo repeated in checked.path and code_roots: lookup succeeds,
+      // owns covers src files, but the doc itself does not exist.
+      checked: [{ path: 'docs/GHOST.md', owns: ['src/**'], checks: ['links'] }],
+      code_roots: { docs: 'self', src: 'docs/GHOST.md' },
+    },
+  });
+  const invalid = report.findings.filter((f) => f.code === 'code-root-mapping-invalid');
+  assert.deepEqual(invalid.map((f) => f.path), ['src']);
+  assert.match(invalid[0].message, /GHOST/);
+});
