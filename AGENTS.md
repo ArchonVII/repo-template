@@ -138,7 +138,9 @@ npm run close:ci:guard -- --repo OWNER/REPO --pr <number>
 ```
 
 `close:ci:guard` must pass before `agent:close-preflight`, `agent:pr-ready`, or merge
-actions. Missing, pending, or unavailable required CI is not a pass.
+actions. Missing, pending, or unavailable required CI is not a pass. The guard checks the
+gate this repo declares in `.agent/check-map.yml` (`required_gate.check_name`) — here
+`repo-required-gate / decision`; `--required-check <name>` overrides for one run.
 
 The guard is idempotent against `HEAD`: run `close:ci:guard` **once for the current
 `HEAD`**. A single passing run covers `agent:close-preflight`, `agent:pr-ready`, and the

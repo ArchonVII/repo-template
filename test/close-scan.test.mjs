@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -10,12 +10,15 @@ import {
   evaluateCloseScanMarker,
   evaluateRepoUpdateLogDecision,
   evaluateRequiredChecks,
+  parseRequiredGateCheckName,
+  readRequiredGateCheckName,
 } from '../scripts/close/lib.mjs';
 import {
   checkHookSyntax,
   decideNodeTest,
   parseNameStatus,
   toBashPath,
+  validatePolicyFiles,
 } from '../scripts/close/scan-complete.mjs';
 
 test('classifyCloseScanScope requires local parity checks for code and workflow changes', () => {
@@ -148,6 +151,133 @@ test('evaluateRequiredChecks fails closed when the required gate is unavailable 
   });
   assert.equal(pending.ok, false);
   assert.match(pending.failures[0], /not completed/i);
+});
+
+// #142 (archon-setup#302): the guard and policy scan must honor the gate the
+// repo actually declares in .agent/check-map.yml instead of assuming the
+// repo-template default — a consumer whose gate is `ci-success` was unsatisfiable.
+test('parseRequiredGateCheckName reads the declared gate out of a check-map body', () => {
+  assert.equal(parseRequiredGateCheckName([
+    'version: 1',
+    '',
+    'required_gate:',
+    '  check_name: repo-required-gate / decision',
+    '  workflow: .github/workflows/repo-required-gate.yml',
+    '',
+    'defaults:',
+    '  stack: minimal',
+  ].join('\n')), 'repo-required-gate / decision');
+
+  assert.equal(parseRequiredGateCheckName([
+    'version: 1',
+    'required_gate:',
+    '  check_name: ci-success',
+    '  workflow: .github/workflows/node-ci.yml',
+  ].join('\n')), 'ci-success');
+
+  assert.equal(parseRequiredGateCheckName([
+    'required_gate:',
+    '  check_name: "quoted / gate"',
+  ].join('\n')), 'quoted / gate');
+
+  // CRLF bodies must parse the same way (Windows checkouts).
+  assert.equal(parseRequiredGateCheckName('version: 1\r\nrequired_gate:\r\n  check_name: ci-success\r\n'), 'ci-success');
+
+  // Unquoted trailing YAML comments must not leak into the gate name the
+  // guard then looks for (#142 review).
+  assert.equal(
+    parseRequiredGateCheckName('required_gate:\n  check_name: ci-success # aggregate gate\n'),
+    'ci-success'
+  );
+  assert.equal(
+    parseRequiredGateCheckName('required_gate:\n  check_name: "repo-required-gate / decision" # the gate\n'),
+    'repo-required-gate / decision'
+  );
+  // A '#' with no preceding whitespace is part of the value, not a comment.
+  assert.equal(parseRequiredGateCheckName('required_gate:\n  check_name: gate#1\n'), 'gate#1');
+
+  // A trailing comment on the section header itself is valid YAML and must not
+  // hide the block (#142 review round 2).
+  assert.equal(
+    parseRequiredGateCheckName('required_gate: # aggregate gate\n  check_name: ci-success\n'),
+    'ci-success'
+  );
+  assert.equal(
+    parseRequiredGateCheckName('version: 1\r\nrequired_gate:  # gate\r\n  check_name: ci-success\r\n'),
+    'ci-success'
+  );
+
+  // Blank and comment-only lines inside the mapping are valid YAML and must
+  // not end the block early (#142 review round 3).
+  assert.equal(
+    parseRequiredGateCheckName('required_gate:\n\n  check_name: ci-success\n'),
+    'ci-success'
+  );
+  assert.equal(
+    parseRequiredGateCheckName('required_gate:\n# column-0 comment\n  check_name: ci-success\n'),
+    'ci-success'
+  );
+  assert.equal(
+    parseRequiredGateCheckName('required_gate:\r\n  workflow: x.yml\r\n\r\n  check_name: ci-success\r\n'),
+    'ci-success'
+  );
+});
+
+test('parseRequiredGateCheckName returns null when the gate is not declared', () => {
+  assert.equal(parseRequiredGateCheckName('version: 1\ndefaults:\n  stack: node\n'), null);
+  assert.equal(parseRequiredGateCheckName('required_gate:\n  workflow: .github/workflows/x.yml\n'), null);
+  // An inline scalar is not the declared block shape — only a trailing comment
+  // may follow the header.
+  assert.equal(parseRequiredGateCheckName('required_gate: ci-success\n'), null);
+  assert.equal(parseRequiredGateCheckName('required_gate:\n  check_name: ""\n'), null);
+  // check_name under a DIFFERENT block must not count as the required gate —
+  // including when a blank line separates required_gate from that block, so
+  // the blank-line allowance cannot leak the capture across blocks.
+  assert.equal(parseRequiredGateCheckName('other_block:\n  check_name: not-the-gate\n'), null);
+  assert.equal(
+    parseRequiredGateCheckName('required_gate:\n  workflow: x.yml\n\ndefaults:\n  check_name: sneaky\n'),
+    null
+  );
+  assert.equal(parseRequiredGateCheckName(''), null);
+  assert.equal(parseRequiredGateCheckName(null), null);
+});
+
+test('readRequiredGateCheckName reads .agent/check-map.yml from a repo root, null when absent', () => {
+  const root = mkdtempSync(join(tmpdir(), 'close-gate-checkmap-'));
+  try {
+    assert.equal(readRequiredGateCheckName(root), null);
+    mkdirSync(join(root, '.agent'), { recursive: true });
+    writeFileSync(join(root, '.agent', 'check-map.yml'), 'version: 1\nrequired_gate:\n  check_name: ci-success\n');
+    assert.equal(readRequiredGateCheckName(root), 'ci-success');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validatePolicyFiles accepts any declared gate name and rejects a missing one (#142)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'close-gate-policy-'));
+  try {
+    mkdirSync(join(root, '.agent'), { recursive: true });
+
+    // A custom gate (archon-setup's ci-success) must pass, not just the default.
+    writeFileSync(join(root, '.agent', 'check-map.yml'), 'version: 1\nrequired_gate:\n  check_name: ci-success\n');
+    assert.equal(validatePolicyFiles(root).ok, true);
+
+    // The repo-template default still passes.
+    writeFileSync(
+      join(root, '.agent', 'check-map.yml'),
+      'version: 1\nrequired_gate:\n  check_name: repo-required-gate / decision\n'
+    );
+    assert.equal(validatePolicyFiles(root).ok, true);
+
+    // Declaring the block without a name still fails.
+    writeFileSync(join(root, '.agent', 'check-map.yml'), 'version: 1\nrequired_gate:\n  workflow: x.yml\n');
+    const missingName = validatePolicyFiles(root);
+    assert.equal(missingName.ok, false);
+    assert.match(missingName.summary, /check name/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('buildCloseScanMarker records exact HEAD, decisions, checks, and timestamp', () => {

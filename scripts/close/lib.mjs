@@ -4,6 +4,62 @@ import { dirname, join, relative } from 'node:path';
 export const DEFAULT_REQUIRED_GATE = 'repo-required-gate / decision';
 export const DEFAULT_MARKER_PATH = '.agent/close-scan/complete.json';
 
+// #142 (archon-setup#302): the close guard and policy scan must honor the gate
+// the repo declares in .agent/check-map.yml (`required_gate.check_name`) instead
+// of assuming DEFAULT_REQUIRED_GATE. The check-map is deliberately simple YAML,
+// so a scoped regex read keeps repo-template at zero runtime deps (same approach
+// scan-complete already uses for the version/required_gate presence checks).
+// Drop an unquoted trailing YAML comment (` # ...`). Quote-aware so a `#`
+// inside a quoted gate name survives; a bare `#` with no preceding whitespace
+// is part of the value, matching YAML's comment rule.
+function stripTrailingYamlComment(value) {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < value.length; i += 1) {
+    const ch = value[i];
+    if (ch === "'" && !inDouble) inSingle = !inSingle;
+    else if (ch === '"' && !inSingle) inDouble = !inDouble;
+    else if (ch === '#' && !inSingle && !inDouble && /\s/.test(value[i - 1] || ' ')) {
+      return value.slice(0, i).trimEnd();
+    }
+  }
+  return value;
+}
+
+export function parseRequiredGateCheckName(body) {
+  const text = String(body || '');
+  // Capture only the lines immediately under `required_gate:` so a
+  // `check_name:` beneath some other top-level block never counts as the gate.
+  // The header may carry a trailing YAML comment (`required_gate: # gate`);
+  // anything else after the colon is an inline scalar, not the block shape.
+  // Within the block, indented content, comment-only, and blank lines are all
+  // valid YAML and must not end the capture; the first non-indented content
+  // line (the next top-level key) still does, so a blank line cannot leak the
+  // capture into a different block (check_name there stays out of reach).
+  const block = text.match(
+    /^required_gate:[ \t]*(?:#.*)?\r?\n((?:[ \t]+\S.*\r?\n?|[ \t]*#.*\r?\n?|[ \t]*\r?\n)*)/m
+  );
+  if (!block) return null;
+  const name = block[1].match(/^[ \t]+check_name:[ \t]*(.+?)[ \t]*\r?$/m);
+  if (!name) return null;
+  let value = stripTrailingYamlComment(name[1].trim()).trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
+    (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
+  ) {
+    value = value.slice(1, -1).trim();
+  }
+  return value || null;
+}
+
+export function readRequiredGateCheckName(root) {
+  try {
+    return parseRequiredGateCheckName(readFileSync(join(root, '.agent', 'check-map.yml'), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
 const DOC_EXTENSIONS_RE = /\.(md|txt|png|jpg|jpeg|gif|svg|webp|bmp|ico|avif)$/i;
 const DOC_PREFIXES = ['.changelog/'];
 const CHANGELOG_FRAGMENT_RE = /\.changelog\/unreleased\/[^/\s]+\.md\b/i;
