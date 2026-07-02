@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -11,7 +12,7 @@ import {
   readDocMap,
   renderManagedBlock,
 } from '../scripts/docs/lib.mjs';
-import { collectIndexDocs, displayStatus, renderIndexBlock } from '../scripts/docs/index.mjs';
+import { collectIndexDocs, displayStatus, renderIndexBlock, runIndex } from '../scripts/docs/index.mjs';
 import { renderNavBlock, renderReadmeStatusBlock } from '../scripts/docs/nav.mjs';
 import { buildStatusModel, renderStatusMarkdown } from '../scripts/docs/status.mjs';
 
@@ -141,6 +142,34 @@ test('collectIndexDocs walks docs/, skipping raw intake, fragment ledger, and IN
   }
 });
 
+// Rendered-class docs (doc-map) are never committed, so indexing one links a
+// file absent at HEAD — and a local `docs:status` run would leave the
+// `docs:render --check` drift gate failing (#144 self-review).
+test('runIndex excludes rendered-class docs declared in the doc-map', () => {
+  const root = tempRoot();
+  try {
+    mkdirSync(join(root, '.agent'), { recursive: true });
+    mkdirSync(join(root, 'docs'), { recursive: true });
+    writeFileSync(
+      join(root, '.agent', 'doc-map.yml'),
+      ['version: 1', 'generated:', '  - path: docs/STATUS.md', '    class: rendered', '    generator: docs:status', ''].join('\n')
+    );
+    writeFileSync(join(root, 'docs', 'STATUS.md'), '# status dashboard\n');
+    writeFileSync(join(root, 'docs', 'real-page.md'), '---\nsummary: Durable.\n---\n# real\n');
+    writeFileSync(
+      join(root, 'docs', 'INDEX.md'),
+      '# index\n\n<!-- BEGIN ARCHONVII MANAGED BLOCK: index-pages -->\nstale\n<!-- END ARCHONVII MANAGED BLOCK: index-pages -->\n'
+    );
+
+    runIndex({ root });
+    const index = readFileSync(join(root, 'docs', 'INDEX.md'), 'utf8');
+    assert.ok(index.includes('real-page.md'));
+    assert.ok(!index.includes('STATUS.md'), 'rendered-class docs must not enter the committed index');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('renderIndexBlock groups by directory, sorts deterministically, carries summaries', () => {
   const block = renderIndexBlock([
     { rel: 'docs/CANON.md', summary: 'Ground truth.', status: 'CANON' },
@@ -213,17 +242,71 @@ test('status model summarizes volatile inputs and renders with an injected times
       { number: 999, title: 'draft thing', isDraft: true, url: 'https://x/999' },
     ],
     issues: [{ number: 124, title: 'Epic: docs system', labels: [{ name: 'epic' }], url: 'https://x/124' }],
-    docHealth: { warnings: [{ rule: 'stale-terms', path: 'docs/CANON.md' }], errors: [] },
+    // doc-health.v1 report shape — what scripts/doc-health/health.mjs --json
+    // actually emits (findings, not warnings/errors arrays; #144 review).
+    docHealth: {
+      schemaVersion: 'doc-health.v1',
+      summary: { findings: 2, warnings: 1, blocking: 1 },
+      findings: [
+        {
+          severity: 'warning',
+          code: 'charter-overbudget',
+          path: 'README.md',
+          line: 1,
+          message: 'README.md has 161 lines; charter budget is 150.',
+        },
+        { severity: 'blocking', code: 'doc-health-run', path: 'scripts/doc-health/health.mjs', message: 'boom' },
+      ],
+    },
     now: '2026-07-02T00:00:00.000Z',
   });
   assert.equal(model.openPrs.length, 2);
   assert.equal(model.draftPrCount, 1);
   assert.equal(model.openIssues.length, 1);
   assert.equal(model.docWarningCount, 1);
+  assert.equal(model.docErrorCount, 1);
 
   const md = renderStatusMarkdown(model);
   assert.ok(md.includes('2026-07-02T00:00:00.000Z'));
   assert.ok(md.includes('#143'));
   assert.ok(md.includes('rendered, not committed'), 'dashboard must declare its class');
-  assert.ok(md.includes('stale-terms'));
+  assert.ok(md.includes('charter-overbudget'));
+  assert.ok(md.includes('README.md:1'));
+  assert.ok(md.includes('1 blocking, 1 warning'));
+});
+
+// The live producer is the fixture (#124 spine principle): if health.mjs and
+// the status consumer ever disagree on shape, this fails loudly instead of the
+// dashboard silently rendering "0 warnings" (#144 review).
+test('status model must not drop findings from the live doc-health producer', () => {
+  let raw;
+  try {
+    raw = execFileSync(
+      process.execPath,
+      [join(REPO_ROOT, 'scripts', 'doc-health', 'health.mjs'), '--repo', REPO_ROOT, '--json'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+  } catch (err) {
+    raw = err.stdout; // health.mjs exits non-zero on blocking findings but still prints its report
+  }
+  const report = JSON.parse(raw);
+  const model = buildStatusModel({ prs: [], issues: [], docHealth: report, now: 'x' });
+  assert.equal(model.docWarningCount, report.summary.warnings);
+  assert.equal(model.docWarningCount + model.docErrorCount, report.summary.findings);
+});
+
+test('status render surfaces gh snapshot failures instead of reporting zero open work', () => {
+  const model = buildStatusModel({
+    prs: [],
+    issues: [],
+    prsError: 'gh: To get started with GitHub CLI, please run: gh auth login',
+    issuesError: 'gh: To get started with GitHub CLI, please run: gh auth login',
+    docHealth: { findings: [] },
+    now: 'x',
+  });
+  const md = renderStatusMarkdown(model);
+  assert.ok(md.includes('unavailable'), 'failed snapshots must say so');
+  assert.ok(md.includes('gh auth login'), 'the gh error must reach the reader');
+  assert.ok(!md.includes('Open PRs (0'), 'a failed snapshot must not read as zero open PRs');
+  assert.ok(!md.includes('Open issues (0'), 'a failed snapshot must not read as zero open issues');
 });

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { parseDocMetadata, readText, walkFiles } from '../doc-health/lib.mjs';
-import { applyGeneratedFile } from './lib.mjs';
+import { applyGeneratedFile, readDocMap } from './lib.mjs';
 
 // Tiers excluded from the index, with the reason each is out:
 // - docs/raw/            immutable intake sources (LIBRARIAN wiki tiers) — not durable pages
@@ -13,14 +13,15 @@ import { applyGeneratedFile } from './lib.mjs';
 // - docs/INDEX.md        the index itself
 // - docs/log.md          append-only ops log (gitignored where present)
 const EXCLUDED_PREFIXES = ['docs/raw/', 'docs/repo-update-log/'];
-const EXCLUDED_FILES = new Set(['docs/INDEX.md', 'docs/log.md']);
+const EXCLUDED_FILES = ['docs/INDEX.md', 'docs/log.md'];
 
-export function collectIndexDocs(root) {
+export function collectIndexDocs(root, { exclude = [] } = {}) {
+  const excluded = new Set([...EXCLUDED_FILES, ...exclude]);
   const docs = [];
   for (const file of walkFiles(join(root, 'docs'))) {
     const rel = `docs/${file.rel}`;
     if (!rel.endsWith('.md')) continue;
-    if (EXCLUDED_FILES.has(rel)) continue;
+    if (excluded.has(rel)) continue;
     if (EXCLUDED_PREFIXES.some((prefix) => rel.startsWith(prefix))) continue;
     const meta = parseDocMetadata(readText(file.abs));
     docs.push({
@@ -72,10 +73,16 @@ export function renderIndexBlock(docs) {
 }
 
 export function runIndex({ root, check = false }) {
+  // Rendered-class docs (doc-map) are never committed: indexing one would link
+  // a file absent at HEAD, and a local `docs:status` run would leave the
+  // `docs:render --check` drift gate failing.
+  const rendered = readDocMap(root)
+    .generated.filter((d) => d.class === 'rendered')
+    .map((d) => d.path);
   return applyGeneratedFile({
     path: join(root, 'docs', 'INDEX.md'),
     blockId: 'index-pages',
-    body: renderIndexBlock(collectIndexDocs(root)),
+    body: renderIndexBlock(collectIndexDocs(root, { exclude: rendered })),
     check,
   });
 }

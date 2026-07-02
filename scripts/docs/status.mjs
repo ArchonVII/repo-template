@@ -10,8 +10,13 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // Pure: volatile snapshots in, display model out. `now` is injected so tests
-// and callers control the timestamp.
-export function buildStatusModel({ prs = [], issues = [], docHealth = null, now }) {
+// and callers control the timestamp. `docHealth` is a doc-health.v1 report
+// (scripts/doc-health/health.mjs --json): findings carry severity/code/path,
+// where anything not 'warning' counts as blocking. prsError/issuesError carry
+// a failed gh snapshot so the dashboard never renders a failure as zero work.
+export function buildStatusModel({ prs = [], issues = [], prsError = null, issuesError = null, docHealth = null, now }) {
+  const findings = Array.isArray(docHealth?.findings) ? docHealth.findings : [];
+  const docWarningCount = findings.filter((f) => f.severity === 'warning').length;
   return {
     generatedAt: now,
     openPrs: prs.map((pr) => ({ number: pr.number, title: pr.title, draft: Boolean(pr.isDraft), url: pr.url })),
@@ -22,9 +27,11 @@ export function buildStatusModel({ prs = [], issues = [], docHealth = null, now 
       labels: (issue.labels || []).map((l) => l.name).filter(Boolean),
       url: issue.url,
     })),
-    docWarnings: docHealth?.warnings ?? [],
-    docWarningCount: (docHealth?.warnings ?? []).length,
-    docErrorCount: (docHealth?.errors ?? []).length,
+    prsError,
+    issuesError,
+    docFindings: findings,
+    docWarningCount,
+    docErrorCount: findings.length - docWarningCount,
   };
 }
 
@@ -34,25 +41,32 @@ export function renderStatusMarkdown(model) {
     '',
     `_Class: rendered, not committed (.agent/doc-map.yml). Generated ${model.generatedAt} by \`npm run docs:status\`. Do not commit this file._`,
     '',
-    `## Open PRs (${model.openPrs.length}, ${model.draftPrCount} draft)`,
+    `## Open PRs (${model.prsError ? 'unavailable' : `${model.openPrs.length}, ${model.draftPrCount} draft`})`,
     '',
-    ...(model.openPrs.length === 0
-      ? ['- none']
-      : model.openPrs.map((pr) => `- #${pr.number}${pr.draft ? ' (draft)' : ''} ${pr.title} — ${pr.url}`)),
+    ...(model.prsError
+      ? [`- snapshot failed: ${model.prsError}`]
+      : model.openPrs.length === 0
+        ? ['- none']
+        : model.openPrs.map((pr) => `- #${pr.number}${pr.draft ? ' (draft)' : ''} ${pr.title} — ${pr.url}`)),
     '',
-    `## Open issues (${model.openIssues.length})`,
+    `## Open issues (${model.issuesError ? 'unavailable' : model.openIssues.length})`,
     '',
-    ...(model.openIssues.length === 0
-      ? ['- none']
-      : model.openIssues.map(
-          (i) => `- #${i.number} ${i.title}${i.labels.length ? ` [${i.labels.join(', ')}]` : ''} — ${i.url}`
+    ...(model.issuesError
+      ? [`- snapshot failed: ${model.issuesError}`]
+      : model.openIssues.length === 0
+        ? ['- none']
+        : model.openIssues.map(
+            (i) => `- #${i.number} ${i.title}${i.labels.length ? ` [${i.labels.join(', ')}]` : ''} — ${i.url}`
+          )),
+    '',
+    `## Doc health (${model.docErrorCount} blocking, ${model.docWarningCount} warning${model.docWarningCount === 1 ? '' : 's'})`,
+    '',
+    ...(model.docFindings.length === 0
+      ? ['- clean']
+      : model.docFindings.map(
+          (f) =>
+            `- [${f.severity}] ${f.code}: ${f.path}${f.line ? `:${f.line}` : ''}${f.message ? ` — ${f.message}` : ''}`
         )),
-    '',
-    `## Doc health (${model.docErrorCount} errors, ${model.docWarningCount} warnings)`,
-    '',
-    ...(model.docWarnings.length === 0
-      ? ['- no warnings']
-      : model.docWarnings.map((w) => `- ${w.rule}: ${w.path}${w.message ? ` — ${w.message}` : ''}`)),
     '',
   ];
   return lines.join('\n');
@@ -86,7 +100,18 @@ function docHealthJson(root) {
         /* fall through */
       }
     }
-    return { warnings: [], errors: [{ rule: 'doc-health-run', path: '(doc-health failed to run)' }] };
+    // Same doc-health.v1 finding shape the real producer emits, and severity
+    // 'blocking' so a broken checker shows up in the error count, not as clean.
+    return {
+      findings: [
+        {
+          severity: 'blocking',
+          code: 'doc-health-run',
+          path: 'scripts/doc-health/health.mjs',
+          message: err.message.split('\n')[0],
+        },
+      ],
+    };
   }
 }
 
@@ -96,6 +121,8 @@ export function runStatus({ root, now = new Date().toISOString() }) {
   const model = buildStatusModel({
     prs: Array.isArray(prs) ? prs : [],
     issues: Array.isArray(issues) ? issues : [],
+    prsError: Array.isArray(prs) ? null : (prs?.__error ?? 'gh returned unexpected output'),
+    issuesError: Array.isArray(issues) ? null : (issues?.__error ?? 'gh returned unexpected output'),
     docHealth: docHealthJson(root),
     now,
   });
