@@ -169,12 +169,24 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
   const volatile = new Set(
     (docMap.generated || []).filter((g) => g.class === 'rendered' || g.class === 'release').map((g) => g.path)
   );
+  // Only tokens anchored at a real top-level root of THIS repo count as repo
+  // paths — cross-repo references (`repo-template/AGENTS.md`) and org slugs
+  // in prose are not broken links (#146 review). Dot-roots (.agent/.github)
+  // are real anchors too.
+  const isRealRoot = (seg) => {
+    try {
+      return fs.statSync(path.join(root, seg)).isDirectory();
+    } catch {
+      return false;
+    }
+  };
   const pathRefDocs = checked.filter((doc) => toList(doc.checks).includes('path-refs'));
   const candidates = [];
   for (const doc of pathRefDocs) {
     for (const rel of resolveDocRels(doc.path)) {
       for (const { token, line } of extractPathRefTokens(textByRel.get(rel) || '')) {
         if (volatile.has(token)) continue;
+        if (!isRealRoot(token.split('/')[0])) continue;
         if (fs.existsSync(path.join(root, ...token.split('/')))) continue;
         candidates.push({ rel, token, line });
       }

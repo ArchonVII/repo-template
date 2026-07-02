@@ -432,7 +432,11 @@ test('checkRepo: path-refs verify backtick repo paths in declaring docs, exempti
     '',
     'Run `scripts/nope.mjs` after reading `docs/STATUS.md`; globs like `scripts/**` are ignored,',
     'and `docs/project-status.md` exists.',
+    'Prose examples must not block (#146 review): git ranges `origin/main...branch` and',
+    '`origin/main..HEAD`, bare dirs `dir/`, cross-repo refs `repo-template/AGENTS.md`,',
+    'and GitHub slugs `ArchonVII/repo-template` are not repo paths here.',
   ].join('\n')));
+  writeInRepo(repo, 'scripts/real-root-marker.mjs', 'export {};\n');
   commitAll(repo, 'docs: path refs (#0)');
 
   const report = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP, changedPaths: ['docs/CANON.md'] });

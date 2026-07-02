@@ -274,8 +274,13 @@ export function docMapGlobToRegExp(glob) {
 // Backtick tokens that read as repo paths, for the path-refs rule. Deliberately
 // conservative — a false "missing path" blocking a PR is worse than a missed
 // one: requires a '/', bans whitespace, glob metachars, URLs/anchors/windows
-// drives (':'), placeholders ('<'), flags ('--'), and leading '/' or '#'; each
-// segment is word-ish. Returns [{ token, line }], deduped per token per doc.
+// drives (':'), placeholders ('<'), flags ('--'), leading '/' or '#', git
+// range syntax ('..'), and single-segment tokens like `dir/` (#146 review —
+// prose examples such as `origin/main...branch` are not repo paths). Each
+// segment is word-ish. The caller additionally requires the first segment to
+// be a real top-level root of THIS repo, which drops cross-repo references
+// (`repo-template/AGENTS.md`) and org slugs. Returns [{ token, line }],
+// deduped per token per doc.
 export function extractPathRefTokens(text) {
   const out = [];
   const seen = new Set();
@@ -284,10 +289,11 @@ export function extractPathRefTokens(text) {
     for (const match of lines[i].matchAll(/`([^`]+)`/g)) {
       const token = match[1].trim();
       if (seen.has(token)) continue;
-      if (!token.includes('/')) continue;
+      if (!token.includes('/') || token.includes('..')) continue;
       if (/[\s*?{}[\]<>:]/.test(token)) continue;
       if (token.startsWith('/') || token.startsWith('#') || token.startsWith('--')) continue;
       const segments = token.replace(/\/$/, '').split('/');
+      if (segments.length < 2) continue;
       if (!segments.every((seg) => /^[\w.@-]+$/.test(seg))) continue;
       seen.add(token);
       out.push({ token, line: i + 1 });
