@@ -2,7 +2,7 @@
 // `npm run docs:render` — regenerate every committed-class doc surface in one
 // pass (#124, S1). `--check` is the drift gate: exit 1 when any block would
 // change, write nothing (P1 wires this under repo-required-gate / decision).
-import { parseGeneratorArgs, readDocMap } from './lib.mjs';
+import { KNOWN_BLOCK_SURFACES, parseGeneratorArgs, readDocMap } from './lib.mjs';
 import { runIndex } from './index.mjs';
 import { runNav } from './nav.mjs';
 
@@ -10,13 +10,19 @@ const args = parseGeneratorArgs(process.argv.slice(2));
 // Only the doc-map's declared committed blocks run — the remediation command
 // the blocking gate points at must not ENOENT on surfaces a partial consumer
 // never declared (repo-template#146 round 12). Same mapping the doc-health
-// render check uses.
-const declared = new Set(
-  (readDocMap(args.root).generated || [])
-    .filter((g) => g.class === 'committed')
-    .map((g) => g.block)
-    .filter(Boolean)
-);
+// render check uses; a declared path that mismatches its block's fixed
+// surface refuses to run rather than mutate an undeclared file (round 13).
+const committed = (readDocMap(args.root).generated || []).filter((g) => g.class === 'committed');
+for (const entry of committed) {
+  const expected = entry.block ? KNOWN_BLOCK_SURFACES[entry.block] : undefined;
+  if (expected && entry.path !== expected) {
+    console.error(
+      `docs:render refused: doc-map declares block ${entry.block} at ${entry.path}, but its generator manages ${expected}.`
+    );
+    process.exit(2);
+  }
+}
+const declared = new Set(committed.map((g) => g.block).filter(Boolean));
 const results = [];
 if (declared.has('index-pages')) {
   results.push({ name: 'docs/INDEX.md (index-pages)', ...runIndex(args) });

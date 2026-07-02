@@ -167,8 +167,31 @@ export function parseDocMap(text) {
     throw new Error(`doc-map line ${lineNo}: unhandled content in section "${section}"`);
   }
 
+  // generated[].class is schema, not decoration: a typo like 'commited' would
+  // silently drop the entry from every consumer and disable the
+  // generated-block gate (#146 round 13) — fail closed instead.
+  for (const entry of map.generated) {
+    if (!GENERATED_CLASSES.has(entry.class)) {
+      throw new Error(
+        `doc-map generated entry ${entry.path || '(no path)'}: class must be one of ` +
+        `${[...GENERATED_CLASSES].join('/')}, got "${entry.class ?? '(missing)'}"`
+      );
+    }
+  }
+
   return map;
 }
+
+const GENERATED_CLASSES = new Set(['committed', 'rendered', 'release']);
+
+// The fixed surface each known committed block's generator manages — shared
+// by docs:render and the doc-health render check so a declared path that
+// mismatches its block fails closed everywhere (#146 rounds 7+13).
+export const KNOWN_BLOCK_SURFACES = {
+  'index-pages': 'docs/INDEX.md',
+  nav: 'llms.txt',
+  status: 'README.md',
+};
 
 export function docMapPath(root) {
   return join(root, '.agent', 'doc-map.yml');

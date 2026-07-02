@@ -423,3 +423,68 @@ test('docs:render runs only doc-map-declared committed surfaces', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// #146 round 13: generated[].class is schema, not decoration — a typo
+// (class: commited) silently dropped the entry from every consumer, disabling
+// the generated-block gate. The parser fails closed on invalid/missing class.
+test('parseDocMap rejects invalid or missing generated class values', () => {
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'generated:',
+    '  - path: README.md',
+    '    class: commited',
+    '    generator: docs:render',
+    '    block: status',
+  ].join('\n')), /class/i);
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'generated:',
+    '  - path: README.md',
+    '    generator: docs:render',
+    '    block: status',
+  ].join('\n')), /class/i);
+});
+
+// #146 round 13: docs:render must refuse a committed entry whose path does
+// not match its block's surface — running the generator would mutate an
+// UNDECLARED file while the declared one stays broken.
+test('docs:render refuses mismatched path/block declarations', () => {
+  const root = tempRoot();
+  try {
+    mkdirSync(join(root, '.agent'), { recursive: true });
+    mkdirSync(join(root, 'docs'), { recursive: true });
+    writeFileSync(join(root, '.agent', 'doc-map.yml'), [
+      'version: 1',
+      'generated:',
+      '  - path: docs/NO_SUCH_INDEX.md',
+      '    class: committed',
+      '    generator: docs:render',
+      '    block: index-pages',
+      'code_roots:',
+      '  docs: self',
+      '',
+    ].join('\n'));
+    writeFileSync(
+      join(root, 'docs', 'INDEX.md'),
+      '# index\n\n<!-- BEGIN ARCHONVII MANAGED BLOCK: index-pages -->\nuntouched\n<!-- END ARCHONVII MANAGED BLOCK: index-pages -->\n'
+    );
+
+    let code = 0;
+    try {
+      execFileSync(
+        process.execPath,
+        [join(REPO_ROOT, 'scripts', 'docs', 'render.mjs'), '--repo', root],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+      );
+    } catch (err) {
+      code = err.status;
+    }
+    assert.notEqual(code, 0, 'mismatched declaration must fail');
+    assert.ok(
+      readFileSync(join(root, 'docs', 'INDEX.md'), 'utf8').includes('untouched'),
+      'the undeclared real surface must not be mutated'
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
