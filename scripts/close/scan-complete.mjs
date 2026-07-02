@@ -471,6 +471,8 @@ async function main() {
     docsOnly: scope.docsOnly,
     labels: pr.labels,
     decision: args['docs-decision'] || captured('docs'),
+    // A deleted/renamed-away triggered doc must not satisfy its own trigger.
+    existsFn: (rel) => existsSync(join(root, rel)),
   });
   const localChecks = runLocalChecks({ root, pr, files, scope, changelogDecision, docsResult });
   const failures = localChecks.filter((check) => !check.ok).map((check) => `[${check.name}] ${check.summary}`);

@@ -302,7 +302,13 @@ export function matchDocMapTriggers(files, docMap) {
 // a diff that triggers doc-map-owned docs must update them in-PR, explain
 // substantively why not, or carry the docs:waived label WITH a reason. The
 // waiver is recorded (not hidden) so dashboards can count it.
-export function evaluateDocsDecision({ files = [], docMap = null, docMapError = null, docsOnly = false, labels = [], decision = '' } = {}) {
+// existsFn: injectable existence check for changed paths. Deletions ride in
+// `files` on purpose (parseNameStatus counts D and both rename sides for
+// scope), so "updated in-PR" additionally requires the matched doc to still
+// exist — a PR deleting the owning doc must not satisfy its own trigger
+// (#145 review round 4). Production passes an fs-backed check; the pure
+// default keeps the function testable without a filesystem.
+export function evaluateDocsDecision({ files = [], docMap = null, docMapError = null, docsOnly = false, labels = [], decision = '', existsFn = () => true } = {}) {
   const waived = (labels || []).includes('docs:waived');
   const explicit = String(decision || '').trim();
   const pass = (text, triggers = []) => ({ ok: true, waived, triggers, decision: explicit || text, failures: [] });
@@ -332,7 +338,7 @@ export function evaluateDocsDecision({ files = [], docMap = null, docMapError = 
   const triggerPaths = triggers.map((t) => t.path);
   const updated = triggerPaths.filter((path) => {
     const re = globToRegExp(path);
-    return files.some((file) => re.test(file));
+    return files.some((file) => re.test(file) && existsFn(file));
   });
   if (updated.length === triggerPaths.length) return pass(`updated in-PR: ${updated.join(', ')}`, triggerPaths);
   if (isSubstantiveDecision(explicit)) {

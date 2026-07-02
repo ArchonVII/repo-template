@@ -474,6 +474,29 @@ test('evaluateDocsDecision fails closed when the doc-map is present but broken',
   assert.equal(decided.ok, false);
 });
 
+// Deletions ride in `files` on purpose (scope derivation counts them), so a PR
+// that deletes the owning doc would otherwise satisfy its own trigger
+// (#145 review round 4): "updated" requires the matched doc to still exist.
+test('evaluateDocsDecision does not count a deleted triggered doc as updated', () => {
+  const args = {
+    files: ['scripts/close/lib.mjs', 'docs/CANON.md'],
+    docMap: { checked: [{ path: 'docs/CANON.md', owns: ['scripts/**'], checks: [] }], human: [] },
+    docsOnly: false,
+    labels: [],
+    decision: '',
+  };
+
+  // Doc present on disk: trigger satisfied.
+  const alive = evaluateDocsDecision({ ...args, existsFn: () => true });
+  assert.equal(alive.ok, true);
+
+  // Same diff, but the doc was deleted: the trigger is NOT satisfied and a
+  // substantive decision is required.
+  const deleted = evaluateDocsDecision({ ...args, existsFn: (rel) => rel !== 'docs/CANON.md' });
+  assert.equal(deleted.ok, false);
+  assert.match(deleted.failures.join('\n'), /docs\/CANON\.md/);
+});
+
 test('evaluateDocsDecision demands substance (or a waiver) when triggered docs are not updated', () => {
   const args = { files: ['scripts/close/lib.mjs'], docMap: S2_DOC_MAP, docsOnly: false };
 
