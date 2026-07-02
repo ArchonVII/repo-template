@@ -382,3 +382,44 @@ test('status render surfaces gh snapshot failures instead of reporting zero open
   assert.ok(!md.includes('Open PRs (0'), 'a failed snapshot must not read as zero open PRs');
   assert.ok(!md.includes('Open issues (0'), 'a failed snapshot must not read as zero open issues');
 });
+
+// #146 round 12: docs:render must honor the doc-map's declared committed
+// surfaces — the remediation command the blocking gate points at must not
+// ENOENT on generators the consumer never declared.
+test('docs:render runs only doc-map-declared committed surfaces', () => {
+  const root = tempRoot();
+  try {
+    mkdirSync(join(root, '.agent'), { recursive: true });
+    writeFileSync(join(root, '.agent', 'doc-map.yml'), [
+      'version: 1',
+      'generated:',
+      '  - path: README.md',
+      '    class: committed',
+      '    generator: docs:render',
+      '    block: status',
+      'code_roots:',
+      '  docs: self',
+      '',
+    ].join('\n'));
+    writeFileSync(join(root, 'README.md'), [
+      '# Partial consumer',
+      '',
+      '<!-- BEGIN ARCHONVII MANAGED BLOCK: status -->',
+      'stale',
+      '<!-- END ARCHONVII MANAGED BLOCK: status -->',
+      '',
+    ].join('\n'));
+    // No docs/INDEX.md, no llms.txt, no docs/CANON.md — none declared.
+
+    const out = execFileSync(
+      process.execPath,
+      [join(REPO_ROOT, 'scripts', 'docs', 'render.mjs'), '--repo', root],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+    assert.match(out, /status/);
+    assert.doesNotMatch(out, /INDEX/);
+    assert.ok(!readFileSync(join(root, 'README.md'), 'utf8').includes('stale'), 'declared block regenerated');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

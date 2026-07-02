@@ -2,15 +2,32 @@
 // `npm run docs:render` — regenerate every committed-class doc surface in one
 // pass (#124, S1). `--check` is the drift gate: exit 1 when any block would
 // change, write nothing (P1 wires this under repo-required-gate / decision).
-import { parseGeneratorArgs } from './lib.mjs';
+import { parseGeneratorArgs, readDocMap } from './lib.mjs';
 import { runIndex } from './index.mjs';
 import { runNav } from './nav.mjs';
 
 const args = parseGeneratorArgs(process.argv.slice(2));
-const results = [
-  { name: 'docs/INDEX.md (index-pages)', ...runIndex(args) },
-  { name: 'llms.txt (nav) + README.md (status)', ...runNav(args) },
-];
+// Only the doc-map's declared committed blocks run — the remediation command
+// the blocking gate points at must not ENOENT on surfaces a partial consumer
+// never declared (repo-template#146 round 12). Same mapping the doc-health
+// render check uses.
+const declared = new Set(
+  (readDocMap(args.root).generated || [])
+    .filter((g) => g.class === 'committed')
+    .map((g) => g.block)
+    .filter(Boolean)
+);
+const results = [];
+if (declared.has('index-pages')) {
+  results.push({ name: 'docs/INDEX.md (index-pages)', ...runIndex(args) });
+}
+const navSurfaces = ['nav', 'status'].filter((b) => declared.has(b));
+if (navSurfaces.length > 0) {
+  results.push({
+    name: `nav surfaces (${navSurfaces.join('+')})`,
+    ...runNav({ root: args.root, check: args.check, surfaces: navSurfaces }),
+  });
+}
 
 const stale = results.filter((r) => r.changed);
 if (args.check) {
