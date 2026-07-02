@@ -293,10 +293,26 @@ export function matchDocMapTriggers(files, docMap) {
 // a diff that triggers doc-map-owned docs must update them in-PR, explain
 // substantively why not, or carry the docs:waived label WITH a reason. The
 // waiver is recorded (not hidden) so dashboards can count it.
-export function evaluateDocsDecision({ files = [], docMap = null, docsOnly = false, labels = [], decision = '' } = {}) {
+export function evaluateDocsDecision({ files = [], docMap = null, docMapError = null, docsOnly = false, labels = [], decision = '' } = {}) {
   const waived = (labels || []).includes('docs:waived');
   const explicit = String(decision || '').trim();
   const pass = (text, triggers = []) => ({ ok: true, waived, triggers, decision: explicit || text, failures: [] });
+
+  // Fail closed on a PRESENT-but-broken spine (#145 review): a malformed
+  // doc-map silently disabling the DoD is worse than a loud failure, and no
+  // decision text can substitute for the input it is judged against.
+  if (docMapError) {
+    return {
+      ok: false,
+      waived,
+      triggers: [],
+      decision: explicit,
+      failures: [
+        `.agent/doc-map.yml exists but could not be used (${docMapError}); `
+          + 'the docs DoD fails closed on a broken spine — fix the doc-map, do not bypass it.',
+      ],
+    };
+  }
 
   if (docsOnly) return pass('docs are the change under review');
   if (!docMap) return pass('not required: no .agent/doc-map.yml in this repo (docs DoD auto-passes)');

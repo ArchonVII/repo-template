@@ -25,13 +25,24 @@ import {
 
 // The doc-map lives with the docs generators (scripts/docs); consumers that
 // received the close scripts without the docs system (pre-T1 self-apply) must
-// not crash — the docs DoD degrades to auto-pass when the spine is absent.
+// not crash — the docs DoD degrades to auto-pass ONLY when the spine is
+// truly absent. A doc-map that EXISTS but cannot be imported/read/parsed
+// fails closed instead (#145 review): parseDocMap is a lenient line-parser,
+// so "malformed" often reads as an empty-but-truthy map — the version check
+// catches that shape too.
 async function readDocMapSafe(root) {
+  if (!existsSync(join(root, '.agent', 'doc-map.yml'))) {
+    return { docMap: null, docMapError: null };
+  }
   try {
     const { readDocMap } = await import('../docs/lib.mjs');
-    return readDocMap(root);
-  } catch {
-    return null;
+    const docMap = readDocMap(root);
+    if (!docMap || docMap.version !== 1) {
+      return { docMap: null, docMapError: 'parsed but is not a valid version-1 doc-map' };
+    }
+    return { docMap, docMapError: null };
+  } catch (err) {
+    return { docMap: null, docMapError: String(err.message || err).split('\n')[0] };
   }
 }
 
@@ -443,10 +454,11 @@ async function main() {
   const changelogDecision = args['changelog-decision'] || captured('changelog')
     || (scope.requiresChangelog ? '' : 'not required: docs-only change');
   const findingsDecision = args['findings-decision'] || captured('findings');
-  const docMap = await readDocMapSafe(root);
+  const { docMap, docMapError } = await readDocMapSafe(root);
   const docsResult = evaluateDocsDecision({
     files,
     docMap,
+    docMapError,
     docsOnly: scope.docsOnly,
     labels: pr.labels,
     decision: args['docs-decision'] || captured('docs'),

@@ -432,6 +432,35 @@ test('evaluateDocsDecision passes automatically when nothing is triggered or doc
   assert.match(updated.decision, /updated/i);
 });
 
+// A spine that EXISTS but cannot be read or parsed must fail the docs check —
+// a malformed doc-map silently disabling the DoD is the worst failure mode
+// (#145 review, Codex P2: fail closed on malformed doc maps).
+test('evaluateDocsDecision fails closed when the doc-map is present but broken', () => {
+  const broken = evaluateDocsDecision({
+    files: ['scripts/close/lib.mjs'],
+    docMap: null,
+    docMapError: 'doc-map parsed but is not a valid version-1 map',
+    docsOnly: false,
+    labels: [],
+    decision: '',
+  });
+  assert.equal(broken.ok, false);
+  assert.match(broken.failures.join('\n'), /doc-map/i);
+  assert.match(broken.failures.join('\n'), /fails closed/i);
+
+  // Even a substantive decision does not paper over a broken spine — the
+  // spine is the input the decision is supposed to be judged against.
+  const decided = evaluateDocsDecision({
+    files: ['scripts/close/lib.mjs'],
+    docMap: null,
+    docMapError: 'boom',
+    docsOnly: false,
+    labels: [],
+    decision: 'not needed: internal refactor with no doc-owned surface',
+  });
+  assert.equal(decided.ok, false);
+});
+
 test('evaluateDocsDecision demands substance (or a waiver) when triggered docs are not updated', () => {
   const args = { files: ['scripts/close/lib.mjs'], docMap: S2_DOC_MAP, docsOnly: false };
 
