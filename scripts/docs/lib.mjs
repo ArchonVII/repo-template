@@ -167,6 +167,16 @@ export function parseDocMap(text) {
     throw new Error(`doc-map line ${lineNo}: unhandled content in section "${section}"`);
   }
 
+  // Every list-section entry needs a path — a misspelled `paths:` key would
+  // silently drop the entry from every guard it enables (#146 round 16).
+  for (const [sectionName, entries] of [['generated', map.generated], ['checked', map.checked], ['human', map.human]]) {
+    for (const entry of entries) {
+      if (typeof entry.path !== 'string' || !entry.path.trim()) {
+        throw new Error(`doc-map ${sectionName} entry is missing a path (keys: ${Object.keys(entry).join(', ') || 'none'})`);
+      }
+    }
+  }
+
   // Scalar list fields (owns: scripts/**) are valid YAML — normalize them
   // ONCE here so no consumer can crash on .join/.map over a string
   // (#146 round 15; same lesson as scripts/close/lib.mjs toGlobList).

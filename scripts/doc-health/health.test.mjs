@@ -834,3 +834,26 @@ test('checkRepo: contents-ignored dirs (tmp/*) are exempt from code-root coverag
   assert.ok(!unmapped.includes('tmp'), `contents-ignored tmp/ must not need a mapping; got ${unmapped}`);
   assert.ok(unmapped.includes('src'), 'tracked unmapped roots still block');
 });
+
+// #146 round 16: the coverage probe must use TRACKED files like root
+// discovery does — an ignored artifact matching owns must not green-light a
+// mapping locally that a clean CI checkout would block.
+test('checkRepo: coverage probe ignores untracked artifacts', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, '.gitignore', 'tools/generated.mjs\n');
+  writeInRepo(repo, 'tools/config.yml', 'a: 1\n');
+  commitAll(repo, 'feat: tools with config only (#0)');
+  writeInRepo(repo, 'tools/generated.mjs', 'export {};\n'); // ignored artifact
+
+  const report = checkRepo(repo, {
+    now: NOW,
+    docMap: {
+      ...L2_DOC_MAP,
+      checked: [{ path: 'docs/CANON.md', owns: ['tools/**/*.mjs'], checks: ['links'] }],
+      code_roots: { docs: 'self', tools: 'docs/CANON.md' },
+    },
+  });
+  const invalid = report.findings.filter((f) => f.code === 'code-root-mapping-invalid');
+  assert.deepEqual(invalid.map((f) => f.path), ['tools'],
+    'owns matching only an ignored artifact must not satisfy coverage');
+});

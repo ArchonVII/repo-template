@@ -156,7 +156,9 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
   // contents-ignored (tmp/*) local artifact dirs have no tracked files and
   // must not red-light a scan CI would pass. Non-git roots fall back to the
   // disk walk minus name-ignored dirs.
-  const tracked = trackedTopLevelDirs(root);
+  const trackedRels = trackedFiles(root);
+  const probeRels = trackedRels ?? allRels;
+  const tracked = trackedRels ? topLevelDirsFromRels(trackedRels) : null;
   const ignoredDirs = tracked ? new Set() : gitIgnoredSet(root, topLevelDirs(root));
   const allDirs = tracked ?? topLevelDirs(root);
   for (const dir of allDirs) {
@@ -198,7 +200,7 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
       });
       continue;
     }
-    const rootFiles = allRels.filter((rel) => rel.startsWith(`${rootDir}/`));
+    const rootFiles = probeRels.filter((rel) => rel.startsWith(`${rootDir}/`));
     if (rootFiles.length === 0) continue; // empty root: nothing to rot yet
     const owns = toList(entry.owns).map(docMapGlobToRegExp);
     const covers = owns.some((re) => rootFiles.some((rel) => re.test(rel)));
@@ -313,24 +315,29 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
   }
 }
 
-// Top-level directories containing TRACKED files — what a clean checkout
-// actually contains (#146 rounds 9+11). Returns null outside a git repo so
-// the caller can fall back to the disk walk.
-function trackedTopLevelDirs(root) {
+// TRACKED file rels — what a clean checkout actually contains (#146 rounds
+// 9+11+16): root discovery AND the coverage probe both read this so local
+// gate-mode and CI agree. Returns null outside a git repo so callers fall
+// back to the disk walk.
+function trackedFiles(root) {
   try {
     const out = execFileSync('git', ['-C', root, 'ls-files'], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     });
-    const dirs = new Set();
-    for (const line of out.split(/\r?\n/)) {
-      const slash = line.indexOf('/');
-      if (slash > 0 && !line.startsWith('.')) dirs.add(line.slice(0, slash));
-    }
-    return [...dirs].sort();
+    return out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   } catch {
     return null;
   }
+}
+
+function topLevelDirsFromRels(rels) {
+  const dirs = new Set();
+  for (const rel of rels) {
+    const slash = rel.indexOf('/');
+    if (slash > 0 && !rel.startsWith('.')) dirs.add(rel.slice(0, slash));
+  }
+  return [...dirs].sort();
 }
 
 // Batched gitignore probe for the path-refs rule: a doc referencing a runtime

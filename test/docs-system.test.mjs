@@ -574,3 +574,27 @@ test('parseDocMap normalizes scalar list fields to arrays', () => {
   // crash it (doc.owns.join is not a function, pre-fix).
   assert.doesNotThrow(() => renderNavBlock(map, 'summary'));
 });
+
+// #146 round 16: entry paths are required — a misspelled `paths:` key
+// silently dropped the entry from every guard it was meant to enable.
+test('parseDocMap rejects entries without a path', () => {
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'checked:',
+    '  - paths: docs/CANON.md',
+    '    owns: ["scripts/**"]',
+    '    checks: [links]',
+  ].join('\n')), /path/i);
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'generated:',
+    '  - class: committed',
+    '    generator: docs:render',
+    '    block: status',
+  ].join('\n')), /path/i);
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'human:',
+    '  - heal_when: ["scripts/**"]',
+  ].join('\n')), /path/i);
+});
