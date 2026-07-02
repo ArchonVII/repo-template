@@ -270,13 +270,22 @@ function globToRegExp(glob) {
   return new RegExp(`^${escaped}$`);
 }
 
+// A scalar `owns: scripts/**` is valid YAML that the lenient doc-map parser
+// returns as a string — treat it as a one-glob list rather than crashing on
+// `.map` (#145 review round 3). Anything else non-array contributes nothing.
+function toGlobList(raw) {
+  if (Array.isArray(raw)) return raw.filter((glob) => typeof glob === 'string' && glob.trim());
+  if (typeof raw === 'string' && raw.trim()) return [raw.trim()];
+  return [];
+}
+
 // Which doc-map docs does this diff put on the hook? `checked` docs fire on
 // their `owns` globs, `human` docs on `heal_when` (an empty heal_when — e.g.
 // VISION.md, owner decision 2026-06-27 — never fires).
 export function matchDocMapTriggers(files, docMap) {
   const entries = [
-    ...(docMap?.checked || []).map((doc) => ({ path: doc.path, globs: doc.owns || [] })),
-    ...(docMap?.human || []).map((doc) => ({ path: doc.path, globs: doc.heal_when || [] })),
+    ...(docMap?.checked || []).map((doc) => ({ path: doc.path, globs: toGlobList(doc.owns) })),
+    ...(docMap?.human || []).map((doc) => ({ path: doc.path, globs: toGlobList(doc.heal_when) })),
   ];
   const triggers = [];
   for (const entry of entries) {

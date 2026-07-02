@@ -404,6 +404,18 @@ test('matchDocMapTriggers maps changed files onto doc-map owners and heal_when g
   const exact = { checked: [{ path: 'docs/CANON.md', owns: ['.agent/doc-map.yml'], checks: [] }], human: [] };
   assert.equal(matchDocMapTriggers(['.agent/doc-map.yml'], exact).length, 1);
   assert.equal(matchDocMapTriggers(['.agent/doc-map.yml.bak'], exact).length, 0);
+
+  // A scalar owns/heal_when (`owns: scripts/**`) is valid YAML and the parser
+  // returns it as a string — normalize to a one-glob list instead of throwing
+  // a TypeError mid-scan (#145 review round 3).
+  const scalar = {
+    checked: [{ path: 'docs/CANON.md', owns: 'scripts/**', checks: [] }],
+    human: [{ path: 'docs/guides/**', heal_when: 'schemas/**' }],
+  };
+  assert.deepEqual(
+    matchDocMapTriggers(['scripts/x.mjs', 'schemas/y.json'], scalar).map((t) => t.path).sort(),
+    ['docs/CANON.md', 'docs/guides/**']
+  );
 });
 
 test('evaluateDocsDecision passes automatically when nothing is triggered or docs ride the PR', () => {
