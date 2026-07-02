@@ -797,3 +797,40 @@ test('CLI status-only render check does not require docs/CANON.md', () => {
     `status-only check must not read CANON; got ${JSON.stringify(report.findings.filter((f) => f.code.startsWith('generated-block')))}`
   );
 });
+
+// #146 round 11, part 1: EVERY checked entry must resolve to at least one
+// markdown file — a typo'd or deleted entry (not just code_roots-referenced
+// ones) silently disables its links/path-refs guard otherwise.
+test('checkRepo: a checked entry resolving to no doc blocks', () => {
+  const repo = makeTempRepo();
+  const report = checkRepo(repo, {
+    now: NOW,
+    docMap: {
+      ...L2_DOC_MAP,
+      checked: [
+        { path: 'docs/CANON.md', owns: ['scripts/**'], checks: ['links'] },
+        { path: 'docs/agent-process/doc-sweeep.md', owns: ['scripts/doc-sweep/**'], checks: ['links'] }, // typo
+      ],
+      code_roots: { docs: 'self' },
+    },
+  });
+  const missing = report.findings.filter((f) => f.code === 'checked-doc-missing');
+  assert.deepEqual(missing.map((f) => f.path), ['docs/agent-process/doc-sweeep.md']);
+  assert.equal(missing[0].severity, 'blocking');
+});
+
+// #146 round 11, part 2: ignore patterns like tmp/* ignore CONTENTS while
+// `git check-ignore tmp` misses the dir itself. Roots are now derived from
+// TRACKED files — exactly what a clean CI checkout contains.
+test('checkRepo: contents-ignored dirs (tmp/*) are exempt from code-root coverage', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, '.gitignore', 'tmp/*\n');
+  writeInRepo(repo, 'src/index.mjs', 'export {};\n');
+  commitAll(repo, 'feat: src + contents-ignore (#0)');
+  writeInRepo(repo, 'tmp/out.txt', 'artifact\n'); // contents ignored, dir unignorable by name
+
+  const report = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP });
+  const unmapped = report.findings.filter((f) => f.code === 'code-root-unmapped').map((f) => f.path);
+  assert.ok(!unmapped.includes('tmp'), `contents-ignored tmp/ must not need a mapping; got ${unmapped}`);
+  assert.ok(unmapped.includes('src'), 'tracked unmapped roots still block');
+});

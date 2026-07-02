@@ -132,13 +132,33 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
     const re = docMapGlobToRegExp(entryPath);
     return mdFiles.map((f) => f.rel).filter((rel) => re.test(rel));
   };
+
+  // EVERY checked entry must resolve to at least one markdown file (#146
+  // round 11): a typo'd or deleted entry would otherwise silently disable its
+  // links/path-refs guard — owns hits iterate zero docs and nothing blocks.
+  // Forward-looking placeholders belong in `human`, not `checked`.
+  const checked = (docMap.checked || []).filter((doc) => doc?.path);
+  for (const doc of checked) {
+    if (resolveDocRels(doc.path).length === 0) {
+      addFinding(findings, {
+        severity: 'blocking',
+        code: 'checked-doc-missing',
+        path: doc.path,
+        message: `checked entry ${doc.path} resolves to no markdown file — its declared checks can never run.`,
+      });
+    }
+  }
+
   const codeRoots = docMap.code_roots || {};
   const mappedRoots = new Set(Object.keys(codeRoots));
-  // Gitignored roots (build output like target/) exist only on local
-  // machines, not clean checkouts — they are not code roots and must not
-  // red-light a local scan that CI would pass (#146 round 9).
-  const allDirs = topLevelDirs(root);
-  const ignoredDirs = gitIgnoredSet(root, allDirs);
+  // A code root is a top-level dir a CLEAN CHECKOUT contains — derived from
+  // tracked files (#146 rounds 9+11): both name-ignored (target/) and
+  // contents-ignored (tmp/*) local artifact dirs have no tracked files and
+  // must not red-light a scan CI would pass. Non-git roots fall back to the
+  // disk walk minus name-ignored dirs.
+  const tracked = trackedTopLevelDirs(root);
+  const ignoredDirs = tracked ? new Set() : gitIgnoredSet(root, topLevelDirs(root));
+  const allDirs = tracked ?? topLevelDirs(root);
   for (const dir of allDirs) {
     if (ignoredDirs.has(dir)) continue;
     if (!mappedRoots.has(dir)) {
@@ -196,8 +216,6 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
   // escalates only the changed file — one ADR changing must not turn
   // pre-existing rot in a sibling ADR blocking — while an owns hit escalates
   // every doc of the entry (the changed code may invalidate any of them).
-  const checked = (docMap.checked || []).filter((doc) => doc?.path);
-
   const changedSet = new Set(changedPaths);
   const escalatedLinkRels = new Set();
   const escalatedPathRefRels = new Set();
@@ -292,6 +310,26 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
         });
       }
     }
+  }
+}
+
+// Top-level directories containing TRACKED files — what a clean checkout
+// actually contains (#146 rounds 9+11). Returns null outside a git repo so
+// the caller can fall back to the disk walk.
+function trackedTopLevelDirs(root) {
+  try {
+    const out = execFileSync('git', ['-C', root, 'ls-files'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const dirs = new Set();
+    for (const line of out.split(/\r?\n/)) {
+      const slash = line.indexOf('/');
+      if (slash > 0 && !line.startsWith('.')) dirs.add(line.slice(0, slash));
+    }
+    return [...dirs].sort();
+  } catch {
+    return null;
   }
 }
 
