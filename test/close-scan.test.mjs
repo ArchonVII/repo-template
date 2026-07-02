@@ -206,6 +206,21 @@ test('parseRequiredGateCheckName reads the declared gate out of a check-map body
     parseRequiredGateCheckName('version: 1\r\nrequired_gate:  # gate\r\n  check_name: ci-success\r\n'),
     'ci-success'
   );
+
+  // Blank and comment-only lines inside the mapping are valid YAML and must
+  // not end the block early (#142 review round 3).
+  assert.equal(
+    parseRequiredGateCheckName('required_gate:\n\n  check_name: ci-success\n'),
+    'ci-success'
+  );
+  assert.equal(
+    parseRequiredGateCheckName('required_gate:\n# column-0 comment\n  check_name: ci-success\n'),
+    'ci-success'
+  );
+  assert.equal(
+    parseRequiredGateCheckName('required_gate:\r\n  workflow: x.yml\r\n\r\n  check_name: ci-success\r\n'),
+    'ci-success'
+  );
 });
 
 test('parseRequiredGateCheckName returns null when the gate is not declared', () => {
@@ -215,8 +230,14 @@ test('parseRequiredGateCheckName returns null when the gate is not declared', ()
   // may follow the header.
   assert.equal(parseRequiredGateCheckName('required_gate: ci-success\n'), null);
   assert.equal(parseRequiredGateCheckName('required_gate:\n  check_name: ""\n'), null);
-  // check_name under a DIFFERENT block must not count as the required gate.
+  // check_name under a DIFFERENT block must not count as the required gate —
+  // including when a blank line separates required_gate from that block, so
+  // the blank-line allowance cannot leak the capture across blocks.
   assert.equal(parseRequiredGateCheckName('other_block:\n  check_name: not-the-gate\n'), null);
+  assert.equal(
+    parseRequiredGateCheckName('required_gate:\n  workflow: x.yml\n\ndefaults:\n  check_name: sneaky\n'),
+    null
+  );
   assert.equal(parseRequiredGateCheckName(''), null);
   assert.equal(parseRequiredGateCheckName(null), null);
 });

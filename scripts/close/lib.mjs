@@ -28,11 +28,17 @@ function stripTrailingYamlComment(value) {
 
 export function parseRequiredGateCheckName(body) {
   const text = String(body || '');
-  // Capture only the indented lines immediately under `required_gate:` so a
+  // Capture only the lines immediately under `required_gate:` so a
   // `check_name:` beneath some other top-level block never counts as the gate.
   // The header may carry a trailing YAML comment (`required_gate: # gate`);
   // anything else after the colon is an inline scalar, not the block shape.
-  const block = text.match(/^required_gate:[ \t]*(?:#.*)?\r?\n((?:[ \t]+\S.*\r?\n?)*)/m);
+  // Within the block, indented content, comment-only, and blank lines are all
+  // valid YAML and must not end the capture; the first non-indented content
+  // line (the next top-level key) still does, so a blank line cannot leak the
+  // capture into a different block (check_name there stays out of reach).
+  const block = text.match(
+    /^required_gate:[ \t]*(?:#.*)?\r?\n((?:[ \t]+\S.*\r?\n?|[ \t]*#.*\r?\n?|[ \t]*\r?\n)*)/m
+  );
   if (!block) return null;
   const name = block[1].match(/^[ \t]+check_name:[ \t]*(.+?)[ \t]*\r?$/m);
   if (!name) return null;
