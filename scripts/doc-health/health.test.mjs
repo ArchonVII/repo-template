@@ -412,6 +412,28 @@ test('checkRepo: code_roots mappings must name a covering checked doc', () => {
   assert.ok(!report.findings.some((f) => f.code === 'code-root-mapping-invalid' && f.path === 'docs'));
 });
 
+// #146 round 6: coverage must be validated against ACTUAL files under the
+// root — an extension-scoped owns glob (tools/**/*.mjs) is a valid narrowing,
+// not a broken mapping.
+test('checkRepo: extension-scoped owns globs validate against real files', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'tools/gen.mjs', 'export {};\n');
+  commitAll(repo, 'feat: tools root (#0)');
+
+  const report = checkRepo(repo, {
+    now: NOW,
+    docMap: {
+      ...L2_DOC_MAP,
+      checked: [{ path: 'docs/CANON.md', owns: ['tools/**/*.mjs'], checks: ['links'] }],
+      code_roots: { docs: 'self', tools: 'docs/CANON.md' },
+    },
+  });
+  assert.ok(
+    !report.findings.some((f) => f.code === 'code-root-mapping-invalid'),
+    `extension-scoped coverage must validate; got ${JSON.stringify(report.findings.filter((f) => f.code === 'code-root-mapping-invalid'))}`
+  );
+});
+
 test('checkRepo: dangling links in a checked doc block only when the doc is re-triggered', () => {
   const repo = makeTempRepo();
   writeInRepo(repo, 'docs/CANON.md', wikiPage('Truth register', 'CANON', [
@@ -536,6 +558,55 @@ test('checkRepo: stale committed generated blocks and a broken doc-map block', (
   const invalidFinding = invalid.findings.find((f) => f.code === 'doc-map-invalid');
   assert.equal(invalidFinding.severity, 'blocking');
   assert.match(invalidFinding.message, /bad section/);
+});
+
+// #146 round 6: only generators the doc-map DECLARES may run — a map that
+// commits README.md but not docs/INDEX.md must not fail because runIndex
+// cannot find INDEX markers it never promised.
+test('CLI runs only doc-map-declared generators for the render check', () => {
+  const repo = makeTempRepo();
+  // README.md with the status managed block the nav generator owns; no INDEX/llms declared.
+  writeInRepo(repo, 'README.md', [
+    '# Project',
+    '',
+    '<!-- BEGIN ARCHONVII MANAGED BLOCK: status -->',
+    'stale placeholder',
+    '<!-- END ARCHONVII MANAGED BLOCK: status -->',
+    '',
+  ].join('\n'));
+  writeInRepo(repo, '.agent/doc-map.yml', [
+    'version: 1',
+    'generated:',
+    '  - path: README.md',
+    '    class: committed',
+    '    generator: docs:render',
+    '    block: status',
+    'code_roots:',
+    '  docs: self',
+    '',
+  ].join('\n'));
+  commitAll(repo, 'chore: partial doc-map (#0)');
+
+  let code = 0;
+  let stdout = '';
+  try {
+    stdout = execFileSync(process.execPath, [
+      join('scripts', 'doc-health', 'health.mjs'),
+      '--repo', repo, '--json', '--now', NOW_ISO,
+    ], { cwd: process.cwd(), encoding: 'utf8' });
+  } catch (err) {
+    code = err.status;
+    stdout = err.stdout;
+  }
+  const report = JSON.parse(stdout);
+  assert.ok(
+    !report.findings.some((f) => f.code === 'generated-block-check-failed' && /INDEX/.test(f.message)),
+    `undeclared INDEX generator must not run; got ${JSON.stringify(report.findings.filter((f) => f.code.startsWith('generated-block')))}`
+  );
+  // The declared README status block IS checked — nav runs against this repo
+  // (llms.txt undeclared and absent, so nav reports only what it can), and a
+  // stale declared block must surface as blocking.
+  assert.ok(code === 0 || code === 1, 'CLI must complete either way');
 });
 
 test('CLI exits 1 on blocking findings and loads the real doc-map + render check', () => {

@@ -63,6 +63,7 @@ export function checkRepo(repoRoot, opts = {}) {
   // findings. docMap/docMapError/renderCheck are injected (the CLI resolves
   // them via dynamic import) so the rules unit-test without the docs system.
   checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
+    allRels: files.map((f) => f.rel),
     docMap: opts.docMap ?? null,
     docMapError: opts.docMapError ?? null,
     renderCheck: opts.renderCheck ?? null,
@@ -103,7 +104,7 @@ function toList(raw) {
 // path-refs on `checked` docs are blocking only when the doc is RE-TRIGGERED
 // by this change set (the doc itself changed, or a path its `owns` globs
 // cover did) — pre-existing rot elsewhere stays a warning for the dashboard.
-function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, { docMap, docMapError, renderCheck }) {
+function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, { allRels = [], docMap, docMapError, renderCheck }) {
   if (docMapError) {
     addFinding(findings, {
       severity: 'blocking',
@@ -138,23 +139,35 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
       });
     }
   }
-  // A mapping VALUE must deliver the coverage it claims (#146 round 5):
+  // A mapping VALUE must deliver the coverage it claims (#146 rounds 5–6):
   // 'unmapped_ok'/'self' are declarations; anything else must name a checked
-  // doc whose owns globs actually cover the root, or a typo silently defeats
-  // the keystone-rot guard.
+  // doc whose owns globs match at least one ACTUAL file under the root —
+  // validating against real files, not a synthetic probe, so extension-scoped
+  // owns like scripts/**/*.mjs are honored. A typo'd or non-covering mapping
+  // silently defeats the keystone-rot guard.
   for (const [rootDir, owner] of Object.entries(codeRoots)) {
     const value = String(owner || '').trim();
     if (value === 'unmapped_ok' || value === 'self') continue;
     const entry = (docMap.checked || []).find((doc) => doc?.path === value);
-    const covers = entry && toList(entry.owns).some((glob) => docMapGlobToRegExp(glob).test(`${rootDir}/__probe__`));
+    if (!entry) {
+      addFinding(findings, {
+        severity: 'blocking',
+        code: 'code-root-mapping-invalid',
+        path: rootDir,
+        message: `code_roots maps ${rootDir} to ${value}, which is not a checked doc (typo?).`,
+      });
+      continue;
+    }
+    const rootFiles = allRels.filter((rel) => rel.startsWith(`${rootDir}/`));
+    if (rootFiles.length === 0) continue; // empty root: nothing to rot yet
+    const owns = toList(entry.owns).map(docMapGlobToRegExp);
+    const covers = owns.some((re) => rootFiles.some((rel) => re.test(rel)));
     if (!covers) {
       addFinding(findings, {
         severity: 'blocking',
         code: 'code-root-mapping-invalid',
         path: rootDir,
-        message: entry
-          ? `code_roots maps ${rootDir} to ${value}, but that checked doc's owns globs do not cover ${rootDir}/.`
-          : `code_roots maps ${rootDir} to ${value}, which is not a checked doc (typo?).`,
+        message: `code_roots maps ${rootDir} to ${value}, but that checked doc's owns globs match no file under ${rootDir}/.`,
       });
     }
   }
@@ -676,17 +689,41 @@ async function loadDocMapForCli(repoRoot) {
   }
 }
 
-async function loadRenderCheckForCli(repoRoot) {
+// Only the generators the doc-map DECLARES may run (#146 round 6): a partial
+// consumer committing only README's status block must not fail because
+// runIndex cannot find INDEX markers it never promised. Declared committed
+// blocks with no known checker are unverifiable and fail closed via the
+// contract rule's catch.
+async function loadRenderCheckForCli(repoRoot, docMap) {
+  const committed = (docMap.generated || []).filter((g) => g.class === 'committed');
+  if (committed.length === 0) return () => [];
+  const blocks = new Set(committed.map((g) => g.block).filter(Boolean));
+  const runners = [];
   try {
-    const { runIndex } = await import('../docs/index.mjs');
-    const { runNav } = await import('../docs/nav.mjs');
-    return () => [
-      { name: 'docs/INDEX.md (index-pages)', ...runIndex({ root: repoRoot, check: true }) },
-      { name: 'llms.txt (nav) + README.md (status)', ...runNav({ root: repoRoot, check: true }) },
-    ];
+    if (blocks.has('index-pages')) {
+      const { runIndex } = await import('../docs/index.mjs');
+      runners.push(() => ({ name: 'docs/INDEX.md (index-pages)', ...runIndex({ root: repoRoot, check: true }) }));
+      blocks.delete('index-pages');
+    }
+    const navSurfaces = ['nav', 'status'].filter((b) => blocks.has(b));
+    if (navSurfaces.length > 0) {
+      const { runNav } = await import('../docs/nav.mjs');
+      runners.push(() => ({
+        name: `nav surfaces (${navSurfaces.join('+')})`,
+        ...runNav({ root: repoRoot, check: true, surfaces: navSurfaces }),
+      }));
+      for (const b of navSurfaces) blocks.delete(b);
+    }
   } catch {
-    return null; // reported as generated-block-check-failed when the map declares committed surfaces
+    return null; // generators unavailable → generated-block-check-failed
   }
+  if (blocks.size > 0) {
+    const unknown = [...blocks].join(', ');
+    runners.push(() => {
+      throw new Error(`no known checker for declared committed block(s): ${unknown}`);
+    });
+  }
+  return () => runners.map((fn) => fn());
 }
 
 const isMain = process.argv[1] &&
@@ -705,7 +742,7 @@ if (isMain) {
       ...(args.changedFrom ? changedPathsFromGit(repo, args.changedFrom) : []),
     ];
     const { docMap, docMapError } = await loadDocMapForCli(repo);
-    const renderCheck = docMap ? await loadRenderCheckForCli(repo) : null;
+    const renderCheck = docMap ? await loadRenderCheckForCli(repo, docMap) : null;
     const report = checkRepo(repo, { now: args.now, changedPaths, docMap, docMapError, renderCheck });
 
     if (args.report) {
