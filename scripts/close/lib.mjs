@@ -9,6 +9,23 @@ export const DEFAULT_MARKER_PATH = '.agent/close-scan/complete.json';
 // of assuming DEFAULT_REQUIRED_GATE. The check-map is deliberately simple YAML,
 // so a scoped regex read keeps repo-template at zero runtime deps (same approach
 // scan-complete already uses for the version/required_gate presence checks).
+// Drop an unquoted trailing YAML comment (` # ...`). Quote-aware so a `#`
+// inside a quoted gate name survives; a bare `#` with no preceding whitespace
+// is part of the value, matching YAML's comment rule.
+function stripTrailingYamlComment(value) {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < value.length; i += 1) {
+    const ch = value[i];
+    if (ch === "'" && !inDouble) inSingle = !inSingle;
+    else if (ch === '"' && !inSingle) inDouble = !inDouble;
+    else if (ch === '#' && !inSingle && !inDouble && /\s/.test(value[i - 1] || ' ')) {
+      return value.slice(0, i).trimEnd();
+    }
+  }
+  return value;
+}
+
 export function parseRequiredGateCheckName(body) {
   const text = String(body || '');
   // Capture only the indented lines immediately under `required_gate:` so a
@@ -17,7 +34,7 @@ export function parseRequiredGateCheckName(body) {
   if (!block) return null;
   const name = block[1].match(/^[ \t]+check_name:[ \t]*(.+?)[ \t]*\r?$/m);
   if (!name) return null;
-  let value = name[1].trim();
+  let value = stripTrailingYamlComment(name[1].trim()).trim();
   if (
     (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
     (value.startsWith("'") && value.endsWith("'") && value.length >= 2)

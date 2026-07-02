@@ -182,6 +182,19 @@ test('parseRequiredGateCheckName reads the declared gate out of a check-map body
 
   // CRLF bodies must parse the same way (Windows checkouts).
   assert.equal(parseRequiredGateCheckName('version: 1\r\nrequired_gate:\r\n  check_name: ci-success\r\n'), 'ci-success');
+
+  // Unquoted trailing YAML comments must not leak into the gate name the
+  // guard then looks for (#142 review).
+  assert.equal(
+    parseRequiredGateCheckName('required_gate:\n  check_name: ci-success # aggregate gate\n'),
+    'ci-success'
+  );
+  assert.equal(
+    parseRequiredGateCheckName('required_gate:\n  check_name: "repo-required-gate / decision" # the gate\n'),
+    'repo-required-gate / decision'
+  );
+  // A '#' with no preceding whitespace is part of the value, not a comment.
+  assert.equal(parseRequiredGateCheckName('required_gate:\n  check_name: gate#1\n'), 'gate#1');
 });
 
 test('parseRequiredGateCheckName returns null when the gate is not declared', () => {
