@@ -116,6 +116,13 @@ export function classifyCloseScanScope({ files = [], labels = [], stack = 'minim
   const requiresChangelog = !docsOnly;
   const requiredChecks = [{ name: 'pr-contract', reason: 'PR metadata contract' }];
 
+  // #124 S2: the docs DoD section is ALWAYS evaluated — substance scales
+  // inside evaluateDocsDecision (docs-only and untriggered diffs auto-pass),
+  // never by dropping the check from scope.
+  requiredChecks.push({
+    name: 'docs',
+    reason: 'Closeout DoD docs section — doc-map-owned docs updated, explained, or visibly waived',
+  });
   requiredChecks.push({
     name: 'repo-update-log',
     reason: 'Applicable PRs must add a docs/repo-update-log fragment or record an allowed doc-only skip',

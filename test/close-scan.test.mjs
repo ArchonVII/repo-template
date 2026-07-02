@@ -42,6 +42,7 @@ test('classifyCloseScanScope requires local parity checks for code and workflow 
   assert.equal(result.requiresChangelog, true);
   assert.deepEqual(result.requiredChecks.map((check) => check.name), [
     'pr-contract',
+    'docs',
     'repo-update-log',
     'changelog',
     'node-test',
@@ -60,7 +61,10 @@ test('classifyCloseScanScope treats docs-only changes as PR contract plus repo-u
 
   assert.equal(result.docsOnly, true);
   assert.equal(result.requiresChangelog, false);
-  assert.deepEqual(result.requiredChecks.map((check) => check.name), ['pr-contract', 'repo-update-log']);
+  // 'docs' is ALWAYS required (#124 S2) — substance scales inside the
+  // evaluation (docs-only auto-passes), never by dropping the check, which is
+  // exactly how the docs entry silently vanished from the marker pre-fix.
+  assert.deepEqual(result.requiredChecks.map((check) => check.name), ['pr-contract', 'docs', 'repo-update-log']);
 });
 
 test('evaluateRepoUpdateLogDecision requires fragments for code changes', () => {
