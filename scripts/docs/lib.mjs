@@ -35,10 +35,13 @@ export function renderManagedBlock(content, id, body) {
 
 // Regenerate one managed block in a file. check:true reports drift without
 // writing (the docs:render --check drift gate); check:false writes in place.
+// Drift is judged eol-normalized: a Windows autocrlf checkout materializes
+// committed files with CRLF while generators emit LF, and that must not read
+// as stale (or every fresh Windows checkout false-fails the gate — #124 L2).
 export function applyGeneratedFile({ path, blockId, body, check = false }) {
   const before = readFileSync(path, 'utf8');
   const after = renderManagedBlock(before, blockId, body);
-  const changed = after !== before;
+  const changed = after.replace(/\r\n/g, '\n') !== before.replace(/\r\n/g, '\n');
   if (changed && !check) writeFileSync(path, after, 'utf8');
   return { changed };
 }
