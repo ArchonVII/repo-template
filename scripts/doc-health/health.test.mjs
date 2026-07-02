@@ -738,3 +738,19 @@ test('checkRepo: code_roots mapping to a nonexistent checked doc blocks', () => 
   assert.deepEqual(invalid.map((f) => f.path), ['src']);
   assert.match(invalid[0].message, /GHOST/);
 });
+
+// #146 round 9: gitignored top-level dirs (build output like target/) are not
+// code roots — a local checkout with build artifacts must not red-light the
+// coverage rule that a clean CI checkout would pass.
+test('checkRepo: gitignored top-level dirs are exempt from code-root coverage', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, '.gitignore', 'target/\n');
+  writeInRepo(repo, 'src/index.mjs', 'export {};\n');
+  commitAll(repo, 'feat: src + gitignore (#0)');
+  writeInRepo(repo, 'target/out.txt', 'artifact\n'); // ignored, uncommitted
+
+  const report = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP });
+  const unmapped = report.findings.filter((f) => f.code === 'code-root-unmapped').map((f) => f.path);
+  assert.ok(!unmapped.includes('target'), `ignored target/ must not need a mapping; got ${unmapped}`);
+  assert.ok(unmapped.includes('src'), 'tracked unmapped roots still block');
+});

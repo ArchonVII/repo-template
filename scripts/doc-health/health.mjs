@@ -134,7 +134,13 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
   };
   const codeRoots = docMap.code_roots || {};
   const mappedRoots = new Set(Object.keys(codeRoots));
-  for (const dir of topLevelDirs(root)) {
+  // Gitignored roots (build output like target/) exist only on local
+  // machines, not clean checkouts — they are not code roots and must not
+  // red-light a local scan that CI would pass (#146 round 9).
+  const allDirs = topLevelDirs(root);
+  const ignoredDirs = gitIgnoredSet(root, allDirs);
+  for (const dir of allDirs) {
+    if (ignoredDirs.has(dir)) continue;
     if (!mappedRoots.has(dir)) {
       addFinding(findings, {
         severity: 'blocking',
