@@ -14,6 +14,7 @@ import {
   evaluateDocsDecision,
   evaluateRepoUpdateLogDecision,
   extractChangelogFragment,
+  freshDodCaptures,
   isSubstantiveDecision,
   listHookShellFiles,
   listWorkflowFiles,
@@ -448,8 +449,16 @@ async function main() {
 
   // #124 S2: decisions captured incrementally during the session (close:dod)
   // are the defaults; explicit flags win; scope-derived defaults come last.
-  const dodCapture = readDodCapture(root);
-  const captured = (section) => dodCapture?.sections?.[section]?.decision || '';
+  // Only captures made at the CURRENT HEAD are reusable (#145 review, P1) —
+  // stale ones are discarded loudly and must be recaptured.
+  const { sections: freshSections, discarded } = freshDodCaptures(readDodCapture(root), gitInfo.head);
+  if (discarded.length > 0) {
+    process.stderr.write(
+      `Discarded stale close:dod captures (recorded at a different HEAD): ${discarded.join(', ')} — `
+        + 'recapture at the current HEAD if still true.\n'
+    );
+  }
+  const captured = (section) => freshSections[section]?.decision || '';
 
   const changelogDecision = args['changelog-decision'] || captured('changelog')
     || (scope.requiresChangelog ? '' : 'not required: docs-only change');

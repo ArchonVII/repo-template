@@ -362,6 +362,21 @@ export function readDodCapture(root = process.cwd()) {
   }
 }
 
+// #145 review (P1): the marker's HEAD-bound guarantee extends to every
+// folded-in decision — a capture made at an earlier commit must not certify a
+// later one. Only sections whose recorded head matches the current HEAD are
+// reusable; the rest are discarded and must be recaptured (the reboot-safety
+// property only ever promised survival WITHOUT new commits).
+export function freshDodCaptures(capture, head) {
+  const sections = {};
+  const discarded = [];
+  for (const [name, entry] of Object.entries(capture?.sections || {})) {
+    if (entry?.head && head && entry.head === head) sections[name] = entry;
+    else discarded.push(name);
+  }
+  return { sections, discarded };
+}
+
 export function writeDodSection(root, section, decision, { head = null, timestamp = new Date().toISOString() } = {}) {
   if (!DOD_SECTIONS.includes(section)) {
     throw new Error(`Unknown DoD section "${section}" — expected one of: ${DOD_SECTIONS.join(', ')}.`);

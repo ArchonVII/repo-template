@@ -12,6 +12,7 @@ import {
   evaluateDocsDecision,
   evaluateRepoUpdateLogDecision,
   evaluateRequiredChecks,
+  freshDodCaptures,
   matchDocMapTriggers,
   parseRequiredGateCheckName,
   readDodCapture,
@@ -497,6 +498,28 @@ test('evaluateDocsDecision demands substance (or a waiver) when triggered docs a
 });
 
 // ─── #124 S2: incremental DoD capture (survives reboot) ───────────────────────
+
+// #145 review (P1): a capture made at an earlier commit must not certify a
+// later one — the marker's HEAD-bound guarantee extends to every folded-in
+// decision. Stale sections are discarded, not silently reused.
+test('freshDodCaptures keeps only sections captured at the current HEAD', () => {
+  const capture = {
+    version: 1,
+    sections: {
+      verification: { decision: 'npm test passed at A', head: 'aaa111', capturedAt: 't1' },
+      findings: { decision: 'no findings on this lane', head: 'bbb222', capturedAt: 't2' },
+      docs: { decision: 'updated the owning contract docs', head: null, capturedAt: 't3' },
+    },
+  };
+
+  const atB = freshDodCaptures(capture, 'bbb222');
+  assert.deepEqual(Object.keys(atB.sections), ['findings']);
+  assert.deepEqual(atB.discarded.sort(), ['docs', 'verification']);
+
+  // No capture / no HEAD → nothing fresh, nothing kept.
+  assert.deepEqual(freshDodCaptures(null, 'bbb222'), { sections: {}, discarded: [] });
+  assert.deepEqual(freshDodCaptures(capture, null).sections, {});
+});
 
 test('writeDodSection / readDodCapture merge per-section decisions incrementally', () => {
   const root = mkdtempSync(join(tmpdir(), 'dod-capture-'));
