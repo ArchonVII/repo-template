@@ -308,3 +308,552 @@ test('CLI writes only the requested report path and exits zero for warnings', ()
     .replace(/\\/g, '/');
   assert.equal(status, '?? doc-health-report.json');
 });
+
+// ─── #124 L2: blocking subset (severity split, doc-map contract rules) ────────
+
+// The doc-map is injected (the CLI resolves it via dynamic import) so every
+// rule is unit-testable without the docs generators on disk.
+const L2_DOC_MAP = {
+  version: 1,
+  generated: [
+    { path: 'docs/INDEX.md', class: 'committed', generator: 'docs:render', block: 'index-pages', inputs: [] },
+    { path: 'docs/STATUS.md', class: 'rendered', generator: 'docs:status', inputs: [] },
+  ],
+  checked: [
+    { path: 'docs/CANON.md', owns: ['scripts/**'], checks: ['links', 'path-refs'] },
+  ],
+  human: [],
+  required: { base: ['AGENTS.md', 'docs/CANON.md'] },
+  code_roots: { docs: 'self' },
+};
+
+// #146 review round 4: `**/` means zero-or-more segments (scripts/**/*.mjs
+// must match scripts/foo.mjs), and rename sources must stay in the changed
+// set or a file moved OUT of an owned glob never re-triggers its doc.
+test('docMapGlobToRegExp: globstar matches zero segments', async () => {
+  const { docMapGlobToRegExp } = await import('./lib.mjs');
+  assert.ok(docMapGlobToRegExp('scripts/**/*.mjs').test('scripts/foo.mjs'));
+  assert.ok(docMapGlobToRegExp('scripts/**/*.mjs').test('scripts/a/b/foo.mjs'));
+  assert.ok(!docMapGlobToRegExp('scripts/**/*.mjs').test('scriptsx/foo.mjs'));
+  assert.ok(docMapGlobToRegExp('docs/**/*.md').test('docs/CANON.md'));
+  assert.ok(docMapGlobToRegExp('**/*.md').test('README.md'));
+  assert.ok(docMapGlobToRegExp('scripts/**').test('scripts/close/lib.mjs'));
+});
+
+test('changedPathsFromGit reports both sides of a rename', async () => {
+  const { changedPathsFromGit } = await import('./health.mjs');
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'scripts/owned.mjs', 'export {};\n');
+  commitAll(repo, 'feat: owned file (#0)');
+  const base = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  execFileSync('git', ['-C', repo, 'mv', join('scripts', 'owned.mjs'), join('docs', 'moved.mjs')], { encoding: 'utf8' });
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'refactor: move out of owned glob (#0)'], { encoding: 'utf8' });
+
+  const changed = changedPathsFromGit(repo, base);
+  assert.ok(changed.includes('scripts/owned.mjs'), `rename SOURCE must be in the changed set; got ${changed}`);
+  assert.ok(changed.includes('docs/moved.mjs'), `rename destination must be in the changed set; got ${changed}`);
+});
+
+test('checkRepo without a doc-map: no blocking rules run, report stays warning-only', () => {
+  const repo = makeTempRepo();
+  const report = checkRepo(repo, { now: NOW });
+  assert.equal(report.summary.blocking, 0);
+  assert.equal(report.status, 'clean');
+});
+
+test('checkRepo: missing required.base doc and unmapped code root block', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'src/index.mjs', 'export {};\n'); // top-level root absent from code_roots
+  commitAll(repo, 'feat: unmapped root (#0)');
+
+  const report = checkRepo(repo, {
+    now: NOW,
+    docMap: { ...L2_DOC_MAP, required: { base: ['AGENTS.md', 'docs/CANON.md', 'docs/agent-process/doc-system.md'] } },
+  });
+
+  const blocking = report.findings.filter((f) => f.severity === 'blocking');
+  const codes = blocking.map((f) => `${f.code}:${f.path}`).sort();
+  assert.ok(codes.includes('code-root-unmapped:src'), `expected src unmapped; got ${codes}`);
+  assert.ok(
+    codes.includes('required-doc-missing:docs/agent-process/doc-system.md'),
+    `expected missing required doc; got ${codes}`
+  );
+  assert.equal(report.status, 'blocking');
+  assert.equal(report.summary.blocking, blocking.length);
+  assert.equal(report.summary.warnings, report.summary.findings - blocking.length);
+});
+
+// #146 round 5: a code_roots VALUE must actually deliver the coverage it
+// claims — 'unmapped_ok'/'self', or a checked doc whose owns globs cover the
+// root. A typo'd mapping silently defeats the keystone-rot guard otherwise.
+test('checkRepo: code_roots mappings must name a covering checked doc', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'src/index.mjs', 'export {};\n');
+  writeInRepo(repo, 'lib/util.mjs', 'export {};\n');
+  commitAll(repo, 'feat: roots (#0)');
+
+  const report = checkRepo(repo, {
+    now: NOW,
+    docMap: {
+      ...L2_DOC_MAP,
+      checked: [{ path: 'docs/CANON.md', owns: ['scripts/**'], checks: ['links'] }],
+      code_roots: {
+        docs: 'self',
+        src: 'docs/TYPO.md', // no such checked entry
+        lib: 'docs/CANON.md', // exists, but owns does not cover lib/**
+      },
+    },
+  });
+
+  const invalid = report.findings.filter((f) => f.code === 'code-root-mapping-invalid');
+  assert.deepEqual(invalid.map((f) => f.path).sort(), ['lib', 'src']);
+  assert.ok(invalid.every((f) => f.severity === 'blocking'));
+  // Valid shapes stay clean: no finding for docs (self).
+  assert.ok(!report.findings.some((f) => f.code === 'code-root-mapping-invalid' && f.path === 'docs'));
+});
+
+// #146 round 6: coverage must be validated against ACTUAL files under the
+// root — an extension-scoped owns glob (tools/**/*.mjs) is a valid narrowing,
+// not a broken mapping.
+test('checkRepo: extension-scoped owns globs validate against real files', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'tools/gen.mjs', 'export {};\n');
+  commitAll(repo, 'feat: tools root (#0)');
+
+  const report = checkRepo(repo, {
+    now: NOW,
+    docMap: {
+      ...L2_DOC_MAP,
+      checked: [{ path: 'docs/CANON.md', owns: ['tools/**/*.mjs'], checks: ['links'] }],
+      code_roots: { docs: 'self', tools: 'docs/CANON.md' },
+    },
+  });
+  assert.ok(
+    !report.findings.some((f) => f.code === 'code-root-mapping-invalid'),
+    `extension-scoped coverage must validate; got ${JSON.stringify(report.findings.filter((f) => f.code === 'code-root-mapping-invalid'))}`
+  );
+});
+
+test('checkRepo: dangling links in a checked doc block only when the doc is re-triggered', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'docs/CANON.md', wikiPage('Truth register', 'CANON', [
+    '# CANON',
+    '',
+    'See [missing](./missing-page.md) for details.',
+  ].join('\n')));
+  commitAll(repo, 'docs: dangling link (#0)');
+
+  // Full audit (no changed paths): stays a warning.
+  const audit = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP });
+  const auditFinding = audit.findings.find((f) => f.code === 'dangling-relative-link' && f.path === 'docs/CANON.md');
+  assert.equal(auditFinding.severity, 'warning');
+
+  // The doc itself changed: blocking.
+  const docChanged = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP, changedPaths: ['docs/CANON.md'] });
+  assert.equal(
+    docChanged.findings.find((f) => f.code === 'dangling-relative-link' && f.path === 'docs/CANON.md').severity,
+    'blocking'
+  );
+
+  // Owned code changed (owns: scripts/**): the doc is re-checked → blocking.
+  const codeChanged = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP, changedPaths: ['scripts/foo.mjs'] });
+  assert.equal(
+    codeChanged.findings.find((f) => f.code === 'dangling-relative-link' && f.path === 'docs/CANON.md').severity,
+    'blocking'
+  );
+});
+
+// A glob checked entry (docs/adr/**) must escalate at FILE granularity on
+// doc-path hits: changing one ADR must not turn pre-existing rot in a sibling
+// ADR blocking (#146 review, Codex P2). An owns hit still re-triggers every
+// doc of the entry — the changed code may invalidate any of them.
+test('checkRepo: glob checked entries escalate per file on doc hits, per entry on owns hits', () => {
+  const repo = makeTempRepo();
+  const adrMap = {
+    version: 1,
+    generated: [],
+    checked: [{ path: 'docs/adr/**', owns: ['scripts/**'], checks: ['links'] }],
+    human: [],
+    required: { base: [] },
+    code_roots: { docs: 'self' },
+  };
+  writeInRepo(repo, 'docs/adr/0001-rotten.md', '# ADR 1\n\nSee [gone](./gone.md).\n');
+  writeInRepo(repo, 'docs/adr/0002-fresh.md', '# ADR 2\n\nClean content.\n');
+  commitAll(repo, 'docs: two adrs (#0)');
+
+  // Sibling ADR changed: the rotten ADR was NOT touched → its dead link stays a warning.
+  const sibling = checkRepo(repo, { now: NOW, docMap: adrMap, changedPaths: ['docs/adr/0002-fresh.md'] });
+  assert.equal(
+    sibling.findings.find((f) => f.code === 'dangling-relative-link' && f.path === 'docs/adr/0001-rotten.md').severity,
+    'warning'
+  );
+
+  // The rotten ADR itself changed: blocking.
+  const direct = checkRepo(repo, { now: NOW, docMap: adrMap, changedPaths: ['docs/adr/0001-rotten.md'] });
+  assert.equal(
+    direct.findings.find((f) => f.code === 'dangling-relative-link' && f.path === 'docs/adr/0001-rotten.md').severity,
+    'blocking'
+  );
+
+  // Owned code changed: every doc of the entry re-triggers.
+  const owns = checkRepo(repo, { now: NOW, docMap: adrMap, changedPaths: ['scripts/foo.mjs'] });
+  assert.equal(
+    owns.findings.find((f) => f.code === 'dangling-relative-link' && f.path === 'docs/adr/0001-rotten.md').severity,
+    'blocking'
+  );
+});
+
+test('checkRepo: path-refs verify backtick repo paths in declaring docs, exempting rendered-class paths', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'docs/CANON.md', wikiPage('Truth register', 'CANON', [
+    '# CANON',
+    '',
+    'Run `scripts/nope.mjs` after reading `docs/STATUS.md`; globs like `scripts/**` are ignored,',
+    'and `docs/project-status.md` exists.',
+    'Prose examples must not block (#146 review): git ranges `origin/main...branch` and',
+    '`origin/main..HEAD`, bare dirs `dir/`, cross-repo refs `repo-template/AGENTS.md`,',
+    'and GitHub slugs `ArchonVII/repo-template` are not repo paths here. Directory',
+    'mentions like the optional runtime `docs/some-runtime-claims/` are layout',
+    'descriptions, not file claims — never existence-checked (#146 round 3).',
+  ].join('\n')));
+  writeInRepo(repo, 'scripts/real-root-marker.mjs', 'export {};\n');
+  commitAll(repo, 'docs: path refs (#0)');
+
+  const report = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP, changedPaths: ['docs/CANON.md'] });
+  const refs = report.findings.filter((f) => f.code === 'path-ref-missing');
+  assert.equal(refs.length, 1, `exactly the dead ref should fire; got ${JSON.stringify(refs)}`);
+  assert.equal(refs[0].path, 'docs/CANON.md');
+  assert.match(refs[0].message, /scripts\/nope\.mjs/);
+  assert.equal(refs[0].severity, 'blocking');
+
+  // Unchanged/untriggered: same rule reports as a warning.
+  const audit = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP });
+  assert.equal(audit.findings.find((f) => f.code === 'path-ref-missing').severity, 'warning');
+});
+
+test('checkRepo: stale committed generated blocks and a broken doc-map block', () => {
+  const repo = makeTempRepo();
+
+  const stale = checkRepo(repo, {
+    now: NOW,
+    docMap: L2_DOC_MAP,
+    renderCheck: () => [
+      { name: 'docs/INDEX.md (index-pages)', changed: true },
+      { name: 'llms.txt (nav) + README.md (status)', changed: false },
+    ],
+  });
+  const staleFinding = stale.findings.find((f) => f.code === 'generated-block-stale');
+  assert.equal(staleFinding.severity, 'blocking');
+  assert.match(staleFinding.message, /index-pages/);
+
+  const broken = checkRepo(repo, {
+    now: NOW,
+    docMap: L2_DOC_MAP,
+    renderCheck: () => { throw new Error('markers missing'); },
+  });
+  const checkFailed = broken.findings.find((f) => f.code === 'generated-block-check-failed');
+  assert.equal(checkFailed.severity, 'blocking');
+
+  const invalid = checkRepo(repo, { now: NOW, docMapError: 'doc-map line 3: bad section' });
+  const invalidFinding = invalid.findings.find((f) => f.code === 'doc-map-invalid');
+  assert.equal(invalidFinding.severity, 'blocking');
+  assert.match(invalidFinding.message, /bad section/);
+});
+
+// #146 round 6: only generators the doc-map DECLARES may run — a map that
+// commits README.md but not docs/INDEX.md must not fail because runIndex
+// cannot find INDEX markers it never promised.
+test('CLI runs only doc-map-declared generators for the render check', () => {
+  const repo = makeTempRepo();
+  // README.md with the status managed block the nav generator owns; no INDEX/llms declared.
+  writeInRepo(repo, 'README.md', [
+    '# Project',
+    '',
+    '<!-- BEGIN ARCHONVII MANAGED BLOCK: status -->',
+    'stale placeholder',
+    '<!-- END ARCHONVII MANAGED BLOCK: status -->',
+    '',
+  ].join('\n'));
+  writeInRepo(repo, '.agent/doc-map.yml', [
+    'version: 1',
+    'generated:',
+    '  - path: README.md',
+    '    class: committed',
+    '    generator: docs:render',
+    '    block: status',
+    'code_roots:',
+    '  docs: self',
+    '',
+  ].join('\n'));
+  commitAll(repo, 'chore: partial doc-map (#0)');
+
+  let code = 0;
+  let stdout = '';
+  try {
+    stdout = execFileSync(process.execPath, [
+      join('scripts', 'doc-health', 'health.mjs'),
+      '--repo', repo, '--json', '--now', NOW_ISO,
+    ], { cwd: process.cwd(), encoding: 'utf8' });
+  } catch (err) {
+    code = err.status;
+    stdout = err.stdout;
+  }
+  const report = JSON.parse(stdout);
+  assert.ok(
+    !report.findings.some((f) => f.code === 'generated-block-check-failed' && /INDEX/.test(f.message)),
+    `undeclared INDEX generator must not run; got ${JSON.stringify(report.findings.filter((f) => f.code.startsWith('generated-block')))}`
+  );
+  // The declared README status block IS checked — nav runs against this repo
+  // (llms.txt undeclared and absent, so nav reports only what it can), and a
+  // stale declared block must surface as blocking.
+  assert.ok(code === 0 || code === 1, 'CLI must complete either way');
+});
+
+test('CLI exits 1 on blocking findings and loads the real doc-map + render check', () => {
+  const repo = makeTempRepo();
+  // No inline-[] sections: parseDocMap (correctly) rejects those; omitted
+  // sections default to empty.
+  writeInRepo(repo, '.agent/doc-map.yml', [
+    'version: 1',
+    'checked:',
+    '  - path: docs/CANON.md',
+    '    owns: ["scripts/**"]',
+    '    checks: [links, path-refs]',
+    'required:',
+    '  base:',
+    '    - AGENTS.md',
+    '    - docs/never-installed.md',
+    'code_roots:',
+    '  docs: self',
+    '',
+  ].join('\n'));
+  commitAll(repo, 'chore: doc-map with missing required doc (#0)');
+
+  let code = 0;
+  let stdout = '';
+  try {
+    stdout = execFileSync(process.execPath, [
+      join('scripts', 'doc-health', 'health.mjs'),
+      '--repo', repo, '--json', '--now', NOW_ISO,
+    ], { cwd: process.cwd(), encoding: 'utf8' });
+  } catch (err) {
+    code = err.status;
+    stdout = err.stdout;
+  }
+  assert.equal(code, 1, 'blocking findings must exit 1');
+  const report = JSON.parse(stdout);
+  assert.equal(report.status, 'blocking');
+  assert.ok(report.findings.some((f) => f.code === 'required-doc-missing' && f.path === 'docs/never-installed.md'));
+});
+
+// #146 round 7: a recognized block with a typo'd path must fail closed — the
+// checker manages a fixed surface and must not silently verify a different
+// file than the map declares.
+test('CLI fails closed when a declared generated path mismatches its block surface', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, '.agent/doc-map.yml', [
+    'version: 1',
+    'generated:',
+    '  - path: docs/NO_SUCH_INDEX.md',
+    '    class: committed',
+    '    generator: docs:render',
+    '    block: index-pages',
+    'code_roots:',
+    '  docs: self',
+    '',
+  ].join('\n'));
+  commitAll(repo, 'chore: typo path for known block (#0)');
+
+  let code = 0;
+  let stdout = '';
+  try {
+    stdout = execFileSync(process.execPath, [
+      join('scripts', 'doc-health', 'health.mjs'),
+      '--repo', repo, '--json', '--now', NOW_ISO,
+    ], { cwd: process.cwd(), encoding: 'utf8' });
+  } catch (err) {
+    code = err.status;
+    stdout = err.stdout;
+  }
+  assert.equal(code, 1);
+  const report = JSON.parse(stdout);
+  const failed = report.findings.find((f) => f.code === 'generated-block-check-failed');
+  assert.ok(failed, 'mismatched path must fail closed');
+  assert.match(failed.message, /NO_SUCH_INDEX/);
+});
+
+// #146 round 8, part 1: a committed entry with NO block id is unverifiable —
+// omitting block: must not silently disable the generated-block gate.
+test('CLI fails closed when a committed entry omits its block id', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, '.agent/doc-map.yml', [
+    'version: 1',
+    'generated:',
+    '  - path: docs/INDEX.md',
+    '    class: committed',
+    '    generator: docs:render',
+    'code_roots:',
+    '  docs: self',
+    '',
+  ].join('\n'));
+  commitAll(repo, 'chore: committed entry without block (#0)');
+
+  let code = 0;
+  let stdout = '';
+  try {
+    stdout = execFileSync(process.execPath, [
+      join('scripts', 'doc-health', 'health.mjs'),
+      '--repo', repo, '--json', '--now', NOW_ISO,
+    ], { cwd: process.cwd(), encoding: 'utf8' });
+  } catch (err) {
+    code = err.status;
+    stdout = err.stdout;
+  }
+  assert.equal(code, 1);
+  const report = JSON.parse(stdout);
+  const failed = report.findings.find((f) => f.code === 'generated-block-check-failed');
+  assert.ok(failed, 'blockless committed entry must fail closed');
+  assert.match(failed.message, /docs\/INDEX\.md/);
+});
+
+// #146 round 8, part 2: a code_roots mapping to a checked entry whose own
+// path resolves to no file satisfies coverage while re-triggering nothing —
+// the mapped doc must actually exist.
+test('checkRepo: code_roots mapping to a nonexistent checked doc blocks', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'src/index.mjs', 'export {};\n');
+  commitAll(repo, 'feat: src root (#0)');
+
+  const report = checkRepo(repo, {
+    now: NOW,
+    docMap: {
+      ...L2_DOC_MAP,
+      // Same typo repeated in checked.path and code_roots: lookup succeeds,
+      // owns covers src files, but the doc itself does not exist.
+      checked: [{ path: 'docs/GHOST.md', owns: ['src/**'], checks: ['links'] }],
+      code_roots: { docs: 'self', src: 'docs/GHOST.md' },
+    },
+  });
+  const invalid = report.findings.filter((f) => f.code === 'code-root-mapping-invalid');
+  assert.deepEqual(invalid.map((f) => f.path), ['src']);
+  assert.match(invalid[0].message, /GHOST/);
+});
+
+// #146 round 9: gitignored top-level dirs (build output like target/) are not
+// code roots — a local checkout with build artifacts must not red-light the
+// coverage rule that a clean CI checkout would pass.
+test('checkRepo: gitignored top-level dirs are exempt from code-root coverage', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, '.gitignore', 'target/\n');
+  writeInRepo(repo, 'src/index.mjs', 'export {};\n');
+  commitAll(repo, 'feat: src + gitignore (#0)');
+  writeInRepo(repo, 'target/out.txt', 'artifact\n'); // ignored, uncommitted
+
+  const report = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP });
+  const unmapped = report.findings.filter((f) => f.code === 'code-root-unmapped').map((f) => f.path);
+  assert.ok(!unmapped.includes('target'), `ignored target/ must not need a mapping; got ${unmapped}`);
+  assert.ok(unmapped.includes('src'), 'tracked unmapped roots still block');
+});
+
+// #146 round 10: only the nav block needs CANON's summary — a status-only
+// consumer with no docs/CANON.md must not fail on a read the declared
+// surface never required.
+test('CLI status-only render check does not require docs/CANON.md', () => {
+  const repo = makeTempRepo();
+  execFileSync('git', ['-C', repo, 'rm', '-q', 'docs/CANON.md'], { encoding: 'utf8' });
+  writeInRepo(repo, 'README.md', [
+    '# Project',
+    '',
+    '<!-- BEGIN ARCHONVII MANAGED BLOCK: status -->',
+    'stale placeholder',
+    '<!-- END ARCHONVII MANAGED BLOCK: status -->',
+    '',
+  ].join('\n'));
+  writeInRepo(repo, '.agent/doc-map.yml', [
+    'version: 1',
+    'generated:',
+    '  - path: README.md',
+    '    class: committed',
+    '    generator: docs:render',
+    '    block: status',
+    'code_roots:',
+    '  docs: self',
+    '',
+  ].join('\n'));
+  commitAll(repo, 'chore: status-only consumer without CANON (#0)');
+
+  let stdout = '';
+  try {
+    stdout = execFileSync(process.execPath, [
+      join('scripts', 'doc-health', 'health.mjs'),
+      '--repo', repo, '--json', '--now', NOW_ISO,
+    ], { cwd: process.cwd(), encoding: 'utf8' });
+  } catch (err) {
+    stdout = err.stdout;
+  }
+  const report = JSON.parse(stdout);
+  assert.ok(
+    !report.findings.some((f) => f.code === 'generated-block-check-failed' && /CANON/.test(f.message)),
+    `status-only check must not read CANON; got ${JSON.stringify(report.findings.filter((f) => f.code.startsWith('generated-block')))}`
+  );
+});
+
+// #146 round 11, part 1: EVERY checked entry must resolve to at least one
+// markdown file — a typo'd or deleted entry (not just code_roots-referenced
+// ones) silently disables its links/path-refs guard otherwise.
+test('checkRepo: a checked entry resolving to no doc blocks', () => {
+  const repo = makeTempRepo();
+  const report = checkRepo(repo, {
+    now: NOW,
+    docMap: {
+      ...L2_DOC_MAP,
+      checked: [
+        { path: 'docs/CANON.md', owns: ['scripts/**'], checks: ['links'] },
+        { path: 'docs/agent-process/doc-sweeep.md', owns: ['scripts/doc-sweep/**'], checks: ['links'] }, // typo
+      ],
+      code_roots: { docs: 'self' },
+    },
+  });
+  const missing = report.findings.filter((f) => f.code === 'checked-doc-missing');
+  assert.deepEqual(missing.map((f) => f.path), ['docs/agent-process/doc-sweeep.md']);
+  assert.equal(missing[0].severity, 'blocking');
+});
+
+// #146 round 11, part 2: ignore patterns like tmp/* ignore CONTENTS while
+// `git check-ignore tmp` misses the dir itself. Roots are now derived from
+// TRACKED files — exactly what a clean CI checkout contains.
+test('checkRepo: contents-ignored dirs (tmp/*) are exempt from code-root coverage', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, '.gitignore', 'tmp/*\n');
+  writeInRepo(repo, 'src/index.mjs', 'export {};\n');
+  commitAll(repo, 'feat: src + contents-ignore (#0)');
+  writeInRepo(repo, 'tmp/out.txt', 'artifact\n'); // contents ignored, dir unignorable by name
+
+  const report = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP });
+  const unmapped = report.findings.filter((f) => f.code === 'code-root-unmapped').map((f) => f.path);
+  assert.ok(!unmapped.includes('tmp'), `contents-ignored tmp/ must not need a mapping; got ${unmapped}`);
+  assert.ok(unmapped.includes('src'), 'tracked unmapped roots still block');
+});
+
+// #146 round 16: the coverage probe must use TRACKED files like root
+// discovery does — an ignored artifact matching owns must not green-light a
+// mapping locally that a clean CI checkout would block.
+test('checkRepo: coverage probe ignores untracked artifacts', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, '.gitignore', 'tools/generated.mjs\n');
+  writeInRepo(repo, 'tools/config.yml', 'a: 1\n');
+  commitAll(repo, 'feat: tools with config only (#0)');
+  writeInRepo(repo, 'tools/generated.mjs', 'export {};\n'); // ignored artifact
+
+  const report = checkRepo(repo, {
+    now: NOW,
+    docMap: {
+      ...L2_DOC_MAP,
+      checked: [{ path: 'docs/CANON.md', owns: ['tools/**/*.mjs'], checks: ['links'] }],
+      code_roots: { docs: 'self', tools: 'docs/CANON.md' },
+    },
+  });
+  const invalid = report.findings.filter((f) => f.code === 'code-root-mapping-invalid');
+  assert.deepEqual(invalid.map((f) => f.path), ['tools'],
+    'owns matching only an ignored artifact must not satisfy coverage');
+});

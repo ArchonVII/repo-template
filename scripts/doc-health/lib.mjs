@@ -238,3 +238,86 @@ export function earliestTokenLine(text, tokens) {
   }
   return best ?? 1;
 }
+
+// ─── #124 L2: doc-map contract helpers ─────────────────────────────────────────
+
+// Top-level directories the code-root coverage rule must account for: visible
+// dirs only, minus the same junk walkFiles skips — dot-dirs (.github/.agent/
+// .changelog are config, not code roots) and DIR_EXCLUDES.
+export function topLevelDirs(root) {
+  let entries;
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !DIR_EXCLUDES.has(e.name))
+    .map((e) => e.name)
+    .sort();
+}
+
+// Minimal glob for the doc-map's owns/heal_when/path vocabulary — third copy
+// of the ecosystem's zero-dep converter (twins in scripts/close/lib.mjs and
+// scripts/doc-sweep/lib.mjs): `**/` spans ZERO or more segments (so
+// scripts/**/*.mjs matches root-level scripts/foo.mjs — #146 review round 4),
+// a bare `**` spans anything, `*` stays within one segment, everything else
+// is literal, anchored both ends. Tokenized left-to-right, no placeholders.
+const GLOB_LITERAL_ESCAPE = /[.+^${}()|[\]\\]/;
+export function docMapGlobToRegExp(glob) {
+  const source = String(glob);
+  let out = '';
+  let i = 0;
+  while (i < source.length) {
+    if (source.startsWith('**/', i)) {
+      out += '(?:.*/)?';
+      i += 3;
+    } else if (source.startsWith('**', i)) {
+      out += '.*';
+      i += 2;
+    } else if (source[i] === '*') {
+      out += '[^/]*';
+      i += 1;
+    } else {
+      out += GLOB_LITERAL_ESCAPE.test(source[i]) ? `\\${source[i]}` : source[i];
+      i += 1;
+    }
+  }
+  return new RegExp(`^${out}$`);
+}
+
+// Backtick tokens that read as repo paths, for the path-refs rule. Deliberately
+// conservative — a false "missing path" blocking a PR is worse than a missed
+// one: requires a '/', bans whitespace, glob metachars, URLs/anchors/windows
+// drives (':'), placeholders ('<'), flags ('--'), leading '/' or '#', git
+// range syntax ('..'), and single-segment tokens like `dir/` (#146 review —
+// prose examples such as `origin/main...branch` are not repo paths). Each
+// segment is word-ish. The caller additionally requires the first segment to
+// be a real top-level root of THIS repo, which drops cross-repo references
+// (`repo-template/AGENTS.md`) and org slugs. Returns [{ token, line }],
+// deduped per token per doc.
+export function extractPathRefTokens(text) {
+  const out = [];
+  const seen = new Set();
+  const lines = String(text || '').split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    for (const match of lines[i].matchAll(/`([^`]+)`/g)) {
+      const token = match[1].trim();
+      if (seen.has(token)) continue;
+      if (!token.includes('/') || token.includes('..')) continue;
+      if (/[\s*?{}[\]<>:]/.test(token)) continue;
+      if (token.startsWith('/') || token.startsWith('#') || token.startsWith('--')) continue;
+      // Trailing slash = a directory MENTION describing layout — often an
+      // optional runtime dir (.agent/coordination/claims/) that legitimately
+      // does not exist on a clean checkout. Only file references are
+      // existence-checked (#146 review round 3).
+      if (token.endsWith('/')) continue;
+      const segments = token.split('/');
+      if (segments.length < 2) continue;
+      if (!segments.every((seg) => /^[\w.@-]+$/.test(seg))) continue;
+      seen.add(token);
+      out.push({ token, line: i + 1 });
+    }
+  }
+  return out;
+}

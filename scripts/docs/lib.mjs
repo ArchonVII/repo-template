@@ -35,10 +35,13 @@ export function renderManagedBlock(content, id, body) {
 
 // Regenerate one managed block in a file. check:true reports drift without
 // writing (the docs:render --check drift gate); check:false writes in place.
+// Drift is judged eol-normalized: a Windows autocrlf checkout materializes
+// committed files with CRLF while generators emit LF, and that must not read
+// as stale (or every fresh Windows checkout false-fails the gate — #124 L2).
 export function applyGeneratedFile({ path, blockId, body, check = false }) {
   const before = readFileSync(path, 'utf8');
   const after = renderManagedBlock(before, blockId, body);
-  const changed = after !== before;
+  const changed = after.replace(/\r\n/g, '\n') !== before.replace(/\r\n/g, '\n');
   if (changed && !check) writeFileSync(path, after, 'utf8');
   return { changed };
 }
@@ -164,8 +167,87 @@ export function parseDocMap(text) {
     throw new Error(`doc-map line ${lineNo}: unhandled content in section "${section}"`);
   }
 
+  // Every list-section entry needs a path — a misspelled `paths:` key would
+  // silently drop the entry from every guard it enables (#146 round 16).
+  for (const [sectionName, entries] of [['generated', map.generated], ['checked', map.checked], ['human', map.human]]) {
+    for (const entry of entries) {
+      if (typeof entry.path !== 'string' || !entry.path.trim()) {
+        throw new Error(`doc-map ${sectionName} entry is missing a path (keys: ${Object.keys(entry).join(', ') || 'none'})`);
+      }
+    }
+  }
+
+  // Scalar list fields (owns: scripts/**) are valid YAML — normalize them
+  // ONCE here so no consumer can crash on .join/.map over a string
+  // (#146 round 15; same lesson as scripts/close/lib.mjs toGlobList).
+  const toArray = (v) => (Array.isArray(v) ? v : typeof v === 'string' && v.trim() ? [v.trim()] : []);
+  for (const entry of map.checked) {
+    entry.owns = toArray(entry.owns);
+    entry.checks = toArray(entry.checks);
+  }
+  for (const entry of map.human) {
+    entry.heal_when = toArray(entry.heal_when);
+  }
+  for (const entry of map.generated) {
+    entry.inputs = toArray(entry.inputs);
+  }
+
+  // generated[].class is schema, not decoration: a typo like 'commited' would
+  // silently drop the entry from every consumer and disable the
+  // generated-block gate (#146 round 13) — fail closed instead.
+  for (const entry of map.checked) {
+    const rules = Array.isArray(entry.checks) ? entry.checks : entry.checks ? [entry.checks] : [];
+    // A checked entry with no checks is a contradiction — "machine-verified"
+    // with nothing to verify — and silently disables link/path-ref escalation
+    // for its owns hits (#146 round 17).
+    if (rules.length === 0) {
+      throw new Error(`doc-map checked entry ${entry.path}: checks is required and must not be empty`);
+    }
+    for (const rule of rules) {
+      if (!CHECKED_RULES.has(rule)) {
+        throw new Error(
+          `doc-map checked entry ${entry.path || '(no path)'}: unknown checks rule "${rule}" ` +
+          `(known: ${[...CHECKED_RULES].join(', ')})`
+        );
+      }
+    }
+  }
+  for (const entry of map.generated) {
+    if (!GENERATED_CLASSES.has(entry.class)) {
+      throw new Error(
+        `doc-map generated entry ${entry.path || '(no path)'}: class must be one of ` +
+        `${[...GENERATED_CLASSES].join('/')}, got "${entry.class ?? '(missing)'}"`
+      );
+    }
+  }
+
   return map;
 }
+
+const GENERATED_CLASSES = new Set(['committed', 'rendered', 'release']);
+
+// The deterministic per-doc rule vocabulary (doc-system.md contract): the
+// blocking-capable rules plus the warning-only dashboard rules. An unknown
+// name (checks: [link]) would silently disable the guard it misspells
+// (#146 round 14) — the parser fails closed instead.
+const CHECKED_RULES = new Set([
+  'links',
+  'path-refs',
+  'last-reviewed',
+  'placeholders',
+  'stale-terms',
+  'closed-issue-refs',
+  'supersession',
+]);
+
+// The fixed surface each known committed block's generator manages — shared
+// by docs:render and the doc-health render check so a declared path that
+// mismatches its block fails closed everywhere (#146 rounds 7+13).
+export const KNOWN_BLOCK_SURFACES = {
+  'index-pages': 'docs/INDEX.md',
+  nav: 'llms.txt',
+  status: 'README.md',
+};
 
 export function docMapPath(root) {
   return join(root, '.agent', 'doc-map.yml');

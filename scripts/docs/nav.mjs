@@ -42,22 +42,33 @@ export function renderReadmeStatusBlock(docMap) {
   ].join('\n');
 }
 
-export function runNav({ root, check = false }) {
+// `surfaces` selects which of the two nav-owned blocks to touch — a partial
+// doc-map that declares only README's status block must not fail on llms.txt
+// markers it never promised (repo-template#146 round 6). Default: both.
+export function runNav({ root, check = false, surfaces = ['nav', 'status'] }) {
   const docMap = readDocMap(root);
-  const canon = parseDocMetadata(readText(join(root, 'docs', 'CANON.md')));
-  const navResult = applyGeneratedFile({
-    path: join(root, 'llms.txt'),
-    blockId: 'nav',
-    body: renderNavBlock(docMap, canon.frontmatter.summary ?? null),
-    check,
-  });
-  const statusResult = applyGeneratedFile({
-    path: join(root, 'README.md'),
-    blockId: 'status',
-    body: renderReadmeStatusBlock(docMap),
-    check,
-  });
-  return { changed: navResult.changed || statusResult.changed };
+  let changed = false;
+  if (surfaces.includes('nav')) {
+    // Only the nav block consumes CANON's summary — a status-only consumer
+    // without docs/CANON.md must not fail on a read its declared surface
+    // never required (repo-template#146 round 10).
+    const canon = parseDocMetadata(readText(join(root, 'docs', 'CANON.md')));
+    changed = applyGeneratedFile({
+      path: join(root, 'llms.txt'),
+      blockId: 'nav',
+      body: renderNavBlock(docMap, canon.frontmatter.summary ?? null),
+      check,
+    }).changed || changed;
+  }
+  if (surfaces.includes('status')) {
+    changed = applyGeneratedFile({
+      path: join(root, 'README.md'),
+      blockId: 'status',
+      body: renderReadmeStatusBlock(docMap),
+      check,
+    }).changed || changed;
+  }
+  return { changed };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

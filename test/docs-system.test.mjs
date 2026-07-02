@@ -235,6 +235,29 @@ test('applyGeneratedFile check mode reports drift without writing; write mode wr
   }
 });
 
+// A Windows autocrlf checkout materializes committed files with CRLF while
+// generators emit LF; content-identical blocks must not read as drift or
+// every fresh Windows checkout false-fails docs:render --check (#124 L2
+// dogfood catch).
+test('applyGeneratedFile treats eol-only differences as clean', () => {
+  const root = tempRoot();
+  try {
+    const target = join(root, 'INDEX.md');
+    writeFileSync(
+      target,
+      '# head\r\n\r\n<!-- BEGIN ARCHONVII MANAGED BLOCK: x -->\r\nsame\r\n<!-- END ARCHONVII MANAGED BLOCK: x -->\r\n'
+    );
+    const checked = applyGeneratedFile({ path: target, blockId: 'x', body: 'same', check: true });
+    assert.equal(checked.changed, false, 'CRLF vs LF with identical content is not drift');
+
+    const written = applyGeneratedFile({ path: target, blockId: 'x', body: 'same', check: false });
+    assert.equal(written.changed, false);
+    assert.ok(readFileSync(target, 'utf8').includes('\r\n'), 'a clean file must not be rewritten');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('status model summarizes volatile inputs and renders with an injected timestamp', () => {
   const model = buildStatusModel({
     prs: [
@@ -296,6 +319,11 @@ test('status model must not drop findings from the live doc-health producer', ()
   const model = buildStatusModel({ prs: [], issues: [], docHealth: report, now: 'x' });
   assert.equal(model.docWarningCount, report.summary.warnings);
   assert.equal(model.docWarningCount + model.docErrorCount, report.summary.findings);
+  // This repo is its own gate fixture: a committed tree must carry zero
+  // blocking doc-map-contract findings (#124 L2) — the CLI here loads the
+  // real doc-map and render check.
+  assert.equal(report.summary.blocking, 0,
+    `repo must be blocking-clean; got ${JSON.stringify(report.findings.filter((f) => f.severity === 'blocking'))}`);
 });
 
 // gh must run against the requested root, not the caller's cwd, and must ask
@@ -353,4 +381,239 @@ test('status render surfaces gh snapshot failures instead of reporting zero open
   assert.ok(md.includes('gh auth login'), 'the gh error must reach the reader');
   assert.ok(!md.includes('Open PRs (0'), 'a failed snapshot must not read as zero open PRs');
   assert.ok(!md.includes('Open issues (0'), 'a failed snapshot must not read as zero open issues');
+});
+
+// #146 round 12: docs:render must honor the doc-map's declared committed
+// surfaces — the remediation command the blocking gate points at must not
+// ENOENT on generators the consumer never declared.
+test('docs:render runs only doc-map-declared committed surfaces', () => {
+  const root = tempRoot();
+  try {
+    mkdirSync(join(root, '.agent'), { recursive: true });
+    writeFileSync(join(root, '.agent', 'doc-map.yml'), [
+      'version: 1',
+      'generated:',
+      '  - path: README.md',
+      '    class: committed',
+      '    generator: docs:render',
+      '    block: status',
+      'code_roots:',
+      '  docs: self',
+      '',
+    ].join('\n'));
+    writeFileSync(join(root, 'README.md'), [
+      '# Partial consumer',
+      '',
+      '<!-- BEGIN ARCHONVII MANAGED BLOCK: status -->',
+      'stale',
+      '<!-- END ARCHONVII MANAGED BLOCK: status -->',
+      '',
+    ].join('\n'));
+    // No docs/INDEX.md, no llms.txt, no docs/CANON.md — none declared.
+
+    const out = execFileSync(
+      process.execPath,
+      [join(REPO_ROOT, 'scripts', 'docs', 'render.mjs'), '--repo', root],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+    assert.match(out, /status/);
+    assert.doesNotMatch(out, /INDEX/);
+    assert.ok(!readFileSync(join(root, 'README.md'), 'utf8').includes('stale'), 'declared block regenerated');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// #146 round 13: generated[].class is schema, not decoration — a typo
+// (class: commited) silently dropped the entry from every consumer, disabling
+// the generated-block gate. The parser fails closed on invalid/missing class.
+test('parseDocMap rejects invalid or missing generated class values', () => {
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'generated:',
+    '  - path: README.md',
+    '    class: commited',
+    '    generator: docs:render',
+    '    block: status',
+  ].join('\n')), /class/i);
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'generated:',
+    '  - path: README.md',
+    '    generator: docs:render',
+    '    block: status',
+  ].join('\n')), /class/i);
+});
+
+// #146 round 13: docs:render must refuse a committed entry whose path does
+// not match its block's surface — running the generator would mutate an
+// UNDECLARED file while the declared one stays broken.
+test('docs:render refuses mismatched path/block declarations', () => {
+  const root = tempRoot();
+  try {
+    mkdirSync(join(root, '.agent'), { recursive: true });
+    mkdirSync(join(root, 'docs'), { recursive: true });
+    writeFileSync(join(root, '.agent', 'doc-map.yml'), [
+      'version: 1',
+      'generated:',
+      '  - path: docs/NO_SUCH_INDEX.md',
+      '    class: committed',
+      '    generator: docs:render',
+      '    block: index-pages',
+      'code_roots:',
+      '  docs: self',
+      '',
+    ].join('\n'));
+    writeFileSync(
+      join(root, 'docs', 'INDEX.md'),
+      '# index\n\n<!-- BEGIN ARCHONVII MANAGED BLOCK: index-pages -->\nuntouched\n<!-- END ARCHONVII MANAGED BLOCK: index-pages -->\n'
+    );
+
+    let code = 0;
+    try {
+      execFileSync(
+        process.execPath,
+        [join(REPO_ROOT, 'scripts', 'docs', 'render.mjs'), '--repo', root],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+      );
+    } catch (err) {
+      code = err.status;
+    }
+    assert.notEqual(code, 0, 'mismatched declaration must fail');
+    assert.ok(
+      readFileSync(join(root, 'docs', 'INDEX.md'), 'utf8').includes('untouched'),
+      'the undeclared real surface must not be mutated'
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// #146 round 14: unknown checks rule names (checks: [link]) silently disable
+// the guard they misspell — the parser validates the rule vocabulary.
+test('parseDocMap rejects unknown checked rule names', () => {
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'checked:',
+    '  - path: docs/CANON.md',
+    '    owns: ["scripts/**"]',
+    '    checks: [link]',
+  ].join('\n')), /checks/i);
+  // The full documented vocabulary parses clean.
+  const ok = parseDocMap([
+    'version: 1',
+    'checked:',
+    '  - path: docs/CANON.md',
+    '    owns: ["scripts/**"]',
+    '    checks: [links, path-refs, last-reviewed, placeholders, stale-terms, closed-issue-refs, supersession]',
+  ].join('\n'));
+  assert.equal(ok.checked[0].checks.length, 7);
+});
+
+// #146 round 14: docs:render must refuse unknown committed block ids — the
+// remediation command must never report current while doc-health blocks the
+// same map as unverifiable.
+test('docs:render refuses unknown committed block ids', () => {
+  const root = tempRoot();
+  try {
+    mkdirSync(join(root, '.agent'), { recursive: true });
+    writeFileSync(join(root, '.agent', 'doc-map.yml'), [
+      'version: 1',
+      'generated:',
+      '  - path: README.md',
+      '    class: committed',
+      '    generator: docs:render',
+      '    block: statusz',
+      'code_roots:',
+      '  docs: self',
+      '',
+    ].join('\n'));
+
+    let code = 0;
+    try {
+      execFileSync(
+        process.execPath,
+        [join(REPO_ROOT, 'scripts', 'docs', 'render.mjs'), '--repo', root, '--check'],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+      );
+    } catch (err) {
+      code = err.status;
+    }
+    assert.notEqual(code, 0, 'unknown committed block id must fail, not report current');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// #146 round 15: scalar list fields (owns: scripts/**) are valid YAML that
+// every consumer must survive — normalize them ONCE in the parser instead of
+// per-consumer (renderNavBlock crashed on doc.owns.join before this).
+test('parseDocMap normalizes scalar list fields to arrays', () => {
+  const map = parseDocMap([
+    'version: 1',
+    'generated:',
+    '  - path: llms.txt',
+    '    class: committed',
+    '    generator: docs:render',
+    '    block: nav',
+    '    inputs: docs/CANON.md',
+    'checked:',
+    '  - path: docs/CANON.md',
+    '    owns: scripts/**',
+    '    checks: links',
+    'human:',
+    '  - path: docs/guides/**',
+    '    heal_when: scripts/**',
+  ].join('\n'));
+  assert.deepEqual(map.checked[0].owns, ['scripts/**']);
+  assert.deepEqual(map.checked[0].checks, ['links']);
+  assert.deepEqual(map.human[0].heal_when, ['scripts/**']);
+  assert.deepEqual(map.generated[0].inputs, ['docs/CANON.md']);
+
+  // The nav renderer consumes the parsed map directly — scalar owns must not
+  // crash it (doc.owns.join is not a function, pre-fix).
+  assert.doesNotThrow(() => renderNavBlock(map, 'summary'));
+});
+
+// #146 round 16: entry paths are required — a misspelled `paths:` key
+// silently dropped the entry from every guard it was meant to enable.
+test('parseDocMap rejects entries without a path', () => {
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'checked:',
+    '  - paths: docs/CANON.md',
+    '    owns: ["scripts/**"]',
+    '    checks: [links]',
+  ].join('\n')), /path/i);
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'generated:',
+    '  - class: committed',
+    '    generator: docs:render',
+    '    block: status',
+  ].join('\n')), /path/i);
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'human:',
+    '  - heal_when: ["scripts/**"]',
+  ].join('\n')), /path/i);
+});
+
+// #146 round 17: a checked entry with no checks (omitted, or a check: typo)
+// is a contradiction — "machine-verified" with nothing to verify — and
+// silently disabled link/path-ref escalation for its owns hits.
+test('parseDocMap rejects checked entries without checks', () => {
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'checked:',
+    '  - path: docs/CANON.md',
+    '    owns: ["scripts/**"]',
+  ].join('\n')), /checks/i);
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'checked:',
+    '  - path: docs/CANON.md',
+    '    owns: ["scripts/**"]',
+    '    check: [links]',
+  ].join('\n')), /checks/i);
 });

@@ -22,8 +22,8 @@ changelog fragments, `.html-artifacts`) are valuable but routinely stranded unco
    abandoned doc from a live sibling's in-progress work. Orphans accumulate forever.
 
 **Live proof (2026-06-02):** `archon`'s primary `main` checkout carried two untracked roadmap
-docs (`docs/archon/ROADMAP.md`, `docs/archon/window-interaction-roadmap.md`) plus a modified
-`README.md`, none committed.
+docs (that repo's *docs/archon/ROADMAP.md* and *docs/archon/window-interaction-roadmap.md*)
+plus a modified `README.md`, none committed.
 
 ## 2. Understanding Summary
 
