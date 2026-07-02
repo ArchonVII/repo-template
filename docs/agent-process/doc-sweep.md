@@ -151,6 +151,14 @@ repo+branch+`active` but is unclear on path — **fail safe: treat as covering (
 Claims err toward over-blocking. Align with the `.agent/coordination/claims/` lifecycle
 (`active | released | expired | merged`, `expiresAt`); do not invent a parallel model.
 
+**Task claim (#124 S2 coordination bookend):** a lane's `.agent/current-task.json`
+(written by `agent:start-task`) is synthesized into a whole-worktree claim on the
+task's branch — no separate claim file needed. `expiresAt` derives from
+`lastActivityAt` (refreshed by every `close:dod` capture) or `createdAt` plus a 24h
+TTL (`TASK_CLAIM_TTL_MS`). Live → skip (the lane's in-flight docs are never recovered
+out from under it); past TTL → the claim reads as **expired**, which is exactly the
+positive death signal D8 requires to make an abandoned lane's docs eligible.
+
 ### 4.4 Review gate (D5 / D10)
 
 Before committing any eligible doc, ALL must pass (any failure → leave + log):
