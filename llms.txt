@@ -35,3 +35,30 @@ Rule:
 AGENTS.md is the single agent contract. Anything under .claude/, .codex/, .gemini/ (and
 CLAUDE.md / GEMINI.md) are adapters only. Canon lives in docs/CANON.md and docs/LIBRARIAN.md.
 If an adapter or a hook conflicts with them, trust the docs and open an audit in docs/audits/.
+
+<!-- BEGIN ARCHONVII MANAGED BLOCK: nav -->
+Doc system (generated from .agent/doc-map.yml by `npm run docs:render`):
+- docs/CANON.md — High-density register of what is true for this repo now vs. intended, plus locked decisions — read first. (Scaffold — fill per repo.)
+
+Generated surfaces (never hand-edit inside managed blocks):
+- docs/INDEX.md [committed] regenerate: docs:render
+- llms.txt [committed] regenerate: docs:render
+- README.md [committed] regenerate: docs:render
+- docs/STATUS.md [rendered] regenerate: docs:status
+- CHANGELOG.md [release] regenerate: docs:changelog
+
+Machine-checked docs (re-verified when owned paths change):
+- docs/CANON.md owns: scripts/**, schemas/**, docs/adr/**
+- docs/LIBRARIAN.md owns: scripts/wiki/**
+- docs/adr/** owns: scripts/**
+- docs/agent-process/doc-system.md owns: scripts/docs/**, scripts/doc-health/**, scripts/close/**, .agent/doc-map.yml
+- docs/agent-process/doc-sweep.md owns: scripts/doc-sweep/**
+- docs/template-library-inventory.md owns: templates/**, styles/**, examples/**, schemas/**
+
+Required base docs (every repo carries these):
+- AGENTS.md
+- .agent/doc-map.yml
+- docs/CANON.md
+- docs/INDEX.md
+- docs/agent-process/doc-system.md
+<!-- END ARCHONVII MANAGED BLOCK: nav -->
