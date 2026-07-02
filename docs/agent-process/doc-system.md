@@ -130,11 +130,15 @@ doc-map contract and only exist when `.agent/doc-map.yml` does:
 | `path-ref-missing` | a backtick repo path in a `checked` doc declaring `path-refs` does not exist | blocking when re-triggered, warning otherwise |
 
 A `checked` doc is **re-triggered** when it changed or any path its `owns` globs cover
-changed (`--changed <path>` / `--changed-from <git-ref>`); pre-existing rot elsewhere
-never blocks a PR that didn't touch it. Path-refs exempt doc-map `rendered`/`release`
-paths and gitignored runtime paths (`git check-ignore`) — referencing a volatile
-surface is not a broken doc. The CLI exits `1` when blocking findings exist, `0` for
-warnings-only — the exact contract P1 wires under `repo-required-gate / decision`.
+changed (`--changed <path>` / `--changed-from <git-ref>`); doc-path hits escalate at
+file granularity (one ADR changing never weaponizes rot in a sibling), and
+pre-existing rot elsewhere never blocks a PR that didn't touch it. Path-refs exempt
+doc-map `rendered`/`release` paths, gitignored runtime paths (`git check-ignore`),
+tokens with git-range/`dir/`-style shapes, and anything not anchored at a real
+top-level root of this repo. The writing convention that follows: **backtick a repo
+path only if it exists at HEAD** — historical or cross-repo mentions go in italics,
+not backticks. The CLI exits `1` when blocking findings exist, `0` for warnings-only —
+the exact contract P1 wires under `repo-required-gate / decision`.
 
 ## What blocks at PR time
 
