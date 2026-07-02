@@ -197,6 +197,12 @@ export function parseDocMap(text) {
   // generated-block gate (#146 round 13) — fail closed instead.
   for (const entry of map.checked) {
     const rules = Array.isArray(entry.checks) ? entry.checks : entry.checks ? [entry.checks] : [];
+    // A checked entry with no checks is a contradiction — "machine-verified"
+    // with nothing to verify — and silently disables link/path-ref escalation
+    // for its owns hits (#146 round 17).
+    if (rules.length === 0) {
+      throw new Error(`doc-map checked entry ${entry.path}: checks is required and must not be empty`);
+    }
     for (const rule of rules) {
       if (!CHECKED_RULES.has(rule)) {
         throw new Error(

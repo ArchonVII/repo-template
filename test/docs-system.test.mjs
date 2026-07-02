@@ -598,3 +598,22 @@ test('parseDocMap rejects entries without a path', () => {
     '  - heal_when: ["scripts/**"]',
   ].join('\n')), /path/i);
 });
+
+// #146 round 17: a checked entry with no checks (omitted, or a check: typo)
+// is a contradiction — "machine-verified" with nothing to verify — and
+// silently disabled link/path-ref escalation for its owns hits.
+test('parseDocMap rejects checked entries without checks', () => {
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'checked:',
+    '  - path: docs/CANON.md',
+    '    owns: ["scripts/**"]',
+  ].join('\n')), /checks/i);
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'checked:',
+    '  - path: docs/CANON.md',
+    '    owns: ["scripts/**"]',
+    '    check: [links]',
+  ].join('\n')), /checks/i);
+});
