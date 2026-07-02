@@ -113,14 +113,36 @@ by every `close:dod` capture) or `createdAt`. A live claim makes doc-sweep skip 
 lane's in-flight docs; an **expired** claim is the positive death signal that makes an
 abandoned lane's docs eligible for recovery.
 
+## The blocking subset (L2)
+
+`scripts/doc-health/health.mjs` splits findings by severity. Everything that predates
+L2 stays a **warning** (budgets, review cadence, supersession, placeholders, stale
+terms — dashboard food, never gate food). The **blocking** findings all come from the
+doc-map contract and only exist when `.agent/doc-map.yml` does:
+
+| code | fires when | scope |
+| --- | --- | --- |
+| `doc-map-invalid` | the spine exists but cannot be read/parsed (fails closed) | always |
+| `required-doc-missing` | a `required.base` doc does not exist | always |
+| `code-root-unmapped` | a top-level root is absent from `code_roots` | always |
+| `generated-block-stale` / `generated-block-check-failed` | a committed-class surface differs from regeneration, or the generators are unavailable/broken | always |
+| `dangling-relative-link` (escalated) | a dead link in a `checked` doc declaring `links` | only when the doc is **re-triggered** |
+| `path-ref-missing` | a backtick repo path in a `checked` doc declaring `path-refs` does not exist | blocking when re-triggered, warning otherwise |
+
+A `checked` doc is **re-triggered** when it changed or any path its `owns` globs cover
+changed (`--changed <path>` / `--changed-from <git-ref>`); pre-existing rot elsewhere
+never blocks a PR that didn't touch it. Path-refs exempt doc-map `rendered`/`release`
+paths and gitignored runtime paths (`git check-ignore`) — referencing a volatile
+surface is not a broken doc. The CLI exits `1` when blocking findings exist, `0` for
+warnings-only — the exact contract P1 wires under `repo-required-gate / decision`.
+
 ## What blocks at PR time
 
 S1 ships the generators and the `--check` drift gate as a local command; S2 ships the
 4-section closeout DoD in the close-scan marker (enforced by `close:ci:guard` at
-promotion). Enforcement order (epic lanes): P1 wires `docs:render --check` + the
-diff-scoped blocking doc-health subset (dead links, path-refs, required-existence,
-doc-map coverage, generated-block-clean) into `repo-required-gate / decision` and
-retires the fragment workflows; S3 folds changelog generation to release-cut and
-deletes the fragment machinery; T1 snapshots the system into archon-setup onboarding;
-T2 dogfoods archon-setup itself. Warnings (stale terms, budgets, closed-issue refs)
-never block — they flow to the dashboard.
+promotion); L2 ships the blocking doc-health subset above. Enforcement order (epic
+lanes): P1 wires `docs:render --check` + `doc-health --changed-from` into
+`repo-required-gate / decision` and retires the fragment workflows; S3 folds
+changelog generation to release-cut and deletes the fragment machinery; T1 snapshots
+the system into archon-setup onboarding; T2 dogfoods archon-setup itself. Warnings
+(stale terms, budgets, closed-issue refs) never block — they flow to the dashboard.
