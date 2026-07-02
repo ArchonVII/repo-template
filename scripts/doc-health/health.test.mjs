@@ -327,6 +327,33 @@ const L2_DOC_MAP = {
   code_roots: { docs: 'self' },
 };
 
+// #146 review round 4: `**/` means zero-or-more segments (scripts/**/*.mjs
+// must match scripts/foo.mjs), and rename sources must stay in the changed
+// set or a file moved OUT of an owned glob never re-triggers its doc.
+test('docMapGlobToRegExp: globstar matches zero segments', async () => {
+  const { docMapGlobToRegExp } = await import('./lib.mjs');
+  assert.ok(docMapGlobToRegExp('scripts/**/*.mjs').test('scripts/foo.mjs'));
+  assert.ok(docMapGlobToRegExp('scripts/**/*.mjs').test('scripts/a/b/foo.mjs'));
+  assert.ok(!docMapGlobToRegExp('scripts/**/*.mjs').test('scriptsx/foo.mjs'));
+  assert.ok(docMapGlobToRegExp('docs/**/*.md').test('docs/CANON.md'));
+  assert.ok(docMapGlobToRegExp('**/*.md').test('README.md'));
+  assert.ok(docMapGlobToRegExp('scripts/**').test('scripts/close/lib.mjs'));
+});
+
+test('changedPathsFromGit reports both sides of a rename', async () => {
+  const { changedPathsFromGit } = await import('./health.mjs');
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'scripts/owned.mjs', 'export {};\n');
+  commitAll(repo, 'feat: owned file (#0)');
+  const base = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  execFileSync('git', ['-C', repo, 'mv', join('scripts', 'owned.mjs'), join('docs', 'moved.mjs')], { encoding: 'utf8' });
+  execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'refactor: move out of owned glob (#0)'], { encoding: 'utf8' });
+
+  const changed = changedPathsFromGit(repo, base);
+  assert.ok(changed.includes('scripts/owned.mjs'), `rename SOURCE must be in the changed set; got ${changed}`);
+  assert.ok(changed.includes('docs/moved.mjs'), `rename destination must be in the changed set; got ${changed}`);
+});
+
 test('checkRepo without a doc-map: no blocking rules run, report stays warning-only', () => {
   const repo = makeTempRepo();
   const report = checkRepo(repo, { now: NOW });

@@ -258,16 +258,33 @@ export function evaluateRequiredChecks({ checkRuns = [], requiredCheckName = DEF
 // the final HEAD by the marker. Order is display order.
 export const DOD_SECTIONS = ['docs', 'changelog', 'verification', 'findings'];
 
-// Minimal glob for the doc-map's `owns`/`heal_when` vocabulary (zero-dep, same
-// discipline as the check-map reader above): `**` spans path segments, `*`
-// stays within one segment, everything else is literal. Anchored both ends.
+// Minimal glob for doc-map `owns`/`heal_when` patterns (zero-dep, twin of
+// scripts/doc-health/lib.mjs docMapGlobToRegExp, same discipline as the
+// check-map reader above): `**/` spans ZERO or more segments (so
+// scripts/**/*.mjs matches root-level scripts/foo.mjs — repo-template#146
+// review round 4), a bare `**` spans anything, `*` stays within one segment,
+// everything else is literal, anchored both ends.
+const GLOB_LITERAL_ESCAPE = /[.+^${}()|[\]\\]/;
 function globToRegExp(glob) {
-  const escaped = String(glob)
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*/g, '\u0000')
-    .replace(/\*/g, '[^/]*')
-    .replace(/\u0000/g, '.*');
-  return new RegExp(`^${escaped}$`);
+  const source = String(glob);
+  let out = '';
+  let i = 0;
+  while (i < source.length) {
+    if (source.startsWith('**/', i)) {
+      out += '(?:.*/)?';
+      i += 3;
+    } else if (source.startsWith('**', i)) {
+      out += '.*';
+      i += 2;
+    } else if (source[i] === '*') {
+      out += '[^/]*';
+      i += 1;
+    } else {
+      out += GLOB_LITERAL_ESCAPE.test(source[i]) ? `\\${source[i]}` : source[i];
+      i += 1;
+    }
+  }
+  return new RegExp(`^${out}$`);
 }
 
 // A scalar `owns: scripts/**` is valid YAML that the lenient doc-map parser

@@ -259,16 +259,31 @@ export function topLevelDirs(root) {
 
 // Minimal glob for the doc-map's owns/heal_when/path vocabulary — third copy
 // of the ecosystem's zero-dep converter (twins in scripts/close/lib.mjs and
-// scripts/doc-sweep/lib.mjs): `**` spans segments, `*` stays within one,
-// everything else is literal, anchored both ends. The NUL placeholder cannot
-// appear in a real glob.
+// scripts/doc-sweep/lib.mjs): `**/` spans ZERO or more segments (so
+// scripts/**/*.mjs matches root-level scripts/foo.mjs — #146 review round 4),
+// a bare `**` spans anything, `*` stays within one segment, everything else
+// is literal, anchored both ends. Tokenized left-to-right, no placeholders.
+const GLOB_LITERAL_ESCAPE = /[.+^${}()|[\]\\]/;
 export function docMapGlobToRegExp(glob) {
-  const escaped = String(glob)
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*/g, '\u0000')
-    .replace(/\*/g, '[^/]*')
-    .replace(/\u0000/g, '.*');
-  return new RegExp(`^${escaped}$`);
+  const source = String(glob);
+  let out = '';
+  let i = 0;
+  while (i < source.length) {
+    if (source.startsWith('**/', i)) {
+      out += '(?:.*/)?';
+      i += 3;
+    } else if (source.startsWith('**', i)) {
+      out += '.*';
+      i += 2;
+    } else if (source[i] === '*') {
+      out += '[^/]*';
+      i += 1;
+    } else {
+      out += GLOB_LITERAL_ESCAPE.test(source[i]) ? `\\${source[i]}` : source[i];
+      i += 1;
+    }
+  }
+  return new RegExp(`^${out}$`);
 }
 
 // Backtick tokens that read as repo paths, for the path-refs rule. Deliberately

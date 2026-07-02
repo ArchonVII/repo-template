@@ -603,8 +603,11 @@ function parseArgs(argv) {
   return out;
 }
 
-function changedPathsFromGit(repo, ref) {
-  const raw = execFileSync('git', ['-C', repo, 'diff', '--name-only', `${ref}...HEAD`], {
+// --no-renames: a rename must contribute BOTH sides (as D+A) or a file moved
+// out of an owned glob never re-triggers its doc — same rule parseNameStatus
+// enforces for close-scan scope (repo-template#84; #146 review round 4).
+export function changedPathsFromGit(repo, ref) {
+  const raw = execFileSync('git', ['-C', repo, 'diff', '--name-only', '--no-renames', `${ref}...HEAD`], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });

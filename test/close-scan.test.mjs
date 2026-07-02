@@ -722,3 +722,12 @@ test('toBashPath yields either the cygpath /c/ form or the /mnt/ fallback', () =
   const out = toBashPath('C:\\a\\b');
   assert.ok(out === '/c/a/b' || out === '/mnt/c/a/b', `unexpected conversion: ${out}`);
 });
+
+// repo-template#146 round 4: `**/` spans zero-or-more segments in the DoD
+// trigger matcher too — scripts/**/*.mjs must hit root-level scripts files.
+test('matchDocMapTriggers globstar matches zero segments', () => {
+  const map = { checked: [{ path: 'docs/CANON.md', owns: ['scripts/**/*.mjs'], checks: [] }], human: [] };
+  assert.equal(matchDocMapTriggers(['scripts/foo.mjs'], map).length, 1);
+  assert.equal(matchDocMapTriggers(['scripts/a/b/foo.mjs'], map).length, 1);
+  assert.equal(matchDocMapTriggers(['scriptsx/foo.mjs'], map).length, 0);
+});
