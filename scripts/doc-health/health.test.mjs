@@ -308,3 +308,167 @@ test('CLI writes only the requested report path and exits zero for warnings', ()
     .replace(/\\/g, '/');
   assert.equal(status, '?? doc-health-report.json');
 });
+
+// ─── #124 L2: blocking subset (severity split, doc-map contract rules) ────────
+
+// The doc-map is injected (the CLI resolves it via dynamic import) so every
+// rule is unit-testable without the docs generators on disk.
+const L2_DOC_MAP = {
+  version: 1,
+  generated: [
+    { path: 'docs/INDEX.md', class: 'committed', generator: 'docs:render', block: 'index-pages', inputs: [] },
+    { path: 'docs/STATUS.md', class: 'rendered', generator: 'docs:status', inputs: [] },
+  ],
+  checked: [
+    { path: 'docs/CANON.md', owns: ['scripts/**'], checks: ['links', 'path-refs'] },
+  ],
+  human: [],
+  required: { base: ['AGENTS.md', 'docs/CANON.md'] },
+  code_roots: { docs: 'self' },
+};
+
+test('checkRepo without a doc-map: no blocking rules run, report stays warning-only', () => {
+  const repo = makeTempRepo();
+  const report = checkRepo(repo, { now: NOW });
+  assert.equal(report.summary.blocking, 0);
+  assert.equal(report.status, 'clean');
+});
+
+test('checkRepo: missing required.base doc and unmapped code root block', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'src/index.mjs', 'export {};\n'); // top-level root absent from code_roots
+  commitAll(repo, 'feat: unmapped root (#0)');
+
+  const report = checkRepo(repo, {
+    now: NOW,
+    docMap: { ...L2_DOC_MAP, required: { base: ['AGENTS.md', 'docs/CANON.md', 'docs/agent-process/doc-system.md'] } },
+  });
+
+  const blocking = report.findings.filter((f) => f.severity === 'blocking');
+  const codes = blocking.map((f) => `${f.code}:${f.path}`).sort();
+  assert.ok(codes.includes('code-root-unmapped:src'), `expected src unmapped; got ${codes}`);
+  assert.ok(
+    codes.includes('required-doc-missing:docs/agent-process/doc-system.md'),
+    `expected missing required doc; got ${codes}`
+  );
+  assert.equal(report.status, 'blocking');
+  assert.equal(report.summary.blocking, blocking.length);
+  assert.equal(report.summary.warnings, report.summary.findings - blocking.length);
+});
+
+test('checkRepo: dangling links in a checked doc block only when the doc is re-triggered', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'docs/CANON.md', wikiPage('Truth register', 'CANON', [
+    '# CANON',
+    '',
+    'See [missing](./missing-page.md) for details.',
+  ].join('\n')));
+  commitAll(repo, 'docs: dangling link (#0)');
+
+  // Full audit (no changed paths): stays a warning.
+  const audit = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP });
+  const auditFinding = audit.findings.find((f) => f.code === 'dangling-relative-link' && f.path === 'docs/CANON.md');
+  assert.equal(auditFinding.severity, 'warning');
+
+  // The doc itself changed: blocking.
+  const docChanged = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP, changedPaths: ['docs/CANON.md'] });
+  assert.equal(
+    docChanged.findings.find((f) => f.code === 'dangling-relative-link' && f.path === 'docs/CANON.md').severity,
+    'blocking'
+  );
+
+  // Owned code changed (owns: scripts/**): the doc is re-checked → blocking.
+  const codeChanged = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP, changedPaths: ['scripts/foo.mjs'] });
+  assert.equal(
+    codeChanged.findings.find((f) => f.code === 'dangling-relative-link' && f.path === 'docs/CANON.md').severity,
+    'blocking'
+  );
+});
+
+test('checkRepo: path-refs verify backtick repo paths in declaring docs, exempting rendered-class paths', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'docs/CANON.md', wikiPage('Truth register', 'CANON', [
+    '# CANON',
+    '',
+    'Run `scripts/nope.mjs` after reading `docs/STATUS.md`; globs like `scripts/**` are ignored,',
+    'and `docs/project-status.md` exists.',
+  ].join('\n')));
+  commitAll(repo, 'docs: path refs (#0)');
+
+  const report = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP, changedPaths: ['docs/CANON.md'] });
+  const refs = report.findings.filter((f) => f.code === 'path-ref-missing');
+  assert.equal(refs.length, 1, `exactly the dead ref should fire; got ${JSON.stringify(refs)}`);
+  assert.equal(refs[0].path, 'docs/CANON.md');
+  assert.match(refs[0].message, /scripts\/nope\.mjs/);
+  assert.equal(refs[0].severity, 'blocking');
+
+  // Unchanged/untriggered: same rule reports as a warning.
+  const audit = checkRepo(repo, { now: NOW, docMap: L2_DOC_MAP });
+  assert.equal(audit.findings.find((f) => f.code === 'path-ref-missing').severity, 'warning');
+});
+
+test('checkRepo: stale committed generated blocks and a broken doc-map block', () => {
+  const repo = makeTempRepo();
+
+  const stale = checkRepo(repo, {
+    now: NOW,
+    docMap: L2_DOC_MAP,
+    renderCheck: () => [
+      { name: 'docs/INDEX.md (index-pages)', changed: true },
+      { name: 'llms.txt (nav) + README.md (status)', changed: false },
+    ],
+  });
+  const staleFinding = stale.findings.find((f) => f.code === 'generated-block-stale');
+  assert.equal(staleFinding.severity, 'blocking');
+  assert.match(staleFinding.message, /index-pages/);
+
+  const broken = checkRepo(repo, {
+    now: NOW,
+    docMap: L2_DOC_MAP,
+    renderCheck: () => { throw new Error('markers missing'); },
+  });
+  const checkFailed = broken.findings.find((f) => f.code === 'generated-block-check-failed');
+  assert.equal(checkFailed.severity, 'blocking');
+
+  const invalid = checkRepo(repo, { now: NOW, docMapError: 'doc-map line 3: bad section' });
+  const invalidFinding = invalid.findings.find((f) => f.code === 'doc-map-invalid');
+  assert.equal(invalidFinding.severity, 'blocking');
+  assert.match(invalidFinding.message, /bad section/);
+});
+
+test('CLI exits 1 on blocking findings and loads the real doc-map + render check', () => {
+  const repo = makeTempRepo();
+  // No inline-[] sections: parseDocMap (correctly) rejects those; omitted
+  // sections default to empty.
+  writeInRepo(repo, '.agent/doc-map.yml', [
+    'version: 1',
+    'checked:',
+    '  - path: docs/CANON.md',
+    '    owns: ["scripts/**"]',
+    '    checks: [links, path-refs]',
+    'required:',
+    '  base:',
+    '    - AGENTS.md',
+    '    - docs/never-installed.md',
+    'code_roots:',
+    '  docs: self',
+    '',
+  ].join('\n'));
+  commitAll(repo, 'chore: doc-map with missing required doc (#0)');
+
+  let code = 0;
+  let stdout = '';
+  try {
+    stdout = execFileSync(process.execPath, [
+      join('scripts', 'doc-health', 'health.mjs'),
+      '--repo', repo, '--json', '--now', NOW_ISO,
+    ], { cwd: process.cwd(), encoding: 'utf8' });
+  } catch (err) {
+    code = err.status;
+    stdout = err.stdout;
+  }
+  assert.equal(code, 1, 'blocking findings must exit 1');
+  const report = JSON.parse(stdout);
+  assert.equal(report.status, 'blocking');
+  assert.ok(report.findings.some((f) => f.code === 'required-doc-missing' && f.path === 'docs/never-installed.md'));
+});

@@ -8,8 +8,10 @@ import {
   CHARTER_BUDGETS,
   REVIEW_STALE_MS,
   TOOL_STUB_BUDGETS,
+  docMapGlobToRegExp,
   earliestTokenLine,
   extractMarkdownLinks,
+  extractPathRefTokens,
   hasSupersededByPointer,
   isActiveDoc,
   isCurrentTruthRegister,
@@ -24,6 +26,7 @@ import {
   resolveRelativeTarget,
   stripCode,
   toPosix,
+  topLevelDirs,
   walkFiles,
 } from './lib.mjs';
 
@@ -56,26 +59,195 @@ export function checkRepo(repoRoot, opts = {}) {
   checkStartupBaseline(root, findings);
   checkIndexCoherence(root, mdFiles, metaByRel, textByRel, findings);
   checkStaleActiveTerms(mdFiles, metaByRel, textByRel, changedPaths, findings);
+  // #124 L2: the doc-map contract rules — the only source of BLOCKING
+  // findings. docMap/docMapError/renderCheck are injected (the CLI resolves
+  // them via dynamic import) so the rules unit-test without the docs system.
+  checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
+    docMap: opts.docMap ?? null,
+    docMapError: opts.docMapError ?? null,
+    renderCheck: opts.renderCheck ?? null,
+  });
 
   findings.sort((a, b) =>
     a.code.localeCompare(b.code) ||
     a.path.localeCompare(b.path) ||
     (a.line ?? 0) - (b.line ?? 0));
 
+  const blocking = findings.filter((f) => f.severity === 'blocking').length;
   const issues = findings.map(issuePayloadForFinding);
   return {
     schemaVersion: SCHEMA_VERSION,
     generatedAt: new Date(now).toISOString(),
     repo: root,
-    status: findings.length ? 'warnings' : 'clean',
+    status: blocking > 0 ? 'blocking' : findings.length ? 'warnings' : 'clean',
     summary: {
       findings: findings.length,
-      warnings: findings.length,
-      blocking: 0,
+      warnings: findings.length - blocking,
+      blocking,
     },
     findings,
     issues,
   };
+}
+
+// #124 L2: normalize the doc-map's possibly-scalar list fields (same lesson as
+// scripts/close/lib.mjs — a scalar `owns: scripts/**` is valid YAML).
+function toList(raw) {
+  if (Array.isArray(raw)) return raw.filter((v) => typeof v === 'string' && v.trim());
+  if (typeof raw === 'string' && raw.trim()) return [raw.trim()];
+  return [];
+}
+
+// The blocking subset (#124 L2): required-existence, code-root coverage, and
+// generated-block cleanliness are structural and always blocking; links and
+// path-refs on `checked` docs are blocking only when the doc is RE-TRIGGERED
+// by this change set (the doc itself changed, or a path its `owns` globs
+// cover did) — pre-existing rot elsewhere stays a warning for the dashboard.
+function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, { docMap, docMapError, renderCheck }) {
+  if (docMapError) {
+    addFinding(findings, {
+      severity: 'blocking',
+      code: 'doc-map-invalid',
+      path: '.agent/doc-map.yml',
+      message: `.agent/doc-map.yml exists but could not be used: ${docMapError}`,
+    });
+    return;
+  }
+  if (!docMap) return;
+
+  for (const rel of toList(docMap.required?.base)) {
+    if (!fs.existsSync(path.join(root, ...rel.split('/')))) {
+      addFinding(findings, {
+        severity: 'blocking',
+        code: 'required-doc-missing',
+        path: rel,
+        message: `required.base declares ${rel}, which does not exist.`,
+      });
+    }
+  }
+
+  const mappedRoots = new Set(Object.keys(docMap.code_roots || {}));
+  for (const dir of topLevelDirs(root)) {
+    if (!mappedRoots.has(dir)) {
+      addFinding(findings, {
+        severity: 'blocking',
+        code: 'code-root-unmapped',
+        path: dir,
+        message: `top-level root ${dir}/ is not owned by any checked doc nor marked unmapped_ok in .agent/doc-map.yml.`,
+      });
+    }
+  }
+
+  // Re-trigger set: which checked docs must be re-verified for THIS change set.
+  const checked = (docMap.checked || []).filter((doc) => doc?.path);
+  const triggeredEntries = new Set();
+  for (const doc of checked) {
+    const pathRe = docMapGlobToRegExp(doc.path);
+    const ownsRes = toList(doc.owns).map(docMapGlobToRegExp);
+    const hit = changedPaths.some((p) => pathRe.test(p) || ownsRes.some((re) => re.test(p)));
+    if (hit) triggeredEntries.add(doc);
+  }
+  const resolveDocRels = (entryPath) => {
+    if (!/[*?{[]/.test(entryPath)) return textByRel.has(entryPath) ? [entryPath] : [];
+    const re = docMapGlobToRegExp(entryPath);
+    return mdFiles.map((f) => f.rel).filter((rel) => re.test(rel));
+  };
+
+  // path-refs: backtick repo paths in declaring docs must exist — except
+  // doc-map-declared volatile surfaces (rendered/release classes) and
+  // gitignored runtime paths, which are legitimately absent at HEAD.
+  const volatile = new Set(
+    (docMap.generated || []).filter((g) => g.class === 'rendered' || g.class === 'release').map((g) => g.path)
+  );
+  const pathRefDocs = checked.filter((doc) => toList(doc.checks).includes('path-refs'));
+  const candidates = [];
+  for (const doc of pathRefDocs) {
+    for (const rel of resolveDocRels(doc.path)) {
+      for (const { token, line } of extractPathRefTokens(textByRel.get(rel) || '')) {
+        if (volatile.has(token)) continue;
+        if (fs.existsSync(path.join(root, ...token.split('/')))) continue;
+        candidates.push({ doc, rel, token, line });
+      }
+    }
+  }
+  const ignored = gitIgnoredSet(root, candidates.map((c) => c.token));
+  for (const { doc, rel, token, line } of candidates) {
+    if (ignored.has(token)) continue;
+    addFinding(findings, {
+      severity: triggeredEntries.has(doc) ? 'blocking' : 'warning',
+      code: 'path-ref-missing',
+      path: rel,
+      line,
+      message: `references \`${token}\`, which does not exist.`,
+    });
+  }
+
+  // links: escalate the generic dangling-link warnings on re-triggered
+  // checked docs that declare the `links` rule.
+  const linkDocRels = new Set(
+    checked
+      .filter((doc) => triggeredEntries.has(doc) && toList(doc.checks).includes('links'))
+      .flatMap((doc) => resolveDocRels(doc.path))
+  );
+  for (const finding of findings) {
+    if (finding.code === 'dangling-relative-link' && linkDocRels.has(finding.path)) {
+      finding.severity = 'blocking';
+    }
+  }
+
+  // generated-block-clean: committed-class surfaces must match regeneration.
+  const committed = (docMap.generated || []).filter((g) => g.class === 'committed');
+  if (committed.length > 0) {
+    if (!renderCheck) {
+      addFinding(findings, {
+        severity: 'blocking',
+        code: 'generated-block-check-failed',
+        path: '.agent/doc-map.yml',
+        message: 'doc-map declares committed generated surfaces but the docs generators are unavailable.',
+      });
+    } else {
+      try {
+        for (const result of renderCheck()) {
+          if (result.changed) {
+            addFinding(findings, {
+              severity: 'blocking',
+              code: 'generated-block-stale',
+              path: '.agent/doc-map.yml',
+              message: `${result.name} is stale — run \`npm run docs:render\`.`,
+            });
+          }
+        }
+      } catch (err) {
+        addFinding(findings, {
+          severity: 'blocking',
+          code: 'generated-block-check-failed',
+          path: '.agent/doc-map.yml',
+          message: `generated-block check failed: ${String(err.message || err).split('\n')[0]}`,
+        });
+      }
+    }
+  }
+}
+
+// Batched gitignore probe for the path-refs rule: a doc referencing a runtime
+// or rendered path the repo deliberately gitignores (e.g. .agent/close-scan/
+// dod.json) is not a broken reference. One `git check-ignore --stdin` call for
+// all candidates; a non-git root degrades to "nothing ignored".
+function gitIgnoredSet(root, tokens) {
+  if (tokens.length === 0) return new Set();
+  try {
+    const out = execFileSync('git', ['-C', root, 'check-ignore', '--stdin'], {
+      input: [...new Set(tokens)].join('\n'),
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+    return new Set(out.split(/\r?\n/).map((t) => t.trim()).filter(Boolean));
+  } catch (err) {
+    // check-ignore exits 1 when NO path matches — same "nothing ignored"
+    // answer; salvage stdout for partial matches on other statuses.
+    const out = typeof err.stdout === 'string' ? err.stdout : '';
+    return new Set(out.split(/\r?\n/).map((t) => t.trim()).filter(Boolean));
+  }
 }
 
 function addFinding(findings, finding) {
@@ -436,8 +608,45 @@ function usage() {
     'Usage: node scripts/doc-health/health.mjs --repo <path> [--report <path>] [--json]',
     '       [--changed <path> ...] [--changed-from <git-ref>] [--now <iso-date>]',
     '',
-    'Findings are warning-only. The CLI exits 0 when warnings are present.',
+    'Exit codes: 0 clean or warnings-only; 1 blocking findings (#124 L2 doc-map',
+    'contract: required-existence, code-root coverage, generated-block-clean,',
+    'plus links/path-refs on checked docs re-triggered by --changed/--changed-from);',
+    '2 usage or runtime error.',
   ].join('\n');
+}
+
+// #124 L2 CLI wiring: the doc-map and the docs generators live in scripts/docs
+// and may be absent in partially-distributed consumers — resolve both via
+// dynamic import and degrade per the same fail-closed rules as
+// scripts/close/scan-complete.mjs: a truly absent doc-map disables the
+// contract rules; a present-but-unusable one becomes a blocking finding.
+async function loadDocMapForCli(repoRoot) {
+  if (!fs.existsSync(path.join(repoRoot, '.agent', 'doc-map.yml'))) {
+    return { docMap: null, docMapError: null };
+  }
+  try {
+    const { readDocMap } = await import('../docs/lib.mjs');
+    const docMap = readDocMap(repoRoot);
+    if (!docMap || docMap.version !== 1) {
+      return { docMap: null, docMapError: 'parsed but is not a valid version-1 doc-map' };
+    }
+    return { docMap, docMapError: null };
+  } catch (err) {
+    return { docMap: null, docMapError: String(err.message || err).split('\n')[0] };
+  }
+}
+
+async function loadRenderCheckForCli(repoRoot) {
+  try {
+    const { runIndex } = await import('../docs/index.mjs');
+    const { runNav } = await import('../docs/nav.mjs');
+    return () => [
+      { name: 'docs/INDEX.md (index-pages)', ...runIndex({ root: repoRoot, check: true }) },
+      { name: 'llms.txt (nav) + README.md (status)', ...runNav({ root: repoRoot, check: true }) },
+    ];
+  } catch {
+    return null; // reported as generated-block-check-failed when the map declares committed surfaces
+  }
 }
 
 const isMain = process.argv[1] &&
@@ -455,7 +664,9 @@ if (isMain) {
       ...args.changedPaths,
       ...(args.changedFrom ? changedPathsFromGit(repo, args.changedFrom) : []),
     ];
-    const report = checkRepo(repo, { now: args.now, changedPaths });
+    const { docMap, docMapError } = await loadDocMapForCli(repo);
+    const renderCheck = docMap ? await loadRenderCheckForCli(repo) : null;
+    const report = checkRepo(repo, { now: args.now, changedPaths, docMap, docMapError, renderCheck });
 
     if (args.report) {
       const reportPath = path.resolve(args.report);
@@ -464,6 +675,7 @@ if (isMain) {
     }
 
     process.stdout.write(args.json ? `${JSON.stringify(report, null, 2)}\n` : printHuman(report));
+    if (report.summary.blocking > 0) process.exitCode = 1;
   } catch (err) {
     process.stderr.write(`[doc-health] ${err.message}\n\n${usage()}\n`);
     process.exit(2);

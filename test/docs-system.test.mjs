@@ -235,6 +235,29 @@ test('applyGeneratedFile check mode reports drift without writing; write mode wr
   }
 });
 
+// A Windows autocrlf checkout materializes committed files with CRLF while
+// generators emit LF; content-identical blocks must not read as drift or
+// every fresh Windows checkout false-fails docs:render --check (#124 L2
+// dogfood catch).
+test('applyGeneratedFile treats eol-only differences as clean', () => {
+  const root = tempRoot();
+  try {
+    const target = join(root, 'INDEX.md');
+    writeFileSync(
+      target,
+      '# head\r\n\r\n<!-- BEGIN ARCHONVII MANAGED BLOCK: x -->\r\nsame\r\n<!-- END ARCHONVII MANAGED BLOCK: x -->\r\n'
+    );
+    const checked = applyGeneratedFile({ path: target, blockId: 'x', body: 'same', check: true });
+    assert.equal(checked.changed, false, 'CRLF vs LF with identical content is not drift');
+
+    const written = applyGeneratedFile({ path: target, blockId: 'x', body: 'same', check: false });
+    assert.equal(written.changed, false);
+    assert.ok(readFileSync(target, 'utf8').includes('\r\n'), 'a clean file must not be rewritten');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('status model summarizes volatile inputs and renders with an injected timestamp', () => {
   const model = buildStatusModel({
     prs: [
@@ -296,6 +319,11 @@ test('status model must not drop findings from the live doc-health producer', ()
   const model = buildStatusModel({ prs: [], issues: [], docHealth: report, now: 'x' });
   assert.equal(model.docWarningCount, report.summary.warnings);
   assert.equal(model.docWarningCount + model.docErrorCount, report.summary.findings);
+  // This repo is its own gate fixture: a committed tree must carry zero
+  // blocking doc-map-contract findings (#124 L2) — the CLI here loads the
+  // real doc-map and render check.
+  assert.equal(report.summary.blocking, 0,
+    `repo must be blocking-clean; got ${JSON.stringify(report.findings.filter((f) => f.severity === 'blocking'))}`);
 });
 
 // gh must run against the requested root, not the caller's cwd, and must ask

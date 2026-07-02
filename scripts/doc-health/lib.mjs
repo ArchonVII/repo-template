@@ -238,3 +238,60 @@ export function earliestTokenLine(text, tokens) {
   }
   return best ?? 1;
 }
+
+// ─── #124 L2: doc-map contract helpers ─────────────────────────────────────────
+
+// Top-level directories the code-root coverage rule must account for: visible
+// dirs only, minus the same junk walkFiles skips — dot-dirs (.github/.agent/
+// .changelog are config, not code roots) and DIR_EXCLUDES.
+export function topLevelDirs(root) {
+  let entries;
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !DIR_EXCLUDES.has(e.name))
+    .map((e) => e.name)
+    .sort();
+}
+
+// Minimal glob for the doc-map's owns/heal_when/path vocabulary — third copy
+// of the ecosystem's zero-dep converter (twins in scripts/close/lib.mjs and
+// scripts/doc-sweep/lib.mjs): `**` spans segments, `*` stays within one,
+// everything else is literal, anchored both ends. The NUL placeholder cannot
+// appear in a real glob.
+export function docMapGlobToRegExp(glob) {
+  const escaped = String(glob)
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*/g, '\u0000')
+    .replace(/\*/g, '[^/]*')
+    .replace(/\u0000/g, '.*');
+  return new RegExp(`^${escaped}$`);
+}
+
+// Backtick tokens that read as repo paths, for the path-refs rule. Deliberately
+// conservative — a false "missing path" blocking a PR is worse than a missed
+// one: requires a '/', bans whitespace, glob metachars, URLs/anchors/windows
+// drives (':'), placeholders ('<'), flags ('--'), and leading '/' or '#'; each
+// segment is word-ish. Returns [{ token, line }], deduped per token per doc.
+export function extractPathRefTokens(text) {
+  const out = [];
+  const seen = new Set();
+  const lines = String(text || '').split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    for (const match of lines[i].matchAll(/`([^`]+)`/g)) {
+      const token = match[1].trim();
+      if (seen.has(token)) continue;
+      if (!token.includes('/')) continue;
+      if (/[\s*?{}[\]<>:]/.test(token)) continue;
+      if (token.startsWith('/') || token.startsWith('#') || token.startsWith('--')) continue;
+      const segments = token.replace(/\/$/, '').split('/');
+      if (!segments.every((seg) => /^[\w.@-]+$/.test(seg))) continue;
+      seen.add(token);
+      out.push({ token, line: i + 1 });
+    }
+  }
+  return out;
+}
