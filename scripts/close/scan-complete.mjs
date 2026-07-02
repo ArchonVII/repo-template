@@ -11,6 +11,7 @@ import {
   buildCloseScanMarker,
   classifyCloseScanScope,
   evaluateChangelogDecision,
+  evaluateDocsDecision,
   evaluateRepoUpdateLogDecision,
   extractChangelogFragment,
   isSubstantiveDecision,
@@ -18,8 +19,21 @@ import {
   listWorkflowFiles,
   markerPath,
   parseRequiredGateCheckName,
+  readDodCapture,
   writeCloseScanMarker,
 } from './lib.mjs';
+
+// The doc-map lives with the docs generators (scripts/docs); consumers that
+// received the close scripts without the docs system (pre-T1 self-apply) must
+// not crash — the docs DoD degrades to auto-pass when the spine is absent.
+async function readDocMapSafe(root) {
+  try {
+    const { readDocMap } = await import('../docs/lib.mjs');
+    return readDocMap(root);
+  } catch {
+    return null;
+  }
+}
 
 function parseArgs(argv) {
   const args = {};
@@ -281,7 +295,7 @@ function checkChangelogFragment(root, decision) {
   return `Changelog decision names \`${fragment}\`, but that file does not exist.`;
 }
 
-function runLocalChecks({ root, pr, files, scope, changelogDecision }) {
+function runLocalChecks({ root, pr, files, scope, changelogDecision, docsResult }) {
   const localChecks = [];
 
   const contract = validatePrContract({
@@ -294,6 +308,17 @@ function runLocalChecks({ root, pr, files, scope, changelogDecision }) {
     name: 'pr-contract',
     ok: contract.ok,
     summary: formatPrContractResult(contract),
+  });
+
+  // #124 S2: the docs section of the closeout DoD — evaluated in main() (it
+  // needs the doc-map and the captured/explicit decision), reported here so it
+  // fails the scan like any other local check.
+  localChecks.push({
+    name: 'docs',
+    ok: docsResult.ok,
+    summary: docsResult.ok
+      ? `Docs DoD satisfied: ${docsResult.decision}${docsResult.waived ? ' [docs:waived]' : ''}`
+      : docsResult.failures.join(' '),
   });
 
   const repoUpdateLog = evaluateRepoUpdateLogDecision({
@@ -398,7 +423,7 @@ function truncate(text) {
   return text.length > 800 ? `${text.slice(0, 797)}...` : text;
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   const root = git(['rev-parse', '--show-toplevel']);
   process.chdir(root);
@@ -409,16 +434,31 @@ function main() {
   const files = collectChangedFiles({ base, fallbackFiles: pr.files });
   const stack = args.stack || stackFromRequiredGate(root);
   const scope = classifyCloseScanScope({ files, labels: pr.labels, stack });
-  const changelogDecision = args['changelog-decision'] || (scope.requiresChangelog ? '' : 'not required: docs-only change');
-  const findingsDecision = args['findings-decision'] || '';
-  const localChecks = runLocalChecks({ root, pr, files, scope, changelogDecision });
+
+  // #124 S2: decisions captured incrementally during the session (close:dod)
+  // are the defaults; explicit flags win; scope-derived defaults come last.
+  const dodCapture = readDodCapture(root);
+  const captured = (section) => dodCapture?.sections?.[section]?.decision || '';
+
+  const changelogDecision = args['changelog-decision'] || captured('changelog')
+    || (scope.requiresChangelog ? '' : 'not required: docs-only change');
+  const findingsDecision = args['findings-decision'] || captured('findings');
+  const docMap = await readDocMapSafe(root);
+  const docsResult = evaluateDocsDecision({
+    files,
+    docMap,
+    docsOnly: scope.docsOnly,
+    labels: pr.labels,
+    decision: args['docs-decision'] || captured('docs'),
+  });
+  const localChecks = runLocalChecks({ root, pr, files, scope, changelogDecision, docsResult });
   const failures = localChecks.filter((check) => !check.ok).map((check) => `[${check.name}] ${check.summary}`);
 
   if (!isSubstantiveDecision(findingsDecision)) {
     failures.push('Missing required --findings-decision value.');
   }
 
-  const verificationSummary = args['verification-summary']
+  const verificationSummary = args['verification-summary'] || captured('verification')
     || localChecks.map((check) => `${check.name}: ${check.summary}`).join(' ');
   if (!isSubstantiveDecision(verificationSummary)) {
     failures.push('Missing substantive verification summary.');
@@ -428,10 +468,11 @@ function main() {
     git: gitInfo,
     pr,
     scope,
-    decisions: {
-      changelog: changelogDecision,
-      findings: findingsDecision,
-      verification: verificationSummary,
+    dod: {
+      docs: { decision: docsResult.decision, waived: docsResult.waived, triggers: docsResult.triggers },
+      changelog: { decision: changelogDecision },
+      verification: { decision: verificationSummary },
+      findings: { decision: findingsDecision },
     },
     localChecks,
   });
@@ -451,5 +492,5 @@ function main() {
 export { checkHookSyntax, parseNameStatus, toBashPath, decideNodeTest, validatePolicyFiles };
 
 if (process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
-  main();
+  await main();
 }

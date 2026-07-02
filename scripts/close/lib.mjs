@@ -246,16 +246,123 @@ export function evaluateRequiredChecks({ checkRuns = [], requiredCheckName = DEF
   return { ok: true, failures: [], matched };
 }
 
+// #124 S2: the closeout Definition of Done is exactly these four decisions,
+// each captured (incrementally via close:dod, or at scan time) and bound to
+// the final HEAD by the marker. Order is display order.
+export const DOD_SECTIONS = ['docs', 'changelog', 'verification', 'findings'];
+
+// Minimal glob for the doc-map's `owns`/`heal_when` vocabulary (zero-dep, same
+// discipline as the check-map reader above): `**` spans path segments, `*`
+// stays within one segment, everything else is literal. Anchored both ends.
+function globToRegExp(glob) {
+  const escaped = String(glob)
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*/g, '\u0000')
+    .replace(/\*/g, '[^/]*')
+    .replace(/\u0000/g, '.*');
+  return new RegExp(`^${escaped}$`);
+}
+
+// Which doc-map docs does this diff put on the hook? `checked` docs fire on
+// their `owns` globs, `human` docs on `heal_when` (an empty heal_when — e.g.
+// VISION.md, owner decision 2026-06-27 — never fires).
+export function matchDocMapTriggers(files, docMap) {
+  const entries = [
+    ...(docMap?.checked || []).map((doc) => ({ path: doc.path, globs: doc.owns || [] })),
+    ...(docMap?.human || []).map((doc) => ({ path: doc.path, globs: doc.heal_when || [] })),
+  ];
+  const triggers = [];
+  for (const entry of entries) {
+    if (!entry.path || entry.globs.length === 0) continue;
+    const patterns = entry.globs.map(globToRegExp);
+    const matchedBy = (files || []).filter((file) => patterns.some((re) => re.test(file)));
+    if (matchedBy.length > 0) triggers.push({ path: entry.path, matchedBy });
+  }
+  return triggers;
+}
+
+// The docs section of the DoD, substance scaled by scope (#124 S2):
+// docs-only diffs, untriggered diffs, and repos without a doc-map auto-pass;
+// a diff that triggers doc-map-owned docs must update them in-PR, explain
+// substantively why not, or carry the docs:waived label WITH a reason. The
+// waiver is recorded (not hidden) so dashboards can count it.
+export function evaluateDocsDecision({ files = [], docMap = null, docsOnly = false, labels = [], decision = '' } = {}) {
+  const waived = (labels || []).includes('docs:waived');
+  const explicit = String(decision || '').trim();
+  const pass = (text, triggers = []) => ({ ok: true, waived, triggers, decision: explicit || text, failures: [] });
+
+  if (docsOnly) return pass('docs are the change under review');
+  if (!docMap) return pass('not required: no .agent/doc-map.yml in this repo (docs DoD auto-passes)');
+
+  const triggers = matchDocMapTriggers(files, docMap);
+  if (triggers.length === 0) return pass('not required: no doc-map-owned docs match the diff');
+
+  const triggerPaths = triggers.map((t) => t.path);
+  const updated = triggerPaths.filter((path) => {
+    const re = globToRegExp(path);
+    return files.some((file) => re.test(file));
+  });
+  if (updated.length === triggerPaths.length) return pass(`updated in-PR: ${updated.join(', ')}`, triggerPaths);
+  if (isSubstantiveDecision(explicit)) {
+    return { ok: true, waived, triggers: triggerPaths, decision: explicit, failures: [] };
+  }
+
+  const stale = triggerPaths.filter((path) => !updated.includes(path));
+  return {
+    ok: false,
+    waived,
+    triggers: triggerPaths,
+    decision: explicit,
+    failures: [
+      `Diff triggers doc-map-owned docs not updated in this PR: ${stale.join(', ')}. `
+        + 'Update them in this PR, pass a substantive --docs-decision explaining why not, '
+        + 'or add the docs:waived label with a substantive reason.',
+    ],
+  };
+}
+
+// Incremental DoD capture (#124 S2): decisions are written to
+// .agent/close-scan/dod.json AS THEY ARE MADE during the session, so a reboot
+// or context loss never re-litigates them; scan-complete folds them into the
+// HEAD-bound marker as defaults (explicit flags win).
+export function dodCapturePath(root = process.cwd()) {
+  return join(root, '.agent', 'close-scan', 'dod.json');
+}
+
+export function readDodCapture(root = process.cwd()) {
+  try {
+    const parsed = JSON.parse(readFileSync(dodCapturePath(root), 'utf8'));
+    if (!parsed || parsed.version !== 1 || typeof parsed.sections !== 'object' || parsed.sections === null) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function writeDodSection(root, section, decision, { head = null, timestamp = new Date().toISOString() } = {}) {
+  if (!DOD_SECTIONS.includes(section)) {
+    throw new Error(`Unknown DoD section "${section}" — expected one of: ${DOD_SECTIONS.join(', ')}.`);
+  }
+  if (!isSubstantiveDecision(decision)) {
+    throw new Error(`DoD ${section} decision must be substantive (>= 10 chars, no placeholder text).`);
+  }
+  const capture = readDodCapture(root) || { version: 1, sections: {} };
+  capture.sections[section] = { decision, head, capturedAt: timestamp };
+  mkdirSync(join(root, '.agent', 'close-scan'), { recursive: true });
+  writeFileSync(dodCapturePath(root), `${JSON.stringify(capture, null, 2)}\n`);
+  return capture;
+}
+
 export function buildCloseScanMarker({
   git,
   pr,
   scope,
-  decisions,
+  dod,
   localChecks,
   timestamp = new Date().toISOString(),
 } = {}) {
   return {
-    version: 1,
+    version: 2,
     timestamp,
     git: {
       branch: git?.branch || null,
@@ -274,10 +381,15 @@ export function buildCloseScanMarker({
         typeof check === 'string' ? check : check.name
       )),
     },
-    decisions: {
-      changelog: decisions?.changelog || '',
-      findings: decisions?.findings || '',
-      verification: decisions?.verification || '',
+    dod: {
+      docs: {
+        decision: dod?.docs?.decision || '',
+        waived: Boolean(dod?.docs?.waived),
+        triggers: Array.isArray(dod?.docs?.triggers) ? dod.docs.triggers : [],
+      },
+      changelog: { decision: dod?.changelog?.decision || '' },
+      verification: { decision: dod?.verification?.decision || '' },
+      findings: { decision: dod?.findings?.decision || '' },
     },
     localChecks: Array.isArray(localChecks) ? localChecks : [],
   };
@@ -291,8 +403,10 @@ export function evaluateCloseScanMarker({
 } = {}) {
   const failures = [];
 
-  if (!marker || marker.version !== 1) {
-    return { ok: false, failures: ['Close-scan completion marker is missing or has an unsupported version.'] };
+  // Version 2 only: a v1 marker predates the 4-section DoD (#124 S2) and says
+  // nothing about the docs decision, so the guard cannot accept it.
+  if (!marker || marker.version !== 2) {
+    return { ok: false, failures: ['Close-scan completion marker is missing or has an unsupported version (expected 2 — re-run close:scan:complete).'] };
   }
 
   if (!marker.timestamp) {
@@ -310,14 +424,10 @@ export function evaluateCloseScanMarker({
   if (pr?.branch && marker.pr?.branch !== pr.branch) {
     failures.push('Close-scan completion marker PR branch does not match the current PR branch.');
   }
-  if (!isSubstantiveDecision(marker.decisions?.changelog)) {
-    failures.push('Close-scan completion marker is missing a substantive changelog decision.');
-  }
-  if (!isSubstantiveDecision(marker.decisions?.findings)) {
-    failures.push('Close-scan completion marker is missing a substantive findings decision.');
-  }
-  if (!isSubstantiveDecision(marker.decisions?.verification)) {
-    failures.push('Close-scan completion marker is missing a substantive verification summary.');
+  for (const section of DOD_SECTIONS) {
+    if (!isSubstantiveDecision(marker.dod?.[section]?.decision)) {
+      failures.push(`Close-scan completion marker is missing a substantive ${section} DoD decision.`);
+    }
   }
   for (const check of marker.localChecks || []) {
     if (!check.ok) {

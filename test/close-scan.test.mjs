@@ -4,14 +4,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
+  DOD_SECTIONS,
   buildCloseScanMarker,
   classifyCloseScanScope,
   evaluateChangelogDecision,
   evaluateCloseScanMarker,
+  evaluateDocsDecision,
   evaluateRepoUpdateLogDecision,
   evaluateRequiredChecks,
+  matchDocMapTriggers,
   parseRequiredGateCheckName,
+  readDodCapture,
   readRequiredGateCheckName,
+  writeDodSection,
 } from '../scripts/close/lib.mjs';
 import {
   checkHookSyntax,
@@ -280,7 +285,19 @@ test('validatePolicyFiles accepts any declared gate name and rejects a missing o
   }
 });
 
-test('buildCloseScanMarker records exact HEAD, decisions, checks, and timestamp', () => {
+// #124 S2: the marker carries the 4-section closeout DoD (docs, changelog,
+// verification, findings) instead of the loose 3-decision bag.
+function sampleDod(overrides = {}) {
+  return {
+    docs: { decision: 'updated: docs/agent-process/doc-system.md', waived: false, triggers: ['docs/agent-process/doc-system.md'] },
+    changelog: { decision: 'fragment .changelog/unreleased/28-close-scan-local-guard.md' },
+    verification: { decision: 'npm test passed' },
+    findings: { decision: 'no findings file used' },
+    ...overrides,
+  };
+}
+
+test('buildCloseScanMarker records exact HEAD, the 4-section DoD, checks, and timestamp', () => {
   const marker = buildCloseScanMarker({
     git: {
       branch: 'agent/codex/28-close-scan-local-guard',
@@ -294,24 +311,22 @@ test('buildCloseScanMarker records exact HEAD, decisions, checks, and timestamp'
       branch: 'agent/codex/28-close-scan-local-guard',
     },
     scope: { requiredChecks: [{ name: 'pr-contract' }], docsOnly: false },
-    decisions: {
-      changelog: 'fragment .changelog/unreleased/28-close-scan-local-guard.md',
-      findings: 'no findings file used',
-      verification: 'npm test passed',
-    },
+    dod: sampleDod(),
     localChecks: [{ name: 'pr-contract', ok: true, summary: 'passed' }],
     timestamp: '2026-06-12T18:30:00.000Z',
   });
 
-  assert.equal(marker.version, 1);
+  assert.equal(marker.version, 2);
   assert.equal(marker.git.head, 'abc123');
-  assert.equal(marker.decisions.verification, 'npm test passed');
+  assert.equal(marker.dod.verification.decision, 'npm test passed');
+  assert.equal(marker.dod.docs.waived, false);
+  assert.deepEqual(marker.dod.docs.triggers, ['docs/agent-process/doc-system.md']);
   assert.equal(marker.timestamp, '2026-06-12T18:30:00.000Z');
   assert.deepEqual(marker.localChecks, [{ name: 'pr-contract', ok: true, summary: 'passed' }]);
 });
 
-test('evaluateCloseScanMarker accepts only a fresh marker bound to the current final HEAD', () => {
-  const marker = buildCloseScanMarker({
+test('evaluateCloseScanMarker accepts only a fresh v2 marker with all four DoD sections', () => {
+  const build = (dod) => buildCloseScanMarker({
     git: {
       branch: 'agent/codex/28-close-scan-local-guard',
       head: 'abc123',
@@ -320,29 +335,157 @@ test('evaluateCloseScanMarker accepts only a fresh marker bound to the current f
     },
     pr: { number: 28, url: 'https://github.com/ArchonVII/repo-template/pull/79', branch: 'agent/codex/28-close-scan-local-guard' },
     scope: { requiredChecks: [{ name: 'pr-contract' }], docsOnly: false },
-    decisions: {
-      changelog: 'fragment .changelog/unreleased/28-close-scan-local-guard.md',
-      findings: 'no findings file used',
-      verification: 'npm test passed',
-    },
+    dod,
     localChecks: [{ name: 'pr-contract', ok: true, summary: 'passed' }],
     timestamp: '2026-06-12T18:30:00.000Z',
   });
+  const marker = build(sampleDod());
+  const gitNow = { branch: marker.git.branch, head: 'abc123', upstream: marker.git.upstream, upstreamHead: 'abc123' };
 
-  const current = evaluateCloseScanMarker({
-    marker,
-    git: { branch: marker.git.branch, head: marker.git.head, upstream: marker.git.upstream, upstreamHead: marker.git.upstreamHead },
-    pr: { number: 28, branch: marker.pr.branch },
-  });
+  const current = evaluateCloseScanMarker({ marker, git: gitNow, pr: { number: 28, branch: marker.pr.branch } });
   assert.equal(current.ok, true);
 
   const stale = evaluateCloseScanMarker({
     marker,
-    git: { branch: marker.git.branch, head: 'def456', upstream: marker.git.upstream, upstreamHead: marker.git.upstreamHead },
+    git: { ...gitNow, head: 'def456' },
     pr: { number: 28, branch: marker.pr.branch },
   });
   assert.equal(stale.ok, false);
   assert.match(stale.failures.join('\n'), /HEAD/i);
+
+  // A v1 marker (pre-S2 scan) is unsupported — the DoD cannot be assumed.
+  const v1 = { ...marker, version: 1 };
+  const old = evaluateCloseScanMarker({ marker: v1, git: gitNow, pr: { number: 28, branch: marker.pr.branch } });
+  assert.equal(old.ok, false);
+  assert.match(old.failures.join('\n'), /version/i);
+
+  // Any missing or non-substantive DoD section fails, naming the section.
+  for (const section of DOD_SECTIONS) {
+    const gutted = build(sampleDod({ [section]: { decision: 'TODO' } }));
+    const result = evaluateCloseScanMarker({ marker: gutted, git: gitNow, pr: { number: 28, branch: marker.pr.branch } });
+    assert.equal(result.ok, false, `${section} must be substantive`);
+    assert.match(result.failures.join('\n'), new RegExp(section, 'i'));
+  }
+});
+
+// ─── #124 S2: docs DoD section — doc-map triggers and the decision matrix ─────
+
+const S2_DOC_MAP = {
+  checked: [
+    { path: 'docs/CANON.md', owns: ['scripts/**', 'schemas/**'], checks: ['links'] },
+    { path: 'docs/adr/**', owns: ['scripts/**'], checks: ['links'] },
+    { path: 'docs/agent-process/doc-sweep.md', owns: ['scripts/doc-sweep/**'], checks: ['links'] },
+  ],
+  human: [
+    { path: 'VISION.md', heal_when: [] },
+    { path: 'docs/guides/**', heal_when: ['scripts/**'] },
+  ],
+};
+
+test('matchDocMapTriggers maps changed files onto doc-map owners and heal_when globs', () => {
+  const triggers = matchDocMapTriggers(['scripts/close/lib.mjs', 'README.md'], S2_DOC_MAP);
+  const paths = triggers.map((t) => t.path).sort();
+  // scripts/close/lib.mjs hits scripts/** owners and heal_when; it does NOT hit
+  // doc-sweep.md's narrower scripts/doc-sweep/** — glob depth must be honored.
+  assert.deepEqual(paths, ['docs/CANON.md', 'docs/adr/**', 'docs/guides/**']);
+  const canon = triggers.find((t) => t.path === 'docs/CANON.md');
+  assert.deepEqual(canon.matchedBy, ['scripts/close/lib.mjs']);
+
+  // No triggers for paths nothing owns; empty heal_when never fires (VISION).
+  assert.deepEqual(matchDocMapTriggers(['README.md'], S2_DOC_MAP), []);
+  assert.deepEqual(matchDocMapTriggers(['LICENSE'], S2_DOC_MAP), []);
+
+  // Exact (non-glob) owner paths match only themselves.
+  const exact = { checked: [{ path: 'docs/CANON.md', owns: ['.agent/doc-map.yml'], checks: [] }], human: [] };
+  assert.equal(matchDocMapTriggers(['.agent/doc-map.yml'], exact).length, 1);
+  assert.equal(matchDocMapTriggers(['.agent/doc-map.yml.bak'], exact).length, 0);
+});
+
+test('evaluateDocsDecision passes automatically when nothing is triggered or docs ride the PR', () => {
+  // docs-only scope: the docs ARE the change.
+  const docsOnly = evaluateDocsDecision({ files: ['docs/CANON.md'], docMap: S2_DOC_MAP, docsOnly: true, labels: [], decision: '' });
+  assert.equal(docsOnly.ok, true);
+
+  // No doc-map triggers: nothing owed.
+  const untriggered = evaluateDocsDecision({ files: ['LICENSE'], docMap: S2_DOC_MAP, docsOnly: false, labels: [], decision: '' });
+  assert.equal(untriggered.ok, true);
+  assert.match(untriggered.decision, /no doc-map-owned/i);
+
+  // Repos without a doc-map (pre-T1 consumers) degrade to auto-pass, loudly.
+  const noMap = evaluateDocsDecision({ files: ['scripts/x.mjs'], docMap: null, docsOnly: false, labels: [], decision: '' });
+  assert.equal(noMap.ok, true);
+  assert.match(noMap.decision, /no .agent\/doc-map.yml/i);
+
+  // Every triggered doc updated in the same PR: auto-pass records which.
+  const updated = evaluateDocsDecision({
+    files: ['scripts/close/lib.mjs', 'docs/CANON.md', 'docs/adr/0009-close.md', 'docs/guides/close.md'],
+    docMap: S2_DOC_MAP,
+    docsOnly: false,
+    labels: [],
+    decision: '',
+  });
+  assert.equal(updated.ok, true);
+  assert.match(updated.decision, /updated/i);
+});
+
+test('evaluateDocsDecision demands substance (or a waiver) when triggered docs are not updated', () => {
+  const args = { files: ['scripts/close/lib.mjs'], docMap: S2_DOC_MAP, docsOnly: false };
+
+  // Triggered, untouched, no decision: FAIL, naming the triggered docs.
+  const bare = evaluateDocsDecision({ ...args, labels: [], decision: '' });
+  assert.equal(bare.ok, false);
+  assert.match(bare.failures.join('\n'), /docs\/CANON\.md/);
+
+  // Placeholder text is not a decision.
+  const todo = evaluateDocsDecision({ ...args, labels: [], decision: 'TODO' });
+  assert.equal(todo.ok, false);
+
+  // A substantive explanation passes and is recorded un-waived.
+  const explained = evaluateDocsDecision({
+    ...args,
+    labels: [],
+    decision: 'not needed: internal refactor, CANON prose describes behavior that did not change',
+  });
+  assert.equal(explained.ok, true);
+  assert.equal(explained.waived, false);
+
+  // docs:waived label + reason passes and records the waiver for the dashboard.
+  const waived = evaluateDocsDecision({
+    ...args,
+    labels: ['docs:waived'],
+    decision: 'waived by owner: emergency fix, docs follow in #999',
+  });
+  assert.equal(waived.ok, true);
+  assert.equal(waived.waived, true);
+
+  // The label without a reason is not a bypass.
+  const labelOnly = evaluateDocsDecision({ ...args, labels: ['docs:waived'], decision: '' });
+  assert.equal(labelOnly.ok, false);
+});
+
+// ─── #124 S2: incremental DoD capture (survives reboot) ───────────────────────
+
+test('writeDodSection / readDodCapture merge per-section decisions incrementally', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dod-capture-'));
+  try {
+    assert.deepEqual(readDodCapture(root), null);
+
+    writeDodSection(root, 'docs', 'updated: docs/CANON.md', { head: 'abc123', timestamp: '2026-07-02T18:00:00.000Z' });
+    writeDodSection(root, 'findings', 'no findings; clean lane', { head: 'abc123', timestamp: '2026-07-02T18:05:00.000Z' });
+    // Later capture for the same section overwrites (latest decision wins).
+    writeDodSection(root, 'docs', 'updated: docs/CANON.md + docs/adr/0009.md', { head: 'def456', timestamp: '2026-07-02T18:10:00.000Z' });
+
+    const capture = readDodCapture(root);
+    assert.equal(capture.sections.docs.decision, 'updated: docs/CANON.md + docs/adr/0009.md');
+    assert.equal(capture.sections.docs.head, 'def456');
+    assert.equal(capture.sections.findings.decision, 'no findings; clean lane');
+    assert.equal(capture.sections.changelog, undefined);
+
+    assert.throws(() => writeDodSection(root, 'nonsense', 'x', { head: 'a' }), /section/i);
+    assert.throws(() => writeDodSection(root, 'docs', 'TODO', { head: 'a' }), /substantive/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('parseNameStatus collects both sides of renames and includes deletions', () => {
