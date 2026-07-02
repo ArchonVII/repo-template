@@ -645,3 +645,39 @@ test('CLI exits 1 on blocking findings and loads the real doc-map + render check
   assert.equal(report.status, 'blocking');
   assert.ok(report.findings.some((f) => f.code === 'required-doc-missing' && f.path === 'docs/never-installed.md'));
 });
+
+// #146 round 7: a recognized block with a typo'd path must fail closed — the
+// checker manages a fixed surface and must not silently verify a different
+// file than the map declares.
+test('CLI fails closed when a declared generated path mismatches its block surface', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, '.agent/doc-map.yml', [
+    'version: 1',
+    'generated:',
+    '  - path: docs/NO_SUCH_INDEX.md',
+    '    class: committed',
+    '    generator: docs:render',
+    '    block: index-pages',
+    'code_roots:',
+    '  docs: self',
+    '',
+  ].join('\n'));
+  commitAll(repo, 'chore: typo path for known block (#0)');
+
+  let code = 0;
+  let stdout = '';
+  try {
+    stdout = execFileSync(process.execPath, [
+      join('scripts', 'doc-health', 'health.mjs'),
+      '--repo', repo, '--json', '--now', NOW_ISO,
+    ], { cwd: process.cwd(), encoding: 'utf8' });
+  } catch (err) {
+    code = err.status;
+    stdout = err.stdout;
+  }
+  assert.equal(code, 1);
+  const report = JSON.parse(stdout);
+  const failed = report.findings.find((f) => f.code === 'generated-block-check-failed');
+  assert.ok(failed, 'mismatched path must fail closed');
+  assert.match(failed.message, /NO_SUCH_INDEX/);
+});

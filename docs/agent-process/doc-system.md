@@ -125,9 +125,16 @@ doc-map contract and only exist when `.agent/doc-map.yml` does:
 | `doc-map-invalid` | the spine exists but cannot be read/parsed (fails closed) | always |
 | `required-doc-missing` | a `required.base` doc does not exist | always |
 | `code-root-unmapped` | a top-level root is absent from `code_roots` | always |
+| `code-root-mapping-invalid` | a `code_roots` value names no checked doc, or one whose `owns` matches no file under the root | always |
 | `generated-block-stale` / `generated-block-check-failed` | a committed-class surface differs from regeneration, or the generators are unavailable/broken | always |
 | `dangling-relative-link` (escalated) | a dead link in a `checked` doc declaring `links` | only when the doc is **re-triggered** |
 | `path-ref-missing` | a backtick repo path in a `checked` doc declaring `path-refs` does not exist | blocking when re-triggered, warning otherwise |
+
+Coverage validation is deliberately **root-granular**: a mapping is valid when the
+named doc provably owns *something* under the root (per the epic's keystone-rot
+contract — a NEW unmapped root blocks). Extension-scoped `owns` like
+`tools/**/*.mjs` is a legitimate narrowing; per-file completeness inside a mapped
+root is not enforced.
 
 A `checked` doc is **re-triggered** when it changed or any path its `owns` globs cover
 changed (`--changed <path>` / `--changed-from <git-ref>`); doc-path hits escalate at

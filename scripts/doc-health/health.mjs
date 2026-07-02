@@ -694,11 +694,31 @@ async function loadDocMapForCli(repoRoot) {
 // runIndex cannot find INDEX markers it never promised. Declared committed
 // blocks with no known checker are unverifiable and fail closed via the
 // contract rule's catch.
+// Each known block id is checked by a runner that manages a FIXED surface; a
+// committed entry must declare that exact path or the checker would verify a
+// different file than the map promises (#146 round 7 — a typo'd path with a
+// recognized block must fail closed, not silently pass on the real surface).
+const KNOWN_BLOCK_SURFACES = {
+  'index-pages': 'docs/INDEX.md',
+  nav: 'llms.txt',
+  status: 'README.md',
+};
+
 async function loadRenderCheckForCli(repoRoot, docMap) {
   const committed = (docMap.generated || []).filter((g) => g.class === 'committed');
   if (committed.length === 0) return () => [];
-  const blocks = new Set(committed.map((g) => g.block).filter(Boolean));
   const runners = [];
+  const blocks = new Set();
+  for (const entry of committed) {
+    const expected = entry.block ? KNOWN_BLOCK_SURFACES[entry.block] : undefined;
+    if (expected && entry.path !== expected) {
+      runners.push(() => {
+        throw new Error(`doc-map declares block ${entry.block} at ${entry.path}, but its checker manages ${expected}`);
+      });
+      continue;
+    }
+    if (entry.block) blocks.add(entry.block);
+  }
   try {
     if (blocks.has('index-pages')) {
       const { runIndex } = await import('../docs/index.mjs');
