@@ -14,8 +14,18 @@ const args = parseGeneratorArgs(process.argv.slice(2));
 // surface refuses to run rather than mutate an undeclared file (round 13).
 const committed = (readDocMap(args.root).generated || []).filter((g) => g.class === 'committed');
 for (const entry of committed) {
+  // Unknown or missing block ids are unverifiable declarations — refusing
+  // keeps render in agreement with doc-health, which blocks the same map
+  // (#146 round 14).
   const expected = entry.block ? KNOWN_BLOCK_SURFACES[entry.block] : undefined;
-  if (expected && entry.path !== expected) {
+  if (!expected) {
+    console.error(
+      `docs:render refused: committed entry ${entry.path || '(no path)'} declares ` +
+      `${entry.block ? `unknown block "${entry.block}"` : 'no block id'} — no known generator manages it.`
+    );
+    process.exit(2);
+  }
+  if (entry.path !== expected) {
     console.error(
       `docs:render refused: doc-map declares block ${entry.block} at ${entry.path}, but its generator manages ${expected}.`
     );

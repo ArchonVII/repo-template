@@ -488,3 +488,59 @@ test('docs:render refuses mismatched path/block declarations', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// #146 round 14: unknown checks rule names (checks: [link]) silently disable
+// the guard they misspell — the parser validates the rule vocabulary.
+test('parseDocMap rejects unknown checked rule names', () => {
+  assert.throws(() => parseDocMap([
+    'version: 1',
+    'checked:',
+    '  - path: docs/CANON.md',
+    '    owns: ["scripts/**"]',
+    '    checks: [link]',
+  ].join('\n')), /checks/i);
+  // The full documented vocabulary parses clean.
+  const ok = parseDocMap([
+    'version: 1',
+    'checked:',
+    '  - path: docs/CANON.md',
+    '    owns: ["scripts/**"]',
+    '    checks: [links, path-refs, last-reviewed, placeholders, stale-terms, closed-issue-refs, supersession]',
+  ].join('\n'));
+  assert.equal(ok.checked[0].checks.length, 7);
+});
+
+// #146 round 14: docs:render must refuse unknown committed block ids — the
+// remediation command must never report current while doc-health blocks the
+// same map as unverifiable.
+test('docs:render refuses unknown committed block ids', () => {
+  const root = tempRoot();
+  try {
+    mkdirSync(join(root, '.agent'), { recursive: true });
+    writeFileSync(join(root, '.agent', 'doc-map.yml'), [
+      'version: 1',
+      'generated:',
+      '  - path: README.md',
+      '    class: committed',
+      '    generator: docs:render',
+      '    block: statusz',
+      'code_roots:',
+      '  docs: self',
+      '',
+    ].join('\n'));
+
+    let code = 0;
+    try {
+      execFileSync(
+        process.execPath,
+        [join(REPO_ROOT, 'scripts', 'docs', 'render.mjs'), '--repo', root, '--check'],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+      );
+    } catch (err) {
+      code = err.status;
+    }
+    assert.notEqual(code, 0, 'unknown committed block id must fail, not report current');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

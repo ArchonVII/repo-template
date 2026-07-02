@@ -170,6 +170,17 @@ export function parseDocMap(text) {
   // generated[].class is schema, not decoration: a typo like 'commited' would
   // silently drop the entry from every consumer and disable the
   // generated-block gate (#146 round 13) — fail closed instead.
+  for (const entry of map.checked) {
+    const rules = Array.isArray(entry.checks) ? entry.checks : entry.checks ? [entry.checks] : [];
+    for (const rule of rules) {
+      if (!CHECKED_RULES.has(rule)) {
+        throw new Error(
+          `doc-map checked entry ${entry.path || '(no path)'}: unknown checks rule "${rule}" ` +
+          `(known: ${[...CHECKED_RULES].join(', ')})`
+        );
+      }
+    }
+  }
   for (const entry of map.generated) {
     if (!GENERATED_CLASSES.has(entry.class)) {
       throw new Error(
@@ -183,6 +194,20 @@ export function parseDocMap(text) {
 }
 
 const GENERATED_CLASSES = new Set(['committed', 'rendered', 'release']);
+
+// The deterministic per-doc rule vocabulary (doc-system.md contract): the
+// blocking-capable rules plus the warning-only dashboard rules. An unknown
+// name (checks: [link]) would silently disable the guard it misspells
+// (#146 round 14) — the parser fails closed instead.
+const CHECKED_RULES = new Set([
+  'links',
+  'path-refs',
+  'last-reviewed',
+  'placeholders',
+  'stale-terms',
+  'closed-issue-refs',
+  'supersession',
+]);
 
 // The fixed surface each known committed block's generator manages — shared
 // by docs:render and the doc-health render check so a declared path that
