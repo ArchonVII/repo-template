@@ -385,6 +385,46 @@ test('checkRepo: dangling links in a checked doc block only when the doc is re-t
   );
 });
 
+// A glob checked entry (docs/adr/**) must escalate at FILE granularity on
+// doc-path hits: changing one ADR must not turn pre-existing rot in a sibling
+// ADR blocking (#146 review, Codex P2). An owns hit still re-triggers every
+// doc of the entry — the changed code may invalidate any of them.
+test('checkRepo: glob checked entries escalate per file on doc hits, per entry on owns hits', () => {
+  const repo = makeTempRepo();
+  const adrMap = {
+    version: 1,
+    generated: [],
+    checked: [{ path: 'docs/adr/**', owns: ['scripts/**'], checks: ['links'] }],
+    human: [],
+    required: { base: [] },
+    code_roots: { docs: 'self' },
+  };
+  writeInRepo(repo, 'docs/adr/0001-rotten.md', '# ADR 1\n\nSee [gone](./gone.md).\n');
+  writeInRepo(repo, 'docs/adr/0002-fresh.md', '# ADR 2\n\nClean content.\n');
+  commitAll(repo, 'docs: two adrs (#0)');
+
+  // Sibling ADR changed: the rotten ADR was NOT touched → its dead link stays a warning.
+  const sibling = checkRepo(repo, { now: NOW, docMap: adrMap, changedPaths: ['docs/adr/0002-fresh.md'] });
+  assert.equal(
+    sibling.findings.find((f) => f.code === 'dangling-relative-link' && f.path === 'docs/adr/0001-rotten.md').severity,
+    'warning'
+  );
+
+  // The rotten ADR itself changed: blocking.
+  const direct = checkRepo(repo, { now: NOW, docMap: adrMap, changedPaths: ['docs/adr/0001-rotten.md'] });
+  assert.equal(
+    direct.findings.find((f) => f.code === 'dangling-relative-link' && f.path === 'docs/adr/0001-rotten.md').severity,
+    'blocking'
+  );
+
+  // Owned code changed: every doc of the entry re-triggers.
+  const owns = checkRepo(repo, { now: NOW, docMap: adrMap, changedPaths: ['scripts/foo.mjs'] });
+  assert.equal(
+    owns.findings.find((f) => f.code === 'dangling-relative-link' && f.path === 'docs/adr/0001-rotten.md').severity,
+    'blocking'
+  );
+});
+
 test('checkRepo: path-refs verify backtick repo paths in declaring docs, exempting rendered-class paths', () => {
   const repo = makeTempRepo();
   writeInRepo(repo, 'docs/CANON.md', wikiPage('Truth register', 'CANON', [

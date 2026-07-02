@@ -138,20 +138,30 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
     }
   }
 
-  // Re-trigger set: which checked docs must be re-verified for THIS change set.
+  // Re-trigger sets at FILE granularity (#146 review): a doc-path hit
+  // escalates only the changed file — one ADR changing must not turn
+  // pre-existing rot in a sibling ADR blocking — while an owns hit escalates
+  // every doc of the entry (the changed code may invalidate any of them).
   const checked = (docMap.checked || []).filter((doc) => doc?.path);
-  const triggeredEntries = new Set();
-  for (const doc of checked) {
-    const pathRe = docMapGlobToRegExp(doc.path);
-    const ownsRes = toList(doc.owns).map(docMapGlobToRegExp);
-    const hit = changedPaths.some((p) => pathRe.test(p) || ownsRes.some((re) => re.test(p)));
-    if (hit) triggeredEntries.add(doc);
-  }
   const resolveDocRels = (entryPath) => {
     if (!/[*?{[]/.test(entryPath)) return textByRel.has(entryPath) ? [entryPath] : [];
     const re = docMapGlobToRegExp(entryPath);
     return mdFiles.map((f) => f.rel).filter((rel) => re.test(rel));
   };
+  const changedSet = new Set(changedPaths);
+  const escalatedLinkRels = new Set();
+  const escalatedPathRefRels = new Set();
+  for (const doc of checked) {
+    const checks = toList(doc.checks);
+    if (!checks.includes('links') && !checks.includes('path-refs')) continue;
+    const ownsRes = toList(doc.owns).map(docMapGlobToRegExp);
+    const ownsHit = changedPaths.some((p) => ownsRes.some((re) => re.test(p)));
+    for (const rel of resolveDocRels(doc.path)) {
+      if (!ownsHit && !changedSet.has(rel)) continue;
+      if (checks.includes('links')) escalatedLinkRels.add(rel);
+      if (checks.includes('path-refs')) escalatedPathRefRels.add(rel);
+    }
+  }
 
   // path-refs: backtick repo paths in declaring docs must exist — except
   // doc-map-declared volatile surfaces (rendered/release classes) and
@@ -166,15 +176,15 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
       for (const { token, line } of extractPathRefTokens(textByRel.get(rel) || '')) {
         if (volatile.has(token)) continue;
         if (fs.existsSync(path.join(root, ...token.split('/')))) continue;
-        candidates.push({ doc, rel, token, line });
+        candidates.push({ rel, token, line });
       }
     }
   }
   const ignored = gitIgnoredSet(root, candidates.map((c) => c.token));
-  for (const { doc, rel, token, line } of candidates) {
+  for (const { rel, token, line } of candidates) {
     if (ignored.has(token)) continue;
     addFinding(findings, {
-      severity: triggeredEntries.has(doc) ? 'blocking' : 'warning',
+      severity: escalatedPathRefRels.has(rel) ? 'blocking' : 'warning',
       code: 'path-ref-missing',
       path: rel,
       line,
@@ -182,15 +192,9 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
     });
   }
 
-  // links: escalate the generic dangling-link warnings on re-triggered
-  // checked docs that declare the `links` rule.
-  const linkDocRels = new Set(
-    checked
-      .filter((doc) => triggeredEntries.has(doc) && toList(doc.checks).includes('links'))
-      .flatMap((doc) => resolveDocRels(doc.path))
-  );
+  // links: escalate the generic dangling-link warnings on re-triggered files.
   for (const finding of findings) {
-    if (finding.code === 'dangling-relative-link' && linkDocRels.has(finding.path)) {
+    if (finding.code === 'dangling-relative-link' && escalatedLinkRels.has(finding.path)) {
       finding.severity = 'blocking';
     }
   }
