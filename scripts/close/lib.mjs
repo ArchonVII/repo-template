@@ -116,6 +116,13 @@ export function classifyCloseScanScope({ files = [], labels = [], stack = 'minim
   const requiresChangelog = !docsOnly;
   const requiredChecks = [{ name: 'pr-contract', reason: 'PR metadata contract' }];
 
+  // #124 S2: the docs DoD section is ALWAYS evaluated — substance scales
+  // inside evaluateDocsDecision (docs-only and untriggered diffs auto-pass),
+  // never by dropping the check from scope.
+  requiredChecks.push({
+    name: 'docs',
+    reason: 'Closeout DoD docs section — doc-map-owned docs updated, explained, or visibly waived',
+  });
   requiredChecks.push({
     name: 'repo-update-log',
     reason: 'Applicable PRs must add a docs/repo-update-log fragment or record an allowed doc-only skip',
@@ -246,16 +253,169 @@ export function evaluateRequiredChecks({ checkRuns = [], requiredCheckName = DEF
   return { ok: true, failures: [], matched };
 }
 
+// #124 S2: the closeout Definition of Done is exactly these four decisions,
+// each captured (incrementally via close:dod, or at scan time) and bound to
+// the final HEAD by the marker. Order is display order.
+export const DOD_SECTIONS = ['docs', 'changelog', 'verification', 'findings'];
+
+// Minimal glob for the doc-map's `owns`/`heal_when` vocabulary (zero-dep, same
+// discipline as the check-map reader above): `**` spans path segments, `*`
+// stays within one segment, everything else is literal. Anchored both ends.
+function globToRegExp(glob) {
+  const escaped = String(glob)
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*/g, '\u0000')
+    .replace(/\*/g, '[^/]*')
+    .replace(/\u0000/g, '.*');
+  return new RegExp(`^${escaped}$`);
+}
+
+// A scalar `owns: scripts/**` is valid YAML that the lenient doc-map parser
+// returns as a string — treat it as a one-glob list rather than crashing on
+// `.map` (#145 review round 3). Anything else non-array contributes nothing.
+function toGlobList(raw) {
+  if (Array.isArray(raw)) return raw.filter((glob) => typeof glob === 'string' && glob.trim());
+  if (typeof raw === 'string' && raw.trim()) return [raw.trim()];
+  return [];
+}
+
+// Which doc-map docs does this diff put on the hook? `checked` docs fire on
+// their `owns` globs, `human` docs on `heal_when` (an empty heal_when — e.g.
+// VISION.md, owner decision 2026-06-27 — never fires).
+export function matchDocMapTriggers(files, docMap) {
+  const entries = [
+    ...(docMap?.checked || []).map((doc) => ({ path: doc.path, globs: toGlobList(doc.owns) })),
+    ...(docMap?.human || []).map((doc) => ({ path: doc.path, globs: toGlobList(doc.heal_when) })),
+  ];
+  const triggers = [];
+  for (const entry of entries) {
+    if (!entry.path || entry.globs.length === 0) continue;
+    const patterns = entry.globs.map(globToRegExp);
+    const matchedBy = (files || []).filter((file) => patterns.some((re) => re.test(file)));
+    if (matchedBy.length > 0) triggers.push({ path: entry.path, matchedBy });
+  }
+  return triggers;
+}
+
+// The docs section of the DoD, substance scaled by scope (#124 S2):
+// docs-only diffs, untriggered diffs, and repos without a doc-map auto-pass;
+// a diff that triggers doc-map-owned docs must update them in-PR, explain
+// substantively why not, or carry the docs:waived label WITH a reason. The
+// waiver is recorded (not hidden) so dashboards can count it.
+// existsFn: injectable existence check for changed paths. Deletions ride in
+// `files` on purpose (parseNameStatus counts D and both rename sides for
+// scope), so "updated in-PR" additionally requires the matched doc to still
+// exist — a PR deleting the owning doc must not satisfy its own trigger
+// (#145 review round 4). Production passes an fs-backed check; the pure
+// default keeps the function testable without a filesystem.
+export function evaluateDocsDecision({ files = [], docMap = null, docMapError = null, docsOnly = false, labels = [], decision = '', existsFn = () => true } = {}) {
+  const waived = (labels || []).includes('docs:waived');
+  const explicit = String(decision || '').trim();
+  const pass = (text, triggers = []) => ({ ok: true, waived, triggers, decision: explicit || text, failures: [] });
+
+  // Fail closed on a PRESENT-but-broken spine (#145 review): a malformed
+  // doc-map silently disabling the DoD is worse than a loud failure, and no
+  // decision text can substitute for the input it is judged against.
+  if (docMapError) {
+    return {
+      ok: false,
+      waived,
+      triggers: [],
+      decision: explicit,
+      failures: [
+        `.agent/doc-map.yml exists but could not be used (${docMapError}); `
+          + 'the docs DoD fails closed on a broken spine — fix the doc-map, do not bypass it.',
+      ],
+    };
+  }
+
+  if (docsOnly) return pass('docs are the change under review');
+  if (!docMap) return pass('not required: no .agent/doc-map.yml in this repo (docs DoD auto-passes)');
+
+  const triggers = matchDocMapTriggers(files, docMap);
+  if (triggers.length === 0) return pass('not required: no doc-map-owned docs match the diff');
+
+  const triggerPaths = triggers.map((t) => t.path);
+  const updated = triggerPaths.filter((path) => {
+    const re = globToRegExp(path);
+    return files.some((file) => re.test(file) && existsFn(file));
+  });
+  if (updated.length === triggerPaths.length) return pass(`updated in-PR: ${updated.join(', ')}`, triggerPaths);
+  if (isSubstantiveDecision(explicit)) {
+    return { ok: true, waived, triggers: triggerPaths, decision: explicit, failures: [] };
+  }
+
+  const stale = triggerPaths.filter((path) => !updated.includes(path));
+  return {
+    ok: false,
+    waived,
+    triggers: triggerPaths,
+    decision: explicit,
+    failures: [
+      `Diff triggers doc-map-owned docs not updated in this PR: ${stale.join(', ')}. `
+        + 'Update them in this PR, pass a substantive --docs-decision explaining why not, '
+        + 'or add the docs:waived label with a substantive reason.',
+    ],
+  };
+}
+
+// Incremental DoD capture (#124 S2): decisions are written to
+// .agent/close-scan/dod.json AS THEY ARE MADE during the session, so a reboot
+// or context loss never re-litigates them; scan-complete folds them into the
+// HEAD-bound marker as defaults (explicit flags win).
+export function dodCapturePath(root = process.cwd()) {
+  return join(root, '.agent', 'close-scan', 'dod.json');
+}
+
+export function readDodCapture(root = process.cwd()) {
+  try {
+    const parsed = JSON.parse(readFileSync(dodCapturePath(root), 'utf8'));
+    if (!parsed || parsed.version !== 1 || typeof parsed.sections !== 'object' || parsed.sections === null) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+// #145 review (P1): the marker's HEAD-bound guarantee extends to every
+// folded-in decision — a capture made at an earlier commit must not certify a
+// later one. Only sections whose recorded head matches the current HEAD are
+// reusable; the rest are discarded and must be recaptured (the reboot-safety
+// property only ever promised survival WITHOUT new commits).
+export function freshDodCaptures(capture, head) {
+  const sections = {};
+  const discarded = [];
+  for (const [name, entry] of Object.entries(capture?.sections || {})) {
+    if (entry?.head && head && entry.head === head) sections[name] = entry;
+    else discarded.push(name);
+  }
+  return { sections, discarded };
+}
+
+export function writeDodSection(root, section, decision, { head = null, timestamp = new Date().toISOString() } = {}) {
+  if (!DOD_SECTIONS.includes(section)) {
+    throw new Error(`Unknown DoD section "${section}" — expected one of: ${DOD_SECTIONS.join(', ')}.`);
+  }
+  if (!isSubstantiveDecision(decision)) {
+    throw new Error(`DoD ${section} decision must be substantive (>= 10 chars, no placeholder text).`);
+  }
+  const capture = readDodCapture(root) || { version: 1, sections: {} };
+  capture.sections[section] = { decision, head, capturedAt: timestamp };
+  mkdirSync(join(root, '.agent', 'close-scan'), { recursive: true });
+  writeFileSync(dodCapturePath(root), `${JSON.stringify(capture, null, 2)}\n`);
+  return capture;
+}
+
 export function buildCloseScanMarker({
   git,
   pr,
   scope,
-  decisions,
+  dod,
   localChecks,
   timestamp = new Date().toISOString(),
 } = {}) {
   return {
-    version: 1,
+    version: 2,
     timestamp,
     git: {
       branch: git?.branch || null,
@@ -274,10 +434,15 @@ export function buildCloseScanMarker({
         typeof check === 'string' ? check : check.name
       )),
     },
-    decisions: {
-      changelog: decisions?.changelog || '',
-      findings: decisions?.findings || '',
-      verification: decisions?.verification || '',
+    dod: {
+      docs: {
+        decision: dod?.docs?.decision || '',
+        waived: Boolean(dod?.docs?.waived),
+        triggers: Array.isArray(dod?.docs?.triggers) ? dod.docs.triggers : [],
+      },
+      changelog: { decision: dod?.changelog?.decision || '' },
+      verification: { decision: dod?.verification?.decision || '' },
+      findings: { decision: dod?.findings?.decision || '' },
     },
     localChecks: Array.isArray(localChecks) ? localChecks : [],
   };
@@ -291,8 +456,10 @@ export function evaluateCloseScanMarker({
 } = {}) {
   const failures = [];
 
-  if (!marker || marker.version !== 1) {
-    return { ok: false, failures: ['Close-scan completion marker is missing or has an unsupported version.'] };
+  // Version 2 only: a v1 marker predates the 4-section DoD (#124 S2) and says
+  // nothing about the docs decision, so the guard cannot accept it.
+  if (!marker || marker.version !== 2) {
+    return { ok: false, failures: ['Close-scan completion marker is missing or has an unsupported version (expected 2 — re-run close:scan:complete).'] };
   }
 
   if (!marker.timestamp) {
@@ -310,14 +477,10 @@ export function evaluateCloseScanMarker({
   if (pr?.branch && marker.pr?.branch !== pr.branch) {
     failures.push('Close-scan completion marker PR branch does not match the current PR branch.');
   }
-  if (!isSubstantiveDecision(marker.decisions?.changelog)) {
-    failures.push('Close-scan completion marker is missing a substantive changelog decision.');
-  }
-  if (!isSubstantiveDecision(marker.decisions?.findings)) {
-    failures.push('Close-scan completion marker is missing a substantive findings decision.');
-  }
-  if (!isSubstantiveDecision(marker.decisions?.verification)) {
-    failures.push('Close-scan completion marker is missing a substantive verification summary.');
+  for (const section of DOD_SECTIONS) {
+    if (!isSubstantiveDecision(marker.dod?.[section]?.decision)) {
+      failures.push(`Close-scan completion marker is missing a substantive ${section} DoD decision.`);
+    }
   }
   for (const check of marker.localChecks || []) {
     if (!check.ok) {

@@ -197,12 +197,47 @@ function detectRepoName(wt) {
 
 // ─── Default loadClaims ───────────────────────────────────────────────────────
 
+// Task-claim liveness window (#124 S2 coordination bookend). 24h: the claim
+// must survive a reboot/overnight pause (the epic's incremental-capture
+// requirement), while an abandoned lane becomes a positive death signal by the
+// next working day. close:dod captures refresh lastActivityAt to extend it.
+export const TASK_CLAIM_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * taskClaim(wt) → claim | null  (#124 S2 coordination bookend)
+ *
+ * A lane's .agent/current-task.json (written by agent:start-task) IS its
+ * doc-sweep claim — no separate claim file needed. The claim covers the whole
+ * worktree on the task's branch; expiresAt derives from lastActivityAt
+ * (refreshed by close:dod) or createdAt plus TASK_CLAIM_TTL_MS. Returned even
+ * when already past expiry: an EXPIRED task claim is the positive death
+ * signal classify() needs to make an abandoned lane's docs eligible.
+ */
+export function taskClaim(wt, { ttlMs = TASK_CLAIM_TTL_MS } = {}) {
+  let task;
+  try {
+    task = JSON.parse(readFileSync(join(wt, '.agent', 'current-task.json'), 'utf8'));
+  } catch {
+    return null; // no task metadata (or unreadable) → no synthesized claim
+  }
+  const at = Date.parse(task.lastActivityAt || task.createdAt || '');
+  if (!Number.isFinite(at) || !task.branch) return null;
+  return {
+    repo: detectRepoName(wt),
+    branch: task.branch,
+    paths: ['**'],
+    status: 'active',
+    expiresAt: new Date(at + ttlMs).toISOString(),
+  };
+}
+
 /**
  * defaultLoadClaims(wt) → claim[]
  *
  * Reads .agent/coordination/claims/*.json if the directory exists, else returns [].
  * Parses each file as JSON; silently skips unparseable files (fail-safe: ambiguity
- * never makes a doc eligible — spec §4.3 H3).
+ * never makes a doc eligible — spec §4.3 H3). A live .agent/current-task.json is
+ * appended as a synthesized whole-worktree claim (#124 S2 bookend).
  */
 function defaultLoadClaims(wt) {
   const claimsDir = join(wt, '.agent', 'coordination', 'claims');
@@ -210,7 +245,7 @@ function defaultLoadClaims(wt) {
   try {
     entries = readdirSync(claimsDir);
   } catch {
-    return []; // directory absent → no claims
+    entries = []; // directory absent → no file-based claims
   }
   const claims = [];
   for (const entry of entries) {
@@ -222,6 +257,8 @@ function defaultLoadClaims(wt) {
       // Unparseable claim — skip; fail-safe is handled in coveringClaimStatus
     }
   }
+  const fromTask = taskClaim(wt);
+  if (fromTask) claims.push(fromTask);
   return claims;
 }
 

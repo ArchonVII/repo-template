@@ -239,7 +239,8 @@ test('status model summarizes volatile inputs and renders with an injected times
   const model = buildStatusModel({
     prs: [
       { number: 143, title: 'fix(close): honor check-map', isDraft: false, url: 'https://x/143' },
-      { number: 999, title: 'draft thing', isDraft: true, url: 'https://x/999' },
+      // #124 S2: docs:waived is the closeout-DoD bypass; the dashboard counts it.
+      { number: 999, title: 'draft thing', isDraft: true, url: 'https://x/999', labels: [{ name: 'docs:waived' }] },
     ],
     issues: [{ number: 124, title: 'Epic: docs system', labels: [{ name: 'epic' }], url: 'https://x/124' }],
     // doc-health.v1 report shape — what scripts/doc-health/health.mjs --json
@@ -262,6 +263,7 @@ test('status model summarizes volatile inputs and renders with an injected times
   });
   assert.equal(model.openPrs.length, 2);
   assert.equal(model.draftPrCount, 1);
+  assert.equal(model.docsWaivedCount, 1, 'docs:waived PRs must be counted (#124 S2 owner decision)');
   assert.equal(model.openIssues.length, 1);
   assert.equal(model.docWarningCount, 1);
   assert.equal(model.docErrorCount, 1);
@@ -273,6 +275,7 @@ test('status model summarizes volatile inputs and renders with an injected times
   assert.ok(md.includes('charter-overbudget'));
   assert.ok(md.includes('README.md:1'));
   assert.ok(md.includes('1 blocking, 1 warning'));
+  assert.ok(md.includes('1 docs-waived'), 'waiver count must surface on the dashboard');
 });
 
 // The live producer is the fixture (#124 spine principle): if health.mjs and

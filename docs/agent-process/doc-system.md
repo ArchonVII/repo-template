@@ -75,15 +75,52 @@ Missing markers throw — generators never append blocks silently. Current surfa
 npm run docs:render            # regenerate all committed-class blocks in place
 npm run docs:render -- --check # drift gate: exit 1 if any block is stale, write nothing
 npm run docs:status            # render docs/STATUS.md (never commit it)
+npm run close:dod -- --section <docs|changelog|verification|findings> --decision "<text>"
+                               # capture one closeout-DoD decision as it is made (S2)
 ```
+
+## The closeout DoD (S2)
+
+Closing a lane means answering exactly four questions — the DoD sections — and the
+close-scan marker (`.agent/close-scan/complete.json`, version 2) binds all four to the
+final HEAD:
+
+| section | what it answers | scope scaling |
+| --- | --- | --- |
+| `docs` | were doc-map-owned docs updated for this diff, and if not, why? | auto-passes for docs-only diffs, untriggered diffs, and repos without a doc-map |
+| `changelog` | fragment / direct edit / not required? | auto-defaults for docs-only diffs |
+| `verification` | what was run and what did it prove? | always substantive |
+| `findings` | anomalies / follow-ups routed or none found? | always substantive |
+
+The `docs` section is driven by the spine: `checked.owns` and `human.heal_when` globs
+are matched against the diff. A triggered doc must be updated in the same PR, or the
+close carries a substantive `--docs-decision` explaining why not, or the PR carries the
+**`docs:waived` label plus a substantive reason** — the waiver is recorded in the
+marker and counted on the STATUS dashboard (owner decision 2026-06-27: waivers stay
+visible, they never accumulate silently).
+
+Decisions are captured **incrementally** with `npm run close:dod` the moment they are
+made — the capture (`.agent/close-scan/dod.json`, gitignored) survives reboots and
+context loss, and `close:scan:complete` folds it into the marker as defaults (explicit
+flags win). Each capture also refreshes the lane's task claim (below).
+
+## Coordination bookend (S2)
+
+A lane's `.agent/current-task.json` (written by `agent:start-task`) **is** its
+doc-sweep claim — no separate claim file. The synthesized claim covers the whole
+worktree on the task's branch and stays live for 24h from `lastActivityAt` (refreshed
+by every `close:dod` capture) or `createdAt`. A live claim makes doc-sweep skip the
+lane's in-flight docs; an **expired** claim is the positive death signal that makes an
+abandoned lane's docs eligible for recovery.
 
 ## What blocks at PR time
 
-S1 ships the generators and the `--check` drift gate as a local command. Enforcement
-order (epic lanes): S2 extends the close-scan marker with the 4-section closeout DoD;
-P1 wires `docs:render --check` + the diff-scoped blocking doc-health subset (dead
-links, path-refs, required-existence, doc-map coverage, generated-block-clean) into
-`repo-required-gate / decision` and retires the fragment workflows; S3 folds
-changelog generation to release-cut and deletes the fragment machinery; T1 snapshots
-the system into archon-setup onboarding; T2 dogfoods archon-setup itself. Warnings
-(stale terms, budgets, closed-issue refs) never block — they flow to the dashboard.
+S1 ships the generators and the `--check` drift gate as a local command; S2 ships the
+4-section closeout DoD in the close-scan marker (enforced by `close:ci:guard` at
+promotion). Enforcement order (epic lanes): P1 wires `docs:render --check` + the
+diff-scoped blocking doc-health subset (dead links, path-refs, required-existence,
+doc-map coverage, generated-block-clean) into `repo-required-gate / decision` and
+retires the fragment workflows; S3 folds changelog generation to release-cut and
+deletes the fragment machinery; T1 snapshots the system into archon-setup onboarding;
+T2 dogfoods archon-setup itself. Warnings (stale terms, budgets, closed-issue refs)
+never block — they flow to the dashboard.

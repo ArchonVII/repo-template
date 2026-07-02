@@ -17,10 +17,14 @@ import { pathToFileURL } from 'node:url';
 export function buildStatusModel({ prs = [], issues = [], prsError = null, issuesError = null, docHealth = null, now }) {
   const findings = Array.isArray(docHealth?.findings) ? docHealth.findings : [];
   const docWarningCount = findings.filter((f) => f.severity === 'warning').length;
+  // docs:waived is the closeout-DoD bypass (#124 S2); waivers are counted here
+  // so they stay visible instead of quietly accumulating (owner, 2026-06-27).
+  const docsWaivedCount = prs.filter((pr) => (pr.labels || []).some((l) => l.name === 'docs:waived')).length;
   return {
     generatedAt: now,
     openPrs: prs.map((pr) => ({ number: pr.number, title: pr.title, draft: Boolean(pr.isDraft), url: pr.url })),
     draftPrCount: prs.filter((pr) => pr.isDraft).length,
+    docsWaivedCount,
     openIssues: issues.map((issue) => ({
       number: issue.number,
       title: issue.title,
@@ -41,7 +45,7 @@ export function renderStatusMarkdown(model) {
     '',
     `_Class: rendered, not committed (.agent/doc-map.yml). Generated ${model.generatedAt} by \`npm run docs:status\`. Do not commit this file._`,
     '',
-    `## Open PRs (${model.prsError ? 'unavailable' : `${model.openPrs.length}, ${model.draftPrCount} draft`})`,
+    `## Open PRs (${model.prsError ? 'unavailable' : `${model.openPrs.length}, ${model.draftPrCount} draft${model.docsWaivedCount ? `, ${model.docsWaivedCount} docs-waived` : ''}`})`,
     '',
     ...(model.prsError
       ? [`- snapshot failed: ${model.prsError}`]
@@ -133,7 +137,7 @@ function snapshotError(result) {
 
 export function runStatus({ root, now = new Date().toISOString(), exec = execFileSync }) {
   const gh = { cwd: root, exec };
-  const prs = ghJson(['pr', 'list', '--limit', String(GH_LIST_LIMIT), '--json', 'number,title,isDraft,url'], gh);
+  const prs = ghJson(['pr', 'list', '--limit', String(GH_LIST_LIMIT), '--json', 'number,title,isDraft,url,labels'], gh);
   const issues = ghJson(['issue', 'list', '--limit', String(GH_LIST_LIMIT), '--json', 'number,title,labels,url'], gh);
   const prsError = snapshotError(prs);
   const issuesError = snapshotError(issues);

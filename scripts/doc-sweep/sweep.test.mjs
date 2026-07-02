@@ -515,3 +515,84 @@ test('sweepRepo: staged-but-not-committed doc is enumerated and classified (C1)'
     `docs/staged.md (staged C1) must appear in eligible/leaveLog/skip; got=${JSON.stringify(allClassified)}`
   );
 });
+
+// ─── #124 S2 coordination bookend: current-task.json IS the doc-sweep claim ───
+
+test('sweepRepo: live current-task.json claims the worktree — stale doc → skip, no claim file needed', async () => {
+  const repo = makeTempRepo({ branch: 'main' });
+  writeInRepo(repo, 'docs/wip.md', '# In-flight lane doc\nsome content\n');
+  setFakeOrigin(repo, 'archon-real');
+
+  const now = Date.now() + STALE_MS + 1000; // stale enough to be eligible without a claim
+
+  // agent:start-task metadata — branch matches the checked-out branch.
+  mkdirSync(join(repo, '.agent'), { recursive: true });
+  writeFileSync(join(repo, '.agent', 'current-task.json'), JSON.stringify({
+    issue: 124,
+    branch: 'main',
+    createdAt: new Date(now - 60 * 60 * 1000).toISOString(), // 1h old: live
+  }));
+
+  const buckets = await sweepRepo(repo, {
+    now,
+    apply: false,
+    defaultBranch: 'other-default', // worktree lane
+    scan: cleanScan,
+    // no loadClaims stub: defaultLoadClaims must synthesize the task claim
+  });
+
+  assert.ok(buckets.skip.some((e) => e.path === 'docs/wip.md'),
+    `docs/wip.md must be skip (live task claim); skip=${JSON.stringify(buckets.skip)}`);
+  assert.ok(!buckets.eligible.some((e) => e.path === 'docs/wip.md'), 'must not be eligible');
+});
+
+test('sweepRepo: stale current-task.json (past TASK_CLAIM_TTL_MS) does not claim — doc stays eligible', async () => {
+  const repo = makeTempRepo({ branch: 'main' });
+  writeInRepo(repo, 'docs/abandoned.md', '# Abandoned lane doc\nsome content\n');
+  setFakeOrigin(repo, 'archon-real');
+
+  const now = Date.now() + STALE_MS + 1000;
+
+  mkdirSync(join(repo, '.agent'), { recursive: true });
+  writeFileSync(join(repo, '.agent', 'current-task.json'), JSON.stringify({
+    issue: 124,
+    branch: 'main',
+    createdAt: new Date(now - 48 * 60 * 60 * 1000).toISOString(), // 48h: past the 24h TTL
+  }));
+
+  const buckets = await sweepRepo(repo, {
+    now,
+    apply: false,
+    defaultBranch: 'other-default',
+    scan: cleanScan,
+  });
+
+  assert.ok(buckets.eligible.some((e) => e.path === 'docs/abandoned.md'),
+    `docs/abandoned.md must be eligible (task claim expired); eligible=${JSON.stringify(buckets.eligible)}`);
+});
+
+test('sweepRepo: close:dod refresh (lastActivityAt) extends an otherwise-expired task claim', async () => {
+  const repo = makeTempRepo({ branch: 'main' });
+  writeInRepo(repo, 'docs/long-lane.md', '# Long-running lane doc\nsome content\n');
+  setFakeOrigin(repo, 'archon-real');
+
+  const now = Date.now() + STALE_MS + 1000;
+
+  mkdirSync(join(repo, '.agent'), { recursive: true });
+  writeFileSync(join(repo, '.agent', 'current-task.json'), JSON.stringify({
+    issue: 124,
+    branch: 'main',
+    createdAt: new Date(now - 48 * 60 * 60 * 1000).toISOString(), // stale start...
+    lastActivityAt: new Date(now - 30 * 60 * 1000).toISOString(), // ...but active 30min ago
+  }));
+
+  const buckets = await sweepRepo(repo, {
+    now,
+    apply: false,
+    defaultBranch: 'other-default',
+    scan: cleanScan,
+  });
+
+  assert.ok(buckets.skip.some((e) => e.path === 'docs/long-lane.md'),
+    `docs/long-lane.md must be skip (claim refreshed by activity); skip=${JSON.stringify(buckets.skip)}`);
+});
