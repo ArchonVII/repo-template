@@ -126,7 +126,8 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
     }
   }
 
-  const mappedRoots = new Set(Object.keys(docMap.code_roots || {}));
+  const codeRoots = docMap.code_roots || {};
+  const mappedRoots = new Set(Object.keys(codeRoots));
   for (const dir of topLevelDirs(root)) {
     if (!mappedRoots.has(dir)) {
       addFinding(findings, {
@@ -134,6 +135,26 @@ function checkDocMapContract(root, mdFiles, textByRel, changedPaths, findings, {
         code: 'code-root-unmapped',
         path: dir,
         message: `top-level root ${dir}/ is not owned by any checked doc nor marked unmapped_ok in .agent/doc-map.yml.`,
+      });
+    }
+  }
+  // A mapping VALUE must deliver the coverage it claims (#146 round 5):
+  // 'unmapped_ok'/'self' are declarations; anything else must name a checked
+  // doc whose owns globs actually cover the root, or a typo silently defeats
+  // the keystone-rot guard.
+  for (const [rootDir, owner] of Object.entries(codeRoots)) {
+    const value = String(owner || '').trim();
+    if (value === 'unmapped_ok' || value === 'self') continue;
+    const entry = (docMap.checked || []).find((doc) => doc?.path === value);
+    const covers = entry && toList(entry.owns).some((glob) => docMapGlobToRegExp(glob).test(`${rootDir}/__probe__`));
+    if (!covers) {
+      addFinding(findings, {
+        severity: 'blocking',
+        code: 'code-root-mapping-invalid',
+        path: rootDir,
+        message: entry
+          ? `code_roots maps ${rootDir} to ${value}, but that checked doc's owns globs do not cover ${rootDir}/.`
+          : `code_roots maps ${rootDir} to ${value}, which is not a checked doc (typo?).`,
       });
     }
   }

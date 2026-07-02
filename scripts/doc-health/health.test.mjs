@@ -383,6 +383,35 @@ test('checkRepo: missing required.base doc and unmapped code root block', () => 
   assert.equal(report.summary.warnings, report.summary.findings - blocking.length);
 });
 
+// #146 round 5: a code_roots VALUE must actually deliver the coverage it
+// claims — 'unmapped_ok'/'self', or a checked doc whose owns globs cover the
+// root. A typo'd mapping silently defeats the keystone-rot guard otherwise.
+test('checkRepo: code_roots mappings must name a covering checked doc', () => {
+  const repo = makeTempRepo();
+  writeInRepo(repo, 'src/index.mjs', 'export {};\n');
+  writeInRepo(repo, 'lib/util.mjs', 'export {};\n');
+  commitAll(repo, 'feat: roots (#0)');
+
+  const report = checkRepo(repo, {
+    now: NOW,
+    docMap: {
+      ...L2_DOC_MAP,
+      checked: [{ path: 'docs/CANON.md', owns: ['scripts/**'], checks: ['links'] }],
+      code_roots: {
+        docs: 'self',
+        src: 'docs/TYPO.md', // no such checked entry
+        lib: 'docs/CANON.md', // exists, but owns does not cover lib/**
+      },
+    },
+  });
+
+  const invalid = report.findings.filter((f) => f.code === 'code-root-mapping-invalid');
+  assert.deepEqual(invalid.map((f) => f.path).sort(), ['lib', 'src']);
+  assert.ok(invalid.every((f) => f.severity === 'blocking'));
+  // Valid shapes stay clean: no finding for docs (self).
+  assert.ok(!report.findings.some((f) => f.code === 'code-root-mapping-invalid' && f.path === 'docs'));
+});
+
 test('checkRepo: dangling links in a checked doc block only when the doc is re-triggered', () => {
   const repo = makeTempRepo();
   writeInRepo(repo, 'docs/CANON.md', wikiPage('Truth register', 'CANON', [
