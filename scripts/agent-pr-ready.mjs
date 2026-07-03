@@ -17,7 +17,7 @@ function parseArgs(argv) {
     if (!item.startsWith('--')) continue;
 
     const key = item.slice(2);
-    if (key === 'json' || key === 'dry-run' || key === 'skip-ci-guard') {
+    if (key === 'json' || key === 'dry-run') {
       args[key] = true;
       continue;
     }
@@ -98,23 +98,21 @@ function main() {
     return;
   }
 
-  // Gate promotion on the close CI guard unless the caller asserts it already
-  // passed for this HEAD (--skip-ci-guard; the guard is idempotent per HEAD, so the
-  // documented run-once flow can opt out). Default is to verify (archon-setup#295).
-  if (!args['skip-ci-guard']) {
-    const guard = runCloseCiGuard({ repo: args.repo, pr: pr.number, requiredCheck: args['required-check'] });
-    payload.ciGuard = { ok: guard.ok };
-    if (!guard.ok) {
-      payload.ready = false;
-      if (args.json) {
-        process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-      } else {
-        if (guard.output) process.stderr.write(`${guard.output}\n`);
-        process.stderr.write('\nRefusing to run `gh pr ready`: close:ci:guard must pass for the current HEAD first (run `npm run close:ci:guard`, or pass --skip-ci-guard if you already ran it for this HEAD).\n');
-      }
-      process.exitCode = 1;
-      return;
+  // Gate promotion on the close CI guard for the current HEAD. The guard is
+  // idempotent, so always running it is cheap and keeps ready promotion tied to
+  // the same required-gate evidence branch protection uses.
+  const guard = runCloseCiGuard({ repo: args.repo, pr: pr.number, requiredCheck: args['required-check'] });
+  payload.ciGuard = { ok: guard.ok };
+  if (!guard.ok) {
+    payload.ready = false;
+    if (args.json) {
+      process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+    } else {
+      if (guard.output) process.stderr.write(`${guard.output}\n`);
+      process.stderr.write('\nRefusing to run `gh pr ready`: close:ci:guard must pass for the current HEAD first (run `npm run close:ci:guard`).\n');
     }
+    process.exitCode = 1;
+    return;
   }
 
   execFileSync('gh', ['pr', 'ready', String(pr.number), '--repo', args.repo], { stdio: 'inherit' });

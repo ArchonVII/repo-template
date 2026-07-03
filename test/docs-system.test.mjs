@@ -326,6 +326,28 @@ test('status model must not drop findings from the live doc-health producer', ()
     `repo must be blocking-clean; got ${JSON.stringify(report.findings.filter((f) => f.severity === 'blocking'))}`);
 });
 
+test('template inventory stays blocking-clean when templates change', () => {
+  let raw;
+  try {
+    raw = execFileSync(
+      process.execPath,
+      [
+        join(REPO_ROOT, 'scripts', 'doc-health', 'health.mjs'),
+        '--repo', REPO_ROOT,
+        '--changed', 'templates/agent/agent.final-response.standard.md',
+        '--json',
+      ],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+  } catch (err) {
+    raw = err.stdout;
+  }
+  const report = JSON.parse(raw);
+  const blocking = report.findings.filter((f) => f.severity === 'blocking');
+
+  assert.deepEqual(blocking, [], `template changes must not inherit pre-existing proposed-path rot: ${JSON.stringify(blocking)}`);
+});
+
 // gh must run against the requested root, not the caller's cwd, and must ask
 // for more than the CLI's 30-item default so counts are exact (#144 review
 // round 3). The exec seam exists so this wiring is testable without spawning gh.
