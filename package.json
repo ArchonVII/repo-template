@@ -17,6 +17,7 @@
     "agent:start-task": "node scripts/agent/start-task.mjs",
     "agent:pr-body": "node scripts/agent/pr-body.mjs",
     "docs:render": "node scripts/docs/render.mjs",
+    "docs:changelog": "node scripts/docs/changelog.mjs",
     "docs:status": "node scripts/docs/status.mjs",
     "wiki:start": "node scripts/wiki/start.mjs",
     "wiki:ingest": "node scripts/wiki/ingest.mjs",
