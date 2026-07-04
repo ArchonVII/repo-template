@@ -144,9 +144,10 @@ doc-map `rendered`/`release` paths, gitignored runtime paths (`git check-ignore`
 git-range shapes, directory mentions (a trailing `/` describes layout — often an
 optional runtime dir — and is never existence-checked), and anything not anchored at
 a real top-level root of this repo. The writing convention that follows: **backtick a
-repo file path only if it exists at HEAD** — historical or cross-repo mentions go in
-italics, and directory references keep their trailing slash. The CLI exits `1` when blocking findings exist, `0` for warnings-only —
-the exact contract P1 wires under `repo-required-gate / decision`.
+repo file path only if it exists at HEAD** — historical, proposed, or cross-repo
+mentions go in plain prose or italics, and directory references keep their trailing
+slash. The CLI exits `1` when blocking findings exist, `0` for warnings-only — the
+exact contract P1 wires under `repo-required-gate / decision`.
 
 ## What blocks at PR time
 
@@ -154,7 +155,9 @@ S1 ships the generators and the `--check` drift gate as a local command; S2 ship
 4-section closeout DoD in the close-scan marker (enforced by `close:ci:guard` at
 promotion); L2 ships the blocking doc-health subset above. Enforcement order (epic
 lanes): P1 wires `docs:render --check` + `doc-health --changed-from` into
-`repo-required-gate / decision` and retires the fragment workflows; S3 folds
-changelog generation to release-cut and deletes the fragment machinery; T1 snapshots
-the system into archon-setup onboarding; T2 dogfoods archon-setup itself. Warnings
-(stale terms, budgets, closed-issue refs) never block — they flow to the dashboard.
+`repo-required-gate / decision` and removes the fragment caller examples from new
+workflow guidance; S3 folds changelog generation to release-cut and deletes the
+repo-template fragment machinery; T1 snapshots the system into archon-setup
+onboarding; T2 dogfoods archon-setup itself. Existing consumers keep their fragment
+callers until their later migration lane. Warnings (stale terms, budgets,
+closed-issue refs) never block — they flow to the dashboard.

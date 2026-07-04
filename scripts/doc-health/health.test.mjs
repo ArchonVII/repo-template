@@ -11,7 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { checkRepo } from './health.mjs';
+import { checkRepo, issuePayloadForFinding } from './health.mjs';
 
 const NOW_ISO = '2026-06-15T12:00:00.000Z';
 const NOW = Date.parse(NOW_ISO);
@@ -307,6 +307,18 @@ test('CLI writes only the requested report path and exits zero for warnings', ()
     .trim()
     .replace(/\\/g, '/');
   assert.equal(status, '?? doc-health-report.json');
+});
+
+test('issue payload for blocking findings does not call them warning-only', () => {
+  const payload = issuePayloadForFinding({
+    severity: 'blocking',
+    code: 'required-doc-missing',
+    path: 'docs/agent-process/doc-system.md',
+    message: 'required.base declares a missing doc.',
+  });
+
+  assert.match(payload.body, /Severity: blocking/);
+  assert.doesNotMatch(payload.body, /warning-only/i);
 });
 
 // ─── #124 L2: blocking subset (severity split, doc-map contract rules) ────────

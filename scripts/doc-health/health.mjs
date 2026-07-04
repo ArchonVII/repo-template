@@ -653,7 +653,7 @@ export function issuePayloadForFinding(finding) {
     findingCode: finding.code,
     path: finding.path,
     body: [
-      'Doc-health reported a warning-only document-policy finding.',
+      'Doc-health reported a document-policy finding.',
       '',
       `- Code: ${finding.code}`,
       `- Path: ${finding.path}${finding.line ? `:${finding.line}` : ''}`,
