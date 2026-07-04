@@ -118,7 +118,7 @@ This template ships local delivery guards that bind final verification to the
 exact commit being delivered:
 
 ```bash
-npm run close:scan:complete -- --repo OWNER/REPO --pr <number> --changelog-decision "fragment .changelog/unreleased/<issue>-<slug>.md" --findings-decision "no findings file used"
+npm run close:scan:complete -- --repo OWNER/REPO --pr <number> --findings-decision "no findings file used"
 git push
 npm run close:ci:guard -- --repo OWNER/REPO --pr <number>
 ```
@@ -146,7 +146,7 @@ bash -n .githooks/commit-msg .githooks/pre-commit .githooks/scripts/*.sh
 - [ ] Update `CODEOWNERS` (currently `* @ArchonVII`).
 - [ ] Update `AGENTS.md` with repo-specific workflow rules, or delete it if no AI agents will work here.
 - [ ] Pick the repo stack in `.agent/check-map.yml` and `.github/workflows/repo-required-gate.yml` (`minimal`, `node`, or `python`).
-- [ ] Update `CHANGELOG.md` / decide if you want `.changelog/unreleased/` fragment mode (delete the directory if not).
+- [ ] Update `CHANGELOG.md`. It is release-class — folded from Conventional Commit history by `npm run docs:changelog`; there is no per-PR fragment mode.
 - [ ] Update `dependabot.yml` ecosystems list for your stack.
 - [ ] Run from a clone of `ArchonVII/github-workflows`:
   ```
