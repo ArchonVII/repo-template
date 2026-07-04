@@ -27,6 +27,7 @@ agents can find it.
 ## Pages
 
 <!-- BEGIN ARCHONVII MANAGED BLOCK: index-pages -->
+- [BOGUS LIVE-RED DRIFT](does-not-exist.md) — intentional doc-map violation
 _Generated from docs/**/*.md frontmatter by `npm run docs:render` — do not edit by hand._
 
 - [CANON.md](CANON.md) — High-density register of what is true for this repo now vs. intended, plus locked decisions — read first. (Scaffold — fill per repo.) `CANON`
