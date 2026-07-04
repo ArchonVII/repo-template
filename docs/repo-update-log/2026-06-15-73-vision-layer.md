@@ -1,8 +1,0 @@
-## 2026-06-15 - Vision layer
-
-- **Issue/PR:** #73 / #99
-- **Branch:** agent/codex/73-vision-layer
-- **Changed paths:** `VISION.md`, `docs/decisions/decision-log.md`, `AGENTS.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `.githooks/commit-msg`, `.githooks/pre-commit`, `.githooks/scripts/owner-maintenance.sh`, `.githooks/scripts/test-owner-maintenance.sh`, `.changelog/unreleased/73-vision-layer.md`, `docs/agent-process/document-policy.md`, `docs/LIBRARIAN.md`, `docs/repo-update-log/2026-06-15-73-vision-layer.md`, `scripts/wiki/lib.mjs`, `scripts/wiki/lib.test.mjs`, `test/startup-baseline.test.mjs`
-- **What changed:** Added the human-owned vision template, owner-intent decision ledger, short agent drift-duties contract, PR-body owner-decision line, and direct-main append allowance for decision-log entries. Added the stacked-docs review-scope note to keep review context on `origin/main..HEAD`.
-- **Verification:** `node --test test/startup-baseline.test.mjs` passed 12/12; `C:\Program Files\Git\bin\bash.exe .githooks/scripts/test-owner-maintenance.sh` passed, including direct-main append of `docs/decisions/decision-log.md` and blocked modify of another `docs/decisions` file; `C:\Program Files\Git\bin\bash.exe -n .githooks/commit-msg .githooks/pre-commit .githooks/scripts/*.sh` passed; `npm run wiki:doctor` passed; `npm run wiki:lint` passed after classifying the decision log as a non-page owner-intent ledger; `node --test scripts/wiki/lib.test.mjs test/startup-baseline.test.mjs` passed 16/16; `npm test` passed 127/127; `git diff --check` passed with CRLF normalization warnings only.
-- **Propagation:** pending `archon-setup` snapshot refresh in lane 2b after this provider PR lands.

@@ -1,8 +1,0 @@
-## 2026-06-29 - close-scan: malformed package.json runs node-test instead of skipping green
-
-- **Issue/PR:** #132 (upstream of ArchonVII/archon-setup#286)
-- **Branch:** agent/claude/132-close-scan-malformed-pkg
-- **Changed paths:** scripts/close/scan-complete.mjs, test/close-scan.test.mjs, .changelog/unreleased/132-close-scan-malformed-package-json.md, docs/repo-update-log/2026-06-29-132-close-scan-malformed-package-json.md
-- **What changed:** Replaced the internal `hasNpmScript(root, name)` (which did `try { JSON.parse } catch { return false }`, conflating an unparseable package.json with an absent one and recording `node-test` green-by-skip) with a pure, exported `decideNodeTest({ exists, readPackageJson })`. It distinguishes ABSENT (skip green, matches the gate's `npm run --if-present`), PRESENT-BUT-UNPARSEABLE (run `npm test` so the EJSONPARSE the required gate hits surfaces locally), PRESENT-with-`test` (run), and PRESENT-without-`test` (skip green). The node-test call site now uses it; the skip summary reports whether package.json was absent vs script-less. This is the fast-follow flagged in docs/repo-update-log/2026-06-24-close-scan-skip-missing-test-script.md.
-- **Verification:** `npm test` (node --test) green 150/150; `node --test test/close-scan.test.mjs` 18/18 incl. the new `decideNodeTest` case (absent/unparseable/no-script/whitespace-script/has-script); `node --check scripts/close/scan-complete.mjs`.
-- **Propagation:** pending ArchonVII/archon-setup snapshot refresh + the vendored `archon-setup/scripts/close/scan-complete.mjs` lockstep fix (gated follow-up tracked in archon-setup#286).

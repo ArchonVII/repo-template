@@ -1,5 +1,5 @@
 {
-  "version": "2026-06-15-document-policy",
+  "version": "2026-07-04-s3-fragment-retirement",
   "required": [
     "AGENTS.md",
     "docs/plans/README.md",
@@ -9,8 +9,6 @@
     ".agent/coordination/README.md",
     ".github/PULL_REQUEST_TEMPLATE.md",
     ".github/workflows/anomaly-triage.yml",
-    ".github/workflows/repo-update-log-fragment.yml",
-    "docs/repo-update-log/README.md",
     "package.json",
     "scripts/agent/lib.mjs",
     "scripts/agent/start-task.mjs",
@@ -30,7 +28,6 @@
   "expectedDirectories": [
     "docs/plans/",
     "docs/agent-process/",
-    "docs/repo-update-log/",
     "scripts/agent/",
     "scripts/close/",
     "scripts/doc-sweep/",
