@@ -8,12 +8,10 @@ import {
   validatePrContract,
 } from '../pr-contract.mjs';
 import {
+  RELEASE_CHANGELOG_DECISION,
   buildCloseScanMarker,
   classifyCloseScanScope,
-  evaluateChangelogDecision,
   evaluateDocsDecision,
-  evaluateRepoUpdateLogDecision,
-  extractChangelogFragment,
   freshDodCaptures,
   isSubstantiveDecision,
   listHookShellFiles,
@@ -299,15 +297,7 @@ function validatePolicyFiles(root) {
   };
 }
 
-function checkChangelogFragment(root, decision) {
-  const fragment = extractChangelogFragment(decision);
-  if (!fragment) return null;
-  const absolute = join(root, fragment);
-  if (existsSync(absolute)) return null;
-  return `Changelog decision names \`${fragment}\`, but that file does not exist.`;
-}
-
-function runLocalChecks({ root, pr, files, scope, changelogDecision, docsResult }) {
+function runLocalChecks({ root, pr, files, scope, docsResult }) {
   const localChecks = [];
 
   const contract = validatePrContract({
@@ -333,27 +323,10 @@ function runLocalChecks({ root, pr, files, scope, changelogDecision, docsResult 
       : docsResult.failures.join(' '),
   });
 
-  const repoUpdateLog = evaluateRepoUpdateLogDecision({
-    files,
-    body: pr.body,
-  });
-  localChecks.push({
-    name: 'repo-update-log',
-    ok: repoUpdateLog.ok,
-    summary: repoUpdateLog.ok ? 'Repo update log decision accepted.' : repoUpdateLog.failures.join(' '),
-  });
-
-  const changelog = evaluateChangelogDecision({
-    requiresChangelog: scope.requiresChangelog,
-    labels: pr.labels,
-    changelogDecision,
-  });
-  const missingFragment = changelog.ok ? checkChangelogFragment(root, changelogDecision) : null;
-  localChecks.push({
-    name: 'changelog',
-    ok: changelog.ok && !missingFragment,
-    summary: missingFragment || (changelog.ok ? 'Changelog decision accepted.' : changelog.failures.join(' ')),
-  });
+  // #124 S3: there is no repo-update-log or changelog LOCAL parity check — the
+  // fragment ledger is retired and CHANGELOG.md is release-class. The marker
+  // still records a substantive `changelog` DoD decision (main() defaults it to
+  // RELEASE_CHANGELOG_DECISION), but that is a marker section, not a check.
 
   if (scope.requiredChecks.some((check) => check.name === 'node-test')) {
     // A baseline'd repo has no `test` script (the required gate leaves
@@ -460,8 +433,10 @@ async function main() {
   }
   const captured = (section) => freshSections[section]?.decision || '';
 
-  const changelogDecision = args['changelog-decision'] || captured('changelog')
-    || (scope.requiresChangelog ? '' : 'not required: docs-only change');
+  // #124 S3: CHANGELOG.md is release-class — the marker's changelog DoD
+  // decision is auto-recorded with the release-class text unless the closer
+  // overrides it; there is no per-PR fragment to name.
+  const changelogDecision = args['changelog-decision'] || captured('changelog') || RELEASE_CHANGELOG_DECISION;
   const findingsDecision = args['findings-decision'] || captured('findings');
   const { docMap, docMapError } = await readDocMapSafe(root);
   const docsResult = evaluateDocsDecision({
@@ -474,7 +449,7 @@ async function main() {
     // A deleted/renamed-away triggered doc must not satisfy its own trigger.
     existsFn: (rel) => existsSync(join(root, rel)),
   });
-  const localChecks = runLocalChecks({ root, pr, files, scope, changelogDecision, docsResult });
+  const localChecks = runLocalChecks({ root, pr, files, scope, docsResult });
   const failures = localChecks.filter((check) => !check.ok).map((check) => `[${check.name}] ${check.summary}`);
 
   if (!isSubstantiveDecision(findingsDecision)) {
