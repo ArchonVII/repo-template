@@ -28,7 +28,7 @@ generated doc therefore declares one of three classes in `.agent/doc-map.yml`:
 | --- | --- | --- | --- |
 | `committed` | yes, inside the PR | `npm run docs:render` | yes — `docs:render --check` drift gate (wired in P1) |
 | `rendered` | never | `npm run docs:status` on demand / post-merge | never |
-| `release` | at release-cut only | `docs:changelog` (lands in S3) | no per-PR changelog edits |
+| `release` | at release-cut only | `docs:changelog` (`scripts/docs/changelog.mjs`) | no per-PR changelog edits |
 
 ## The spine: `.agent/doc-map.yml`
 
@@ -61,7 +61,7 @@ Missing markers throw — generators never append blocks silently. Current surfa
 
 - `docs/INDEX.md` (`index-pages`) — walked from `docs/**/*.md` frontmatter
   (`scripts/docs/index.mjs`); excludes `docs/raw/` (immutable intake),
-  `docs/repo-update-log/` (fragment ledger, retired in S3), and the index itself.
+  `docs/repo-update-log/` (fragment ledger, retired by S3 — #124), and the index itself.
 - `llms.txt` (`nav`) + `README.md` (`status`) — deterministic projections of the
   doc-map + `docs/CANON.md` frontmatter (`scripts/docs/nav.mjs`). Committed-class
   output carries no timestamps: same inputs, byte-identical output.
@@ -74,6 +74,8 @@ Missing markers throw — generators never append blocks silently. Current surfa
 ```bash
 npm run docs:render            # regenerate all committed-class blocks in place
 npm run docs:render -- --check # drift gate: exit 1 if any block is stale, write nothing
+npm run docs:changelog         # fold release-class CHANGELOG.md [Unreleased] from git history
+npm run docs:changelog -- --check  # release-cut drift check (not a PR gate — release-class)
 npm run docs:status            # render docs/STATUS.md (never commit it)
 npm run close:dod -- --section <docs|changelog|verification|findings> --decision "<text>"
                                # capture one closeout-DoD decision as it is made (S2)
@@ -88,7 +90,7 @@ final HEAD:
 | section | what it answers | scope scaling |
 | --- | --- | --- |
 | `docs` | were doc-map-owned docs updated for this diff, and if not, why? | auto-passes for docs-only diffs, untriggered diffs, and repos without a doc-map |
-| `changelog` | fragment / direct edit / not required? | auto-defaults for docs-only diffs |
+| `changelog` | release-class: folded at release-cut by `docs:changelog`, no per-PR edit | auto-recorded release-class decision; never a per-PR fragment (#124 S3) |
 | `verification` | what was run and what did it prove? | always substantive |
 | `findings` | anomalies / follow-ups routed or none found? | always substantive |
 
@@ -156,8 +158,12 @@ S1 ships the generators and the `--check` drift gate as a local command; S2 ship
 promotion); L2 ships the blocking doc-health subset above. Enforcement order (epic
 lanes): P1 wires `docs:render --check` + `doc-health --changed-from` into
 `repo-required-gate / decision` and removes the fragment caller examples from new
-workflow guidance; S3 folds changelog generation to release-cut and deletes the
-repo-template fragment machinery; T1 snapshots the system into archon-setup
-onboarding; T2 dogfoods archon-setup itself. Existing consumers keep their fragment
-callers until their later migration lane. Warnings (stale terms, budgets,
-closed-issue refs) never block — they flow to the dashboard.
+workflow guidance; **S3 (done, #124)** folded changelog generation to release-cut via
+`scripts/docs/changelog.mjs`, deleted the repo-template fragment machinery (the
+`.changelog/unreleased/` + `docs/repo-update-log/` trees and the
+repo-update-log-fragment caller) and retired the fragment/changelog local checks in
+`scripts/close`, and flipped repo-template's own gate caller to `docs-system: true`;
+T1 snapshots the system into archon-setup onboarding; T2 dogfoods archon-setup itself.
+Existing consumers keep their fragment callers until their later migration lane.
+Warnings (stale terms, budgets, closed-issue refs) never block — they flow to the
+dashboard.

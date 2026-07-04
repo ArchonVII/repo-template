@@ -22,7 +22,7 @@ Agents should not spend time rediscovering process files. Start here:
 - Document policy: `docs/agent-process/document-policy.md` - charters, lifecycle, placement rules.
 - Plans: `docs/plans/` - dated plan files for feature and cross-cutting work; one file per plan.
 - Agent process: `docs/agent-process/`.
-- Repo update log: `docs/repo-update-log/` - one fragment per PR; `docs/repo-update-log.md` is the frozen archive.
+- Changelog: `CHANGELOG.md` - release-class; folded from Conventional Commits by `npm run docs:changelog` (no per-PR edits). `docs/repo-update-log.md` is the retired ledger's frozen archive.
 - Check map: `.agent/check-map.yml`.
 - Coordination: `.agent/coordination/README.md`.
 - PR process: `.github/PULL_REQUEST_TEMPLATE.md`.
@@ -58,9 +58,9 @@ node <path-to-archon-setup>/bin/onboard.mjs <repo> --audit
 6. **PR bodies use the committed template.** If `.github/PULL_REQUEST_TEMPLATE.md` exists,
    fill it through `npm run agent:pr-body -- <issue>` or the committed file; do not
    freehand or leave scratch PR-body files in the worktree.
-7. **Repo update log required.** Code, config, behavior, protected docs, workflows, and
-   repository-policy PRs add one fragment at
-   `docs/repo-update-log/<YYYY-MM-DD>-<issue>-<slug>.md`.
+7. **Changelog is release-class.** PRs carry no changelog edits — `CHANGELOG.md` is
+   folded from Conventional Commit history at release-cut by `npm run docs:changelog`.
+   Write a clear Conventional Commit subject; that is the changelog entry.
 8. **Plan/status closeout required.** Any plan, progress file, handoff, audit, roadmap,
    status tracker, or coordination note created or used by the lane must be closed,
    narrowed, or marked superseded before review.
@@ -132,7 +132,7 @@ When a push updates the remote branch, run close-scan after final verification a
 the push so the marker binds to the exact `HEAD`:
 
 ```powershell
-npm run close:scan:complete -- --repo OWNER/REPO --pr <number> --changelog-decision "<fragment-or-no-changelog>" --findings-decision "<decision>"
+npm run close:scan:complete -- --repo OWNER/REPO --pr <number> --findings-decision "<decision>"
 git push
 npm run close:ci:guard -- --repo OWNER/REPO --pr <number>
 ```
@@ -263,9 +263,10 @@ Full contract: `docs/agent-process/doc-health.md`.
 
 ## CHANGELOG
 
-This repo uses **<Mode 1: direct edit / Mode 2: `.changelog/unreleased/` fragments>** -
-pick one and delete the other during initial setup. For PRs that do not warrant a
-CHANGELOG entry, apply the `no-changelog` label.
+`CHANGELOG.md` is **release-class**: its `[Unreleased]` section is folded from
+Conventional Commit history by `npm run docs:changelog` at release-cut, never edited
+per PR (`feat`→Added, `fix`→Fixed, `perf`/`refactor`→Changed; breaking changes always
+surfaced). Write clear Conventional Commit subjects; that is the changelog.
 
 ## Commit Hygiene
 
