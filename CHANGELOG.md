@@ -14,6 +14,7 @@ block by hand — run the generator.
 <!-- BEGIN ARCHONVII MANAGED BLOCK: changelog-unreleased -->
 ### Added
 
+- self-maintaining docs system S3 — fold-and-delete fragments (#124) (#148)
 - blocking subset + severity split — docs system L2 (#124) (#146)
 - closeout 4-section DoD + coordination bookend — docs system S2 (#124) (#145)
 - self-maintaining docs system S1 — doc-map spine + generators (#124) (#144)
