@@ -1,11 +1,13 @@
 # Repository Update Log
 
-> **Frozen archive — historical entries only (through 2026-06-13).** New entries are added as
-> one file per PR under [`repo-update-log/`](repo-update-log/README.md). Per-PR fragments avoid the
-> merge conflicts a single shared log caused across concurrent PRs. This file is retained as the
+> **Frozen archive — historical entries only (through 2026-06-13). Retired by #124 / S3.**
+> The per-PR `docs/repo-update-log/` fragment ledger this once pointed to was removed in
+> the self-maintaining docs system (S3): operational status now lives in the rendered
+> `docs/STATUS.md` dashboard, and user-facing release history in `CHANGELOG.md` (folded
+> from Conventional Commits by `npm run docs:changelog`). This file is kept only as the
 > consolidated history of entries through 2026-06-13; do not append new entries here.
 
-This log records agent-visible repository changes that should be easy to audit later. It complements `CHANGELOG.md`: the changelog is user-facing release history, while this file is the operational ledger for what changed in this repo and whether more propagation is needed.
+This log recorded agent-visible repository changes for later audit. It complemented `CHANGELOG.md`: the changelog is user-facing release history, while this file was the operational ledger for what changed and whether more propagation was needed — a role the `docs/STATUS.md` dashboard now fills.
 
 ## Entry Template
 

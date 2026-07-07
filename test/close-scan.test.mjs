@@ -5,14 +5,14 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   DOD_SECTIONS,
+  RELEASE_CHANGELOG_DECISION,
   buildCloseScanMarker,
   classifyCloseScanScope,
-  evaluateChangelogDecision,
   evaluateCloseScanMarker,
   evaluateDocsDecision,
-  evaluateRepoUpdateLogDecision,
   evaluateRequiredChecks,
   freshDodCaptures,
+  isSubstantiveDecision,
   matchDocMapTriggers,
   parseRequiredGateCheckName,
   readDodCapture,
@@ -40,12 +40,11 @@ test('classifyCloseScanScope requires local parity checks for code and workflow 
   });
 
   assert.equal(result.docsOnly, false);
-  assert.equal(result.requiresChangelog, true);
+  // #124 S3: repo-update-log and changelog are no longer local parity checks —
+  // the fragment ledger is retired and CHANGELOG.md is release-class.
   assert.deepEqual(result.requiredChecks.map((check) => check.name), [
     'pr-contract',
     'docs',
-    'repo-update-log',
-    'changelog',
     'node-test',
     'actionlint',
     'hook-syntax',
@@ -53,95 +52,36 @@ test('classifyCloseScanScope requires local parity checks for code and workflow 
   ]);
 });
 
-test('classifyCloseScanScope treats docs-only changes as PR contract plus repo-update-log check', () => {
+test('classifyCloseScanScope treats docs-only changes as PR contract plus docs check (#124 S3)', () => {
   const result = classifyCloseScanScope({
-    files: ['docs/plans/README.md', '.changelog/unreleased/28-close-scan-local-guard.md'],
+    files: ['docs/plans/README.md', 'docs/agent-process/doc-system.md'],
     labels: [],
     stack: 'node',
   });
 
   assert.equal(result.docsOnly, true);
-  assert.equal(result.requiresChangelog, false);
   // 'docs' is ALWAYS required (#124 S2) — substance scales inside the
-  // evaluation (docs-only auto-passes), never by dropping the check, which is
-  // exactly how the docs entry silently vanished from the marker pre-fix.
-  assert.deepEqual(result.requiredChecks.map((check) => check.name), ['pr-contract', 'docs', 'repo-update-log']);
+  // evaluation (docs-only auto-passes), never by dropping the check. S3 drops
+  // repo-update-log and changelog entirely — no fragment parity checks remain.
+  assert.deepEqual(result.requiredChecks.map((check) => check.name), ['pr-contract', 'docs']);
 });
 
-test('evaluateRepoUpdateLogDecision requires fragments for code changes', () => {
-  const result = evaluateRepoUpdateLogDecision({
+test('classifyCloseScanScope no longer emits repo-update-log or changelog checks for non-doc changes (#124 S3)', () => {
+  const names = classifyCloseScanScope({
     files: ['scripts/close/lib.mjs'],
-    body: '## Docs / Changelog\n\nChangelog fragment added.',
-  });
-
-  assert.equal(result.ok, false);
-  assert.match(result.failures[0], /repo-update-log/i);
-
-  assert.equal(evaluateRepoUpdateLogDecision({
-    files: [
-      'scripts/close/lib.mjs',
-      'docs/repo-update-log/2026-06-20-111-close-scan.md',
-    ],
-    body: '## Docs / Changelog\n\nRepo update log fragment added.',
-  }).ok, true);
-});
-
-test('evaluateRepoUpdateLogDecision permits ledger-only backfills without a second fragment', () => {
-  const result = evaluateRepoUpdateLogDecision({
-    files: [
-      'docs/repo-update-log/2026-06-20-244-coi-extraction.md',
-      'docs/repo-update-log/2026-06-20-245-field-extraction.md',
-    ],
-    body: 'Backfill pointer-only operational ledger fragments.',
-  });
-
-  assert.equal(result.ok, true);
-});
-
-test('evaluateRepoUpdateLogDecision requires a body note for unprotected doc-only skips', () => {
-  assert.equal(evaluateRepoUpdateLogDecision({
-    files: ['docs/plans/operator-copy.md'],
-    body: 'Repo-update-log not required: doc-only typo fix.',
-  }).ok, true);
-
-  const missing = evaluateRepoUpdateLogDecision({
-    files: ['docs/plans/operator-copy.md'],
-    body: 'Small wording cleanup.',
-  });
-  assert.equal(missing.ok, false);
-  assert.match(missing.failures[0], /doc-only/i);
-});
-
-test('evaluateRepoUpdateLogDecision still requires fragments for protected docs', () => {
-  const missing = evaluateRepoUpdateLogDecision({
-    files: ['AGENTS.md'],
-    body: 'Repo-update-log not required: doc-only typo fix.',
-  });
-
-  assert.equal(missing.ok, false);
-  assert.match(missing.failures[0], /repo-update-log/i);
-});
-
-test('evaluateChangelogDecision requires an explicit fragment or no-changelog label for non-doc changes', () => {
-  assert.equal(evaluateChangelogDecision({
-    requiresChangelog: true,
     labels: [],
-    changelogDecision: 'fragment .changelog/unreleased/28-close-scan-local-guard.md',
-  }).ok, true);
+    stack: 'node',
+  }).requiredChecks.map((check) => check.name);
+  assert.ok(!names.includes('repo-update-log'), 'repo-update-log check retired in S3');
+  assert.ok(!names.includes('changelog'), 'changelog local check retired in S3 (release-class)');
+});
 
-  assert.equal(evaluateChangelogDecision({
-    requiresChangelog: true,
-    labels: ['no-changelog'],
-    changelogDecision: 'no-changelog label applied because this is test-only',
-  }).ok, true);
-
-  const missing = evaluateChangelogDecision({
-    requiresChangelog: true,
-    labels: [],
-    changelogDecision: 'none',
-  });
-  assert.equal(missing.ok, false);
-  assert.match(missing.failures[0], /changelog/i);
+test('RELEASE_CHANGELOG_DECISION is substantive so the marker changelog section always passes (#124 S3)', () => {
+  // close-scan v2 requires every DoD section (including changelog) to be
+  // substantive; the auto-recorded release-class text must clear that bar.
+  assert.equal(isSubstantiveDecision(RELEASE_CHANGELOG_DECISION), true);
+  assert.match(RELEASE_CHANGELOG_DECISION, /release-class/);
+  assert.match(RELEASE_CHANGELOG_DECISION, /docs:changelog/);
 });
 
 test('evaluateRequiredChecks fails closed when the required gate is unavailable or not green', () => {
@@ -295,7 +235,7 @@ test('validatePolicyFiles accepts any declared gate name and rejects a missing o
 function sampleDod(overrides = {}) {
   return {
     docs: { decision: 'updated: docs/agent-process/doc-system.md', waived: false, triggers: ['docs/agent-process/doc-system.md'] },
-    changelog: { decision: 'fragment .changelog/unreleased/28-close-scan-local-guard.md' },
+    changelog: { decision: RELEASE_CHANGELOG_DECISION },
     verification: { decision: 'npm test passed' },
     findings: { decision: 'no findings file used' },
     ...overrides,
@@ -609,7 +549,6 @@ test('deletion-only diff of a code file classifies into the wider (non-docs) sco
 
   const scope = classifyCloseScanScope({ files, labels: [], stack: 'node' });
   assert.equal(scope.docsOnly, false);
-  assert.equal(scope.requiresChangelog, true);
   assert.ok(
     scope.requiredChecks.some((check) => check.name === 'node-test'),
     'a deleted code file must still require node-test',

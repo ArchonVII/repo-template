@@ -41,7 +41,7 @@ TODO: Summarize the exact verification evidence and any manual review.
 
 ## Docs / Changelog
 
-TODO: Record the changelog fragment, direct CHANGELOG edit, docs update, or no-changelog label.
+TODO: Record the docs updated for this change, or note that none were needed. No changelog entry is expected: CHANGELOG.md is release-class — folded from Conventional Commit history by `npm run docs:changelog` at release-cut, not edited per PR.
 
 Plan/status artifacts: TODO: closed, narrowed to remaining scoped work, marked deprecated/superseded with the current source of truth, or not applicable because none were created or used by this lane.
 

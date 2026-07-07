@@ -42,8 +42,8 @@ consumer update path.
 | `CLAUDE.md` / `GEMINI.md`                  | What diverges for this tool only?                            | ecosystem             | 25 lines              | Pointer back to `AGENTS.md` plus any tool-specific delta   | Universal rules, repo truth, duplicate workflow policy |
 | `VISION.md`                                | What experience are we building, and what is out of scope?   | human                 | 120 lines             | Experience, north star, scope, explicitly-not section      | Implementation detail, task lists, status logs         |
 | `docs/decisions/decision-log.md`           | What did the owner decide, when?                             | human, agent-appended | append-only           | Newest decision first with date, lane, one-line why        | Rationale essays, technical ADR content                |
-| `CHANGELOG.md` / `.changelog/**`           | What shipped for users?                                      | agents                | release-mode specific | Current unreleased/release entry or fragment purpose       | Operational update notes, internal-only maintenance    |
-| `docs/repo-update-log/`                    | What changed operationally in this repo?                     | agents                | one fragment per PR   | Issue/PR, branch, changed paths, verification, propagation | User-facing release notes, shared append hotspot       |
+| `CHANGELOG.md` (release-class)             | What shipped for users?                                      | `docs:changelog`      | folded at release-cut | Conventional Commit history rendered into `[Unreleased]`   | Operational update notes, internal-only maintenance    |
+| `docs/STATUS.md` (replaced `docs/repo-update-log/`, retired #124) | What changed operationally / is in flight? | `docs:status` | rendered on demand | Open PRs/issues, roadmap %, doc-health summary | User-facing release notes |
 | `ARCHITECTURE.md` / `docs/architecture/**` | Where do subsystems live and what boundaries matter?         | agents                | as needed             | System map and boundary rules before rationale             | Per-file documentation, transient plans                |
 | `docs/plans/**`                            | What implementation plan is active or historical?            | agents                | as needed             | Status, owner, source issue, next action, closeout state   | Project vision, ADR replacement, stale active guidance |
 | `projects/<slug>/PLAN.md`                  | What is the front door for one feature?                      | agents                | as needed             | Current state, next safe action, blocker, invariants       | Duplicate specs, code, generated artifacts             |
@@ -84,8 +84,7 @@ otherwise record `Owner decisions this lane: none`.
 ### Status Header
 
 Durable `docs/**` files use this small header unless their file type already has a
-stronger format, such as ADRs, changelog fragments, repo-update-log fragments, or wiki
-frontmatter:
+stronger format, such as ADRs or wiki frontmatter:
 
 ```markdown
 > **Status:** draft | active | accepted | superseded | archived
@@ -163,5 +162,6 @@ Before a PR is ready for review, every repo-facing plan, progress note, handoff,
 roadmap/status tracker, or coordination note created or used by the lane must be closed,
 narrowed to still-open scope, or marked superseded with a current source of truth.
 
-Record document-policy changes in `docs/repo-update-log/` and mark whether propagation is
-pending in `.github`, `archon-setup`, `github-workflows`, skills, or consumer repos.
+Record document-policy changes with a clear Conventional Commit subject (CHANGELOG.md is
+release-class, folded at release-cut by `npm run docs:changelog`) and mark whether propagation
+is pending in `.github`, `archon-setup`, `github-workflows`, skills, or consumer repos.

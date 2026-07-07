@@ -8,7 +8,7 @@ const ROOT = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
 
 test('startup baseline contract names canonical startup files and legacy plan path', async () => {
   const baseline = JSON.parse(await readFile(join(ROOT, '.agent', 'startup-baseline.json'), 'utf8'));
-  assert.equal(baseline.version, '2026-06-15-document-policy');
+  assert.equal(baseline.version, '2026-07-04-s3-fragment-retirement');
   for (const path of [
     'AGENTS.md',
     'docs/plans/README.md',
@@ -18,8 +18,6 @@ test('startup baseline contract names canonical startup files and legacy plan pa
     '.agent/coordination/README.md',
     '.github/PULL_REQUEST_TEMPLATE.md',
     '.github/workflows/anomaly-triage.yml',
-    '.github/workflows/repo-update-log-fragment.yml',
-    'docs/repo-update-log/README.md',
     'package.json',
     'scripts/agent/lib.mjs',
     'scripts/agent/start-task.mjs',
@@ -38,7 +36,7 @@ test('startup baseline contract names canonical startup files and legacy plan pa
   ]) {
     assert.ok(baseline.required.includes(path), `baseline required should include ${path}`);
   }
-  for (const path of ['docs/plans/', 'docs/agent-process/', 'docs/repo-update-log/', 'scripts/agent/', 'scripts/close/', 'scripts/doc-sweep/', 'scripts/doc-health/']) {
+  for (const path of ['docs/plans/', 'docs/agent-process/', 'scripts/agent/', 'scripts/close/', 'scripts/doc-sweep/', 'scripts/doc-health/']) {
     assert.ok(baseline.expectedDirectories.includes(path), `baseline directories should include ${path}`);
   }
   assert.ok(baseline.legacy.includes('docs/superpowers/plans/'));
@@ -152,10 +150,16 @@ test('anomaly triage contract uses the canonical ledger path and installed calle
   assert.match(workflow, /\.archon\/anomalies-thispr\.md/);
 });
 
-test('repo update log fragment guard caller is installed', async () => {
-  const workflow = await readFile(join(ROOT, '.github', 'workflows', 'repo-update-log-fragment.yml'), 'utf8');
-  assert.match(workflow, /uses: ArchonVII\/github-workflows\/\.github\/workflows\/repo-update-log-fragment\.yml@v1/);
-  assert.match(workflow, /workflow-library-ref: v1/);
+// #124 S3: the repo-update-log fragment ledger + its caller workflow are
+// retired; the caller must be ABSENT (its former presence test is deleted).
+test('repo update log fragment caller is retired (#124 S3)', async () => {
+  const { existsSync } = await import('node:fs');
+  assert.equal(
+    existsSync(join(ROOT, '.github', 'workflows', 'repo-update-log-fragment.yml')),
+    false,
+    'repo-update-log-fragment.yml caller must be removed in S3',
+  );
+  assert.equal(existsSync(join(ROOT, 'docs', 'repo-update-log')), false, 'docs/repo-update-log/ ledger dir must be removed in S3');
 });
 
 test('gitignore keeps archon local state ignored while allowing the anomaly ledger', async () => {

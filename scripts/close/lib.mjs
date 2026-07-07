@@ -61,33 +61,15 @@ export function readRequiredGateCheckName(root) {
 }
 
 const DOC_EXTENSIONS_RE = /\.(md|txt|png|jpg|jpeg|gif|svg|webp|bmp|ico|avif)$/i;
-const DOC_PREFIXES = ['.changelog/'];
-const CHANGELOG_FRAGMENT_RE = /\.changelog\/unreleased\/[^/\s]+\.md\b/i;
-const REPO_UPDATE_LOG_FRAGMENT_RE = /^docs\/repo-update-log\/(?!README\.md$)[^/]+\.md$/i;
 const PLACEHOLDER_RE = /\b(TODO|TBD|FIXME|PLACEHOLDER|NOT YET|NONE YET|N\/A)\b/i;
-const DOC_ONLY_REPO_LOG_SKIP_RE = /\b(repo[- ]?update[- ]?log|update[- ]?log|ledger)\b[\s\S]{0,160}\b(not required|not needed|skipped|skip|omitted|doc[- ]only typo)\b|\bdoc[- ]only typo\b[\s\S]{0,160}\b(repo[- ]?update[- ]?log|update[- ]?log|ledger)\b/i;
-const PROTECTED_REPO_LOG_PATHS = [
-  '.agent/',
-  '.github/',
-  '.githooks/',
-  'AGENTS.md',
-  'CLAUDE.md',
-  'GEMINI.md',
-  'ARCHITECTURE.md',
-  'CHANGELOG.md',
-  'DESIGN.md',
-  'README.md',
-  'TODO.md',
-  'VISION.md',
-  'llms.txt',
-  'docs/CANON.md',
-  'docs/INDEX.md',
-  'docs/LIBRARIAN.md',
-  'docs/project-status.md',
-  'docs/repo-update-log/README.md',
-  'docs/agent-process/',
-  'docs/decisions/',
-];
+
+// #124 S3: the marker's `changelog` DoD section stays required and substantive,
+// but CHANGELOG.md is release-class (folded at release-cut by docs:changelog,
+// never edited per PR), so close-scan auto-records this decision instead of
+// asking for a `.changelog/unreleased/*` fragment. Kept >= 10 chars and
+// placeholder-free so isSubstantiveDecision accepts it.
+export const RELEASE_CHANGELOG_DECISION =
+  'not required per PR: CHANGELOG.md is release-class, folded at release cut by npm run docs:changelog (#124 S3)';
 const DEPENDENCY_FILES = new Set([
   'package.json',
   'package-lock.json',
@@ -113,7 +95,6 @@ export function classifyCloseScanScope({ files = [], labels = [], stack = 'minim
   const touchesPolicy = normalizedFiles.some(isPolicyPath);
   const touchesCode = normalizedFiles.some(isCodePath);
   const touchesDependency = normalizedFiles.some((file) => DEPENDENCY_FILES.has(file));
-  const requiresChangelog = !docsOnly;
   const requiredChecks = [{ name: 'pr-contract', reason: 'PR metadata contract' }];
 
   // #124 S2: the docs DoD section is ALWAYS evaluated — substance scales
@@ -123,13 +104,12 @@ export function classifyCloseScanScope({ files = [], labels = [], stack = 'minim
     name: 'docs',
     reason: 'Closeout DoD docs section — doc-map-owned docs updated, explained, or visibly waived',
   });
-  requiredChecks.push({
-    name: 'repo-update-log',
-    reason: 'Applicable PRs must add a docs/repo-update-log fragment or record an allowed doc-only skip',
-  });
-  if (requiresChangelog) {
-    requiredChecks.push({ name: 'changelog', reason: 'Non-doc changes must record a changelog decision' });
-  }
+  // #124 S3: repo-update-log and changelog are no longer per-PR local parity
+  // checks. The repo-update-log fragment ledger is retired, and CHANGELOG.md is
+  // release-class (folded at release-cut by docs:changelog, no per-PR edit), so
+  // neither belongs in the PR-time set. The marker still carries a substantive
+  // `changelog` DoD decision (RELEASE_CHANGELOG_DECISION), auto-recorded by
+  // scan-complete — it is a marker section, not a local check.
   if (!docsOnly && stack === 'node' && (touchesCode || touchesDependency)) {
     requiredChecks.push({ name: 'node-test', reason: 'Node-owned code or package surface changed' });
   }
@@ -151,74 +131,12 @@ export function classifyCloseScanScope({ files = [], labels = [], stack = 'minim
     labels: normalizedLabels,
     stack,
     docsOnly,
-    requiresChangelog,
     touchesWorkflow,
     touchesHook,
     touchesPolicy,
     touchesCode,
     touchesDependency,
     requiredChecks,
-  };
-}
-
-export function evaluateChangelogDecision({ requiresChangelog, labels = [], changelogDecision = '' } = {}) {
-  if (!requiresChangelog) {
-    return { ok: true, failures: [] };
-  }
-
-  const decision = String(changelogDecision || '').trim();
-  const normalizedLabels = labels.map((label) => String(label || '').toLowerCase());
-
-  if (!isSubstantiveDecision(decision)) {
-    return { ok: false, failures: ['A non-doc change requires an explicit changelog decision.'] };
-  }
-
-  if (CHANGELOG_FRAGMENT_RE.test(normalizePath(decision))) {
-    return { ok: true, failures: [] };
-  }
-
-  if (normalizedLabels.includes('no-changelog') && /\bno-changelog\b/i.test(decision)) {
-    return { ok: true, failures: [] };
-  }
-
-  return {
-    ok: false,
-    failures: ['Changelog decision must name a `.changelog/unreleased/*.md` fragment or cite the `no-changelog` label.'],
-  };
-}
-
-export function evaluateRepoUpdateLogDecision({ files = [], body = '' } = {}) {
-  const normalizedFiles = files.map(normalizePath).filter(Boolean);
-  const ledgerFragments = normalizedFiles.filter(isRepoUpdateLogFragment);
-  const ledgerOnly = normalizedFiles.length > 0 && normalizedFiles.every(isRepoUpdateLogFragment);
-  const docsOnly = normalizedFiles.length > 0 && normalizedFiles.every(isDocOnlyFile);
-  const protectedFiles = normalizedFiles.filter(isRepoUpdateLogProtectedPath);
-
-  if (normalizedFiles.length === 0) {
-    return { ok: false, failures: ['No PR files were available to evaluate for the repo update log.'] };
-  }
-
-  if (ledgerOnly) {
-    return { ok: true, failures: [] };
-  }
-
-  if (ledgerFragments.length > 0) {
-    return { ok: true, failures: [] };
-  }
-
-  if (docsOnly && protectedFiles.length === 0) {
-    if (DOC_ONLY_REPO_LOG_SKIP_RE.test(String(body || ''))) {
-      return { ok: true, failures: [] };
-    }
-    return {
-      ok: false,
-      failures: ['Doc-only PRs without a repo update log fragment must state why the fragment is not required in the PR body.'],
-    };
-  }
-
-  return {
-    ok: false,
-    failures: ['This PR requires an added `docs/repo-update-log/*.md` repo update log fragment.'],
   };
 }
 
@@ -534,11 +452,6 @@ export function writeCloseScanMarker(marker, path = markerPath()) {
   writeFileSync(path, `${JSON.stringify(marker, null, 2)}\n`, 'utf8');
 }
 
-export function extractChangelogFragment(decision) {
-  const match = normalizePath(decision).match(CHANGELOG_FRAGMENT_RE);
-  return match ? match[0] : null;
-}
-
 export function isSubstantiveDecision(value) {
   const text = String(value || '').trim();
   return text.length >= 10 && !PLACEHOLDER_RE.test(text) && !/^(none|null|undefined)$/i.test(text);
@@ -562,7 +475,7 @@ export function listHookShellFiles(root = process.cwd()) {
 }
 
 function isDocOnlyFile(file) {
-  return DOC_EXTENSIONS_RE.test(file) || DOC_PREFIXES.some((prefix) => file.startsWith(prefix));
+  return DOC_EXTENSIONS_RE.test(file);
 }
 
 function isPolicyPath(file) {
@@ -571,17 +484,6 @@ function isPolicyPath(file) {
     || file === 'GEMINI.md'
     || file.startsWith('.agent/')
     || file.startsWith('.github/');
-}
-
-function isRepoUpdateLogFragment(file) {
-  return REPO_UPDATE_LOG_FRAGMENT_RE.test(normalizePath(file));
-}
-
-function isRepoUpdateLogProtectedPath(file) {
-  const normalized = normalizePath(file);
-  return PROTECTED_REPO_LOG_PATHS.some((entry) => (
-    entry.endsWith('/') ? normalized.startsWith(entry) : normalized === entry
-  ));
 }
 
 function isCodePath(file) {

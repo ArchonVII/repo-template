@@ -43,3 +43,8 @@ jobs:
     uses: ArchonVII/github-workflows/.github/workflows/repo-required-gate.yml@v1
     with:
       stack: node
+      # #124 S3: dogfood the self-maintaining docs system. The docs-gate runs
+      # `docs:render --check` + doc-health blocking checks on PR events. Safe on
+      # this lockfile-less repo since github-workflows#105 falls back to
+      # `npm install --no-package-lock` when no package-lock.json exists.
+      docs-system: true

@@ -1,1 +1,0 @@
-- **Docs-system closeout cleanup.** Removes the remaining `--skip-ci-guard` ready-promotion bypass from `agent-pr-ready`, makes doc-health issue payloads severity-neutral instead of calling blocking findings warning-only, and keeps proposed template-library paths out of backtick path-ref checks so future template edits stay blocking-clean. (#124)
