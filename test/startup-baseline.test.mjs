@@ -75,7 +75,7 @@ test('AGENTS doc-health contract is report-only and points to the runner', async
 test('AGENTS stays within the document-policy line budget', async () => {
   const body = await readFile(join(ROOT, 'AGENTS.md'), 'utf8');
   const lineCount = body.split(/\r?\n/).length;
-  assert.ok(lineCount <= 300, `AGENTS.md should be <=300 lines; got ${lineCount}`);
+  assert.ok(lineCount <= 160, `AGENTS.md should be <=160 lines; got ${lineCount}`);
 });
 
 test('VISION template satisfies the owner-intent charter', async () => {

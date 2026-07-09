@@ -3,7 +3,7 @@ import path from 'node:path';
 
 export const CHARTER_BUDGETS = {
   'README.md': 150,
-  'AGENTS.md': 300,
+  'AGENTS.md': 160,
   'VISION.md': 120,
 };
 

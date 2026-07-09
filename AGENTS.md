@@ -1,28 +1,23 @@
 # AGENTS.md
 
-Cross-tool contract for AI agents (Claude, Codex, Copilot, Gemini, etc.) working in this
-repo. Per-tool addenda such as `CLAUDE.md` and `GEMINI.md` are adapters only; rules that
-apply to every tool live here.
+Cross-tool contract for agents in this repo. Keep this file a quick reference; move detail to `docs/agent-process/`.
 
 ## Read First
 
-- `README.md` - what this project is and how to run it.
-- `ARCHITECTURE.md` - subsystem ownership, when the repo has one.
-- When the repo runs the Librarian wiki (see "Librarian Wiki"): `docs/INDEX.md`
-  (map of durable docs), `docs/CANON.md` (current truth and locked decisions),
-  and `docs/LIBRARIAN.md` (wiki schema and operations). Repos onboarded without
-  the wiki feature skip these.
+- `README.md` - purpose and run commands.
+- `ARCHITECTURE.md` - subsystem map, when present.
+- When the repo runs the Librarian wiki: `docs/INDEX.md`, `docs/CANON.md`, `docs/LIBRARIAN.md`.
 
 <!-- BEGIN MANAGED AGENT START MAP -->
 
 ## Agent Start Map
 
-Agents should not spend time rediscovering process files. Start here:
+Start here; do not rediscover process files:
 
-- Document policy: `docs/agent-process/document-policy.md` - charters, lifecycle, placement rules.
-- Plans: `docs/plans/` - dated plan files for feature and cross-cutting work; one file per plan.
+- Document policy: `docs/agent-process/document-policy.md`.
+- Plans: `docs/plans/`.
 - Agent process: `docs/agent-process/`.
-- Changelog: `CHANGELOG.md` - release-class; folded from Conventional Commits by `npm run docs:changelog` (no per-PR edits). `docs/repo-update-log.md` is the retired ledger's frozen archive.
+- Changelog: `CHANGELOG.md` is release-class; folded by `npm run docs:changelog`.
 - Check map: `.agent/check-map.yml`.
 - Coordination: `.agent/coordination/README.md`.
 - PR process: `.github/PULL_REQUEST_TEMPLATE.md`.
@@ -30,8 +25,8 @@ Agents should not spend time rediscovering process files. Start here:
 - Close guards: `scripts/close/`.
 - Doc sweep: `scripts/doc-sweep/`.
 - Doc health: `scripts/doc-health/`.
-- Legacy plans: `docs/superpowers/plans/` is history only; do not add new implementation plans there.
-- Friction ledger: for a non-bug workflow hiccup, append one row to `.claude/friction.md`, do not fix it mid-task, and keep working; bugs/security or off-task defects still go to `.archon/anomalies-thispr.md`.
+- Legacy plans: `docs/superpowers/plans/` is history only; do not add new plans there.
+- Friction ledger: for a non-bug workflow hiccup, append one row to `.claude/friction.md`, do not fix it mid-task, and keep working; bugs/security or off-task defects go to `.archon/anomalies-thispr.md`.
 
 If these files are missing or unclear, stop searching and run:
 
@@ -43,82 +38,34 @@ node <path-to-archon-setup>/bin/onboard.mjs <repo> --audit
 
 ## Workflow
 
-1. **Issue first.** Create or use a GitHub issue with explicit acceptance criteria before
-   branching. Use the Task issue form.
-2. **One issue -> one active branch -> one linked worktree -> one PR per phase.** Branch
-   name: `agent/<tool>/<issue>-<slug>`. Follow-up phases for the same issue start from
-   fresh `origin/main` in a new phase-specific branch/worktree.
-3. **Never commit feature work to `main`.** Repo-facing docs, plans, prompts, ADRs, and
-   shared markdown use the same branch/PR path when committed.
-4. **Retired branches stay retired.** Before reusing an issue branch, run
-   `gh pr list --head <branch> --state all --json number,state,url,mergedAt`; merged or
-   closed PR state means start a new branch/worktree.
-5. **Conventional commits.** Use `<type>(<scope>): <description>` with
-   `feat fix refactor test docs style chore perf ci build revert`.
-6. **PR bodies use the committed template.** If `.github/PULL_REQUEST_TEMPLATE.md` exists,
-   fill it through `npm run agent:pr-body -- <issue>` or the committed file; do not
-   freehand or leave scratch PR-body files in the worktree.
-7. **Changelog is release-class.** PRs carry no changelog edits — `CHANGELOG.md` is
-   folded from Conventional Commit history at release-cut by `npm run docs:changelog`.
-   Write a clear Conventional Commit subject; that is the changelog entry.
-8. **Plan/status closeout required.** Any plan, progress file, handoff, audit, roadmap,
-   status tracker, or coordination note created or used by the lane must be closed,
-   narrowed, or marked superseded before review.
-
-## Message protocol
-
-Turn-terminal messages to the owner (the message that ends a turn or asks for input) open
-with one status tag, then a `For you` lane (the owner's action; omitted for state-only
-messages) and a `My work` lane. The tag vocabulary, the human/agent split, and the
-machine-backed `SAFE TO CLEAR` rule live in
-[`docs/agent-process/message-protocol.md`](docs/agent-process/message-protocol.md). Do not
-claim `SAFE TO CLEAR` with `marker=verified` unless the close-scan marker's HEAD matches the
-pushed HEAD.
-
-## Vision Drift Duties
-
-- At plan time, read `VISION.md` when present and treat Scope / explicitly-not as owner intent.
-- If requested work conflicts with it, surface the conflict and cite the relevant `docs/decisions/decision-log.md` entry before proceeding.
-- At closeout, append owner scope decisions made during the lane to `docs/decisions/decision-log.md`; record none in the PR when none were made.
-- Keep detail in `docs/agent-process/document-policy.md`; do not turn `VISION.md` into implementation notes or status logs.
+1. Issue first; use explicit acceptance criteria.
+2. One issue -> one active branch -> one linked worktree -> one PR per phase.
+3. Branches use `agent/<tool>/<issue>-<slug>`.
+4. Never commit feature, config, behavior, or shared-doc changes on `main`.
+5. Retired branches stay retired; merged or closed PR branch means start fresh from `origin/main`.
+6. Commit messages use Conventional Commits.
+7. PR bodies come from `.github/PULL_REQUEST_TEMPLATE.md` or `npm run agent:pr-body -- <issue>`.
+8. Close or supersede any plan/status artifact used by the lane before review.
 
 ## Checkout Role / Worktrees
 
-The primary checkout stays on the default branch. Feature work happens in linked worktrees:
+Primary checkout stays on the default branch. Feature work happens in sibling worktrees.
 
-```text
-git worktree add -b agent/<tool>/<issue>-<slug> ../<repo>-<issue>-<slug>
+```powershell
+npm run agent:start-task -- <issue> [--agent <name>] [--slug <slug>]
+npm run agent:status
+npm run agent:prune
+npm run agent:pr-body -- [issue]
 ```
 
-Prefer repo helpers:
-
-- `npm run agent:start-task -- <issue> [--agent <name>] [--slug <slug>]` - fetch default,
-  create the worktree, and record current task state.
-- `npm run agent:status` - branch, upstream, PR, issue, dirty state, claims, and next action.
-- `npm run agent:prune` - retire merged and clean agent worktrees using GitHub PR evidence.
-- `npm run agent:pr-body -- [issue]` - print the committed PR template with issue filled.
-
-Do not run `git switch -c` in the primary checkout. If unsure where you are, run
-`bash .githooks/scripts/checkout-doctor.sh`.
+Do not run `git switch -c` in the primary checkout. If unsure, run `bash .githooks/scripts/checkout-doctor.sh`.
 
 ## Verification And Delivery
 
-- Treat `repo-required-gate / decision` as the stable branch-protection check. Do not make
-  path-filtered leaf workflows required.
-- Use `.agent/check-map.yml` for path-to-check expectations. If the repo stack changes,
-  update the check map and `repo-required-gate` caller in the same PR.
-- Run the repo's lint, typecheck, and test commands before review. Record exact commands and
-  results in PR verification notes.
-- `## Verification` needs at least one substantive item — a plain bullet or a checkbox —
-  recording what was actually run or checked (substance-only contract, gw#99). Placeholders
-  and generic claims ("tests pass", "CI green") fail; a bullet with the real command and
-  result passes. Evidence blocks are the recommended shape and are validated when present;
-  their absence is advisory. If you do tick a checkbox, tick it only after the backing
-  command or manual check actually passed.
-- Validate a drafted body BEFORE creating the PR — same validator CI runs, zero paid
-  re-runs on formatting: `npm run pr:contract -- --body-file - --title "<title>" --branch
-  <branch>` (body on stdin).
-- If user-visible behavior changed, smoke-test it and record what was exercised.
+- Required branch-protection check: `repo-required-gate / decision`.
+- Path-to-check map: `.agent/check-map.yml`.
+- Run the repo's lint/typecheck/test commands before review and record exact results.
+- Validate PR bodies before ready: `npm run pr:contract -- --body-file - --title "<title>" --branch <branch>`.
 - Do not run `gh pr ready` directly. Use:
 
 ```powershell
@@ -128,163 +75,82 @@ npm run agent:pr-ready -- --repo OWNER/REPO --pr <number>
 
 ### Local Delivery Guards
 
-When a push updates the remote branch, run close-scan after final verification and before
-the push so the marker binds to the exact `HEAD`:
+Before push/ready/merge on the current `HEAD`:
 
 ```powershell
 npm run close:scan:complete -- --repo OWNER/REPO --pr <number> --findings-decision "<decision>"
-git push
 npm run close:ci:guard -- --repo OWNER/REPO --pr <number>
 ```
 
-`close:ci:guard` must pass before `agent:close-preflight`, `agent:pr-ready`, or merge
-actions. Missing, pending, or unavailable required CI is not a pass. The guard checks the
-gate this repo declares in `.agent/check-map.yml` (`required_gate.check_name`) — here
-`repo-required-gate / decision`; `--required-check <name>` overrides for one run.
-
-The guard is idempotent against `HEAD`: run `close:ci:guard` **once for the current
-`HEAD`**. A single passing run covers `agent:close-preflight`, `agent:pr-ready`, and the
-merge — do not re-run it for each gate while `HEAD` is unchanged; re-run only after a new
-commit moves `HEAD`. Once it passes and the PR is ready with `repo-required-gate /
-decision` green, one confirming status read is enough: do not repeatedly re-poll checks,
-re-snapshot PR status, or re-list review threads on an unchanged, green, ready PR.
+Re-run only after `HEAD` changes. Missing, pending, or unavailable required CI is not a pass.
 
 ### Closeout Modes
 
-- Preparing for review and shipping are different states.
-- Use `close:review` for verify -> push -> PR body -> ready-for-review handoff.
-- Use `close:ship` only when the user says `/close`, `ship it`, `land it`, `merge to main`,
-  or equivalent delivery language.
+- `close:review`: verify -> push -> PR body -> ready-for-review handoff.
+- `close:ship`: only when the owner says `/close`, `ship it`, `land it`, `merge to main`, or equivalent.
 - For stacked docs PRs, review `origin/main..HEAD`, not only the narrow PR diff; guidance only, not a gate.
-- Do not push directly to `main`, merge locally, or bypass review/check gates.
 
 ## Owner Maintenance Lane
 
-If the working tree contains only add-only safe maintenance files, agents may use the
-repo-defined owner-maintenance path instead of full issue/PR ceremony. Safe paths:
-
-- `docs/**`
-- image files (`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`)
-- `.changelog/**`
-
-The lane is add-only. Stop if any unsafe file is staged or if any non-ledger file is
-modified, deleted, renamed, or copied. Unsafe paths include `README.md`, `AGENTS.md`,
-`CLAUDE.md`, `GEMINI.md`, `.github/**`, `.githooks/**`, `.claude/**` except named ledgers,
-`.agent/schema/**`, `package*.json`, `src/**`, `scripts/**`, `docs/process/**`, and
-`docs/architecture/**`.
-
-Append-log ledgers may be added or modified directly on `main` when every staged path is one
-of these files:
-
-- `.claude/noticed.md` - per-repo observation log.
-- `.claude/napkin.md` - curated runbook.
-- `.claude/friction.md` - structured friction ledger.
-- `docs/decisions/decision-log.md` - owner intent decision log.
-
-Renames, copies, and deletes of a ledger still require the normal branch/PR lane.
+Use only when the repo documents a direct owner-maintenance path and every staged path is add-only and allowed. Unsafe paths require the normal issue/branch/worktree/PR lane: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `README.md`, `.github/**`, `.githooks/**`, `.agent/schema/**`, `package*.json`, `src/**`, `scripts/**`, and protected docs.
 
 ## Coordination
 
-This repo is coordination-isolated. Do not read from or write to machine-global boards, and
-do not assume sibling repos exist. Use only `.agent/coordination/` for claims, locks,
-handoffs, or active boards. If claim acquisition fails, stop and report the conflict.
+Use only `.agent/coordination/` for claims, locks, handoffs, or active boards. If a claim fails, stop and report the conflict.
 
 ## Anomaly And Friction Ledgers
 
-- Off-task bugs, stale files, security concerns, or tech debt found during a PR go in
-  `.archon/anomalies-thispr.md` on the PR branch. The installed
-  `.github/workflows/anomaly-triage.yml` routes related entries to PR review comments and
-  unrelated entries to issues.
-- Use one `## <short title>` block per anomaly with severity, representative file when
-  useful, related-to-PR status, and downstream repo only when the fix lives elsewhere.
-- Non-bug workflow friction goes in `.claude/friction.md`; record the cost and keep moving.
+- Off-task bugs, stale files, security concerns, or tech debt found during a PR: `.archon/anomalies-thispr.md`; `.github/workflows/anomaly-triage.yml` routes entries.
+- Non-bug workflow friction: `.claude/friction.md`; record the cost and keep moving.
+
+## Message Protocol
+
+Turn-terminal messages use one status tag plus the human/agent lane split. Full rules: `docs/agent-process/message-protocol.md`. `SAFE TO CLEAR` requires the close-scan marker for the pushed `HEAD`.
+
+## Vision Drift Duties
+
+- At plan time, read `VISION.md` when present and treat Scope / explicitly-not as owner intent.
+- If work conflicts with it, surface the conflict and cite `docs/decisions/decision-log.md`.
+- At closeout, append owner scope decisions to `docs/decisions/decision-log.md`; record none when none were made.
 
 ## Librarian Wiki
 
-**Applies only when the repo installs the Librarian wiki feature** - the `wiki:*`
-npm scripts plus `docs/CANON.md`, `docs/LIBRARIAN.md`, `docs/INDEX.md`, and
-`docs/raw/`. Repos onboarded without it have none of these paths; skip this
-section and keep durable docs under `docs/` directly.
-
-The `docs/` tree is an agent-maintained wiki. `AGENTS.md`, `llms.txt`, `docs/CANON.md`,
-`docs/LIBRARIAN.md`, and `docs/INDEX.md` are the canonical navigation layer. Anything under
-`.claude/`, `.codex/`, `.gemini/`, plus `CLAUDE.md` and `GEMINI.md`, is an adapter only.
-
-- Before wiki maintenance, read `docs/LIBRARIAN.md` and `docs/CANON.md`.
-- `docs/raw/` is immutable intake; `docs/` holds durable pages; `docs/memory/` is a
-  machine-local junction; corrections go in `docs/audits/`.
-- Run wiki operations through `npm run wiki:start`, `wiki:ingest`, `wiki:query`,
-  `wiki:lint`, `wiki:crystallize`, `wiki:compact-save`, `wiki:doctor`, and `wiki:graph`
-  (the last renders the wiki as a graph to `.html-artifacts/wiki-graph.html`).
-- When `docs/CANON.md`, `docs/project-status.md`, or release/deploy-status facts change,
-  resync both `llms.txt` and relevant `README.md` status/overview prose in the same PR.
+Applies only when the repo installs the Librarian wiki feature. Before wiki maintenance, read `docs/LIBRARIAN.md` and `docs/CANON.md`; run wiki operations through the repo's `wiki:*` scripts.
 
 ## Project Capsules
 
-**Applies only when the repo adopts project capsules** - `projects/<slug>/PLAN.md`
-plus `docs/agent-process/project-capsules.md`. Repos onboarded without the capsule
-feature track multi-session feature work under `docs/plans/` instead; skip this
-section.
-
-Active feature work that spans more than one session or one PR lives in
-`projects/<slug>/PLAN.md`. The PLAN owns summary and pointers only; it links out to specs,
-ADRs, research, issues, and PRs. One-off fixes do not need a capsule. Full convention:
-`docs/agent-process/project-capsules.md`.
+Applies only when the repo adopts project capsules. Active multi-session feature work lives in `projects/<slug>/PLAN.md`; full convention: `docs/agent-process/project-capsules.md`.
 
 ## Doc Sweep-Up
 
-Agents recover and preserve docs across sessions. Run `scripts/doc-sweep/` at session
-boundaries; full spec: `docs/agent-process/doc-sweep.md`.
+Run `node scripts/doc-sweep/sweep.mjs --repo <repo>` at session boundaries. Full spec: `docs/agent-process/doc-sweep.md`.
 
-- **sweep-on-open:** run `node scripts/doc-sweep/sweep.mjs --repo <repo>` to surface
-  add-only docs stranded by prior/dead sessions; commit only provably-safe ones with
-  `--apply`, and leave+log the rest.
-- **flush-on-close:** before ending a session, commit your own pending add-only docs after
-  the secret scan so they are never stranded.
-- **Allow-list only:** new add-only docs under `docs/**` except `docs/process/**` and
-  `docs/architecture/**`, `.changelog/**`, `.html-artifacts/**`, and image assets. Never
-  sweep code, CI, hooks, `.claude/`, `AGENTS.md`, `CLAUDE.md`, `README.md`, or manifests.
-- **Liveness:** auto-commit only default-branch docs stale over 12 hours or worktree docs
-  whose coordination claim is expired. Active claim means live; ambiguity means leave+log.
-- **Safety:** the sweep takes a lock, stages files selectively, runs a deterministic secret
-  scan before commit, and never pushes recovery branches.
+- Sweep only add-only allowed docs/assets; never sweep code, CI, hooks, `.claude/`, `AGENTS.md`, `CLAUDE.md`, `README.md`, manifests, or package files.
+- Auto-commit only provably stranded docs. Ambiguity means leave and log.
+- The sweep locks, stages selectively, scans secrets, and never pushes recovery branches.
 
 ## Document Policy
 
-Use `docs/agent-process/document-policy.md` for document charters, status/lifecycle rules,
-placement priority, budgets, and doc-health duties. If a rule needs more than 10 lines in
-`AGENTS.md`, keep a short contract here and move the detail there.
+Use `docs/agent-process/document-policy.md` for document charters, lifecycle, placement, budgets, and doc-health duties. If a rule needs more than five lines here, move it there.
 
 ## Doc Health
 
-Run `node scripts/doc-health/health.mjs --repo <repo> --report <path>` for report-only document-policy drift checks.
-The checker emits warning findings and issue payloads; it never edits docs, opens gates, or blocks.
-Full contract: `docs/agent-process/doc-health.md`.
+Run `node scripts/doc-health/health.mjs --repo <repo> --report <path>` for report-only checks. It never edits docs. Full contract: `docs/agent-process/doc-health.md`.
 
 ## CHANGELOG
 
-`CHANGELOG.md` is **release-class**: its `[Unreleased]` section is folded from
-Conventional Commit history by `npm run docs:changelog` at release-cut, never edited
-per PR (`feat`→Added, `fix`→Fixed, `perf`/`refactor`→Changed; breaking changes always
-surfaced). Write clear Conventional Commit subjects; that is the changelog.
+`CHANGELOG.md` is release-class and folded from Conventional Commit history by `npm run docs:changelog`; do not edit it per PR unless repo policy says otherwise.
 
 ## Commit Hygiene
 
-- Stage specific files: `git add <path> <path>`. Never use `git add -A`, `git add .`, or
-  `git add --all`.
-- If a formatter or fixer changes a staged file, re-stage that path before committing.
-  `.githooks/pre-commit` blocks same-file staged plus unstaged drift; use
-  `ALLOW_PARTIAL_COMMIT=1` only for an intentional partial snapshot with audit logging.
-- Keep one logical unit per commit. If the message needs "and", split it.
-- Do not bypass hooks with `--no-verify` or `--no-gpg-sign`; fix the underlying failure.
+- Stage specific files only.
+- Do not bypass hooks.
+- Keep one logical unit per commit.
 
 ## Reference Precision
 
-In durable artifacts such as decision logs, ADRs, PR bodies, update-log fragments, and
-verification notes, name refs unambiguously. Use `origin/main` when remote-vs-local matters,
-and write "the local default branch" when that is what you mean.
+Use unambiguous refs in durable artifacts: `origin/main` when remote-vs-local matters; "local default branch" when that is what you mean.
 
 ## When Stuck
 
-If the same approach fails twice, stop. Switch tactics, ask the user, or document what you
-tried in the issue.
+If the same approach fails twice, stop, switch tactics, ask the owner, or document what you tried in the issue.

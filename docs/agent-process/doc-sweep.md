@@ -275,26 +275,16 @@ The four pre-`--apply` follow-ups, folded in on 2026-06-04:
 | Registry feature             | `archon-setup` → `agent-workflow.doc-sweep` (locked) + cron opt-in | exposes it                           |
 | Local backstop               | operator's local config (NOT in the ecosystem PRs)                 | scheduled agent / hook               |
 
-### 5.1 `AGENTS.md` short contract block (verbatim)
+### 5.1 `AGENTS.md` short contract block
 
 ```markdown
 ## Doc Sweep-Up
 
-Agents recover and preserve docs across sessions. Run `scripts/doc-sweep/` at session
-boundaries; full spec: `docs/agent-process/doc-sweep.md`.
+Run `node scripts/doc-sweep/sweep.mjs --repo <repo>` at session boundaries. Full spec: `docs/agent-process/doc-sweep.md`.
 
-- **sweep-on-open:** at session start, run the sweep to recover add-only docs that prior/dead
-  sessions stranded; commit the provably-safe ones, leave+log the rest.
-- **flush-on-close:** before ending a session, commit your own pending add-only docs (after the
-  secret scan) so they are never stranded.
-- **Allow-list only:** new add-only docs under `docs/**` (except `docs/process/**`,
-  `docs/architecture/**`), `.changelog/**`, `.html-artifacts/**`, and image assets. Never sweep
-  code, CI, hooks, `.claude/`, `AGENTS.md`/`CLAUDE.md`/`README.md`, or `package*.json`.
-- **Liveness:** auto-commit only docs stranded on the primary default branch (stale >12h) OR a
-  worktree doc whose coordination claim is EXPIRED. Active claim → never touch. No claim, fresh
-  (<12h), detached HEAD, gitignored, symlink, or any ambiguity → leave + log, never force.
-- **Safety:** the sweep takes a lock and files its own claim; selective file-by-file staging
-  only; deterministic secret scan before any commit; never push recovery branches.
+- Sweep only add-only allowed docs/assets; never sweep code, CI, hooks, `.claude/`, `AGENTS.md`, `CLAUDE.md`, `README.md`, manifests, or package files.
+- Auto-commit only provably stranded docs. Ambiguity means leave and log.
+- The sweep locks, stages selectively, scans secrets, and never pushes recovery branches.
 ```
 
 ## 6. Rollout (pilot → propagate)
