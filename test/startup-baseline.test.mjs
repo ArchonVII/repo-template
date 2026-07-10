@@ -148,6 +148,15 @@ test('anomaly triage contract uses the canonical ledger path and installed calle
   const workflow = await readFile(join(ROOT, '.github', 'workflows', 'anomaly-triage.yml'), 'utf8');
   assert.match(workflow, /uses: ArchonVII\/github-workflows\/\.github\/workflows\/anomaly-triage\.yml@v1/);
   assert.match(workflow, /\.archon\/anomalies-thispr\.md/);
+
+  const permissionsStart = workflow.indexOf('permissions:');
+  const jobsStart = workflow.indexOf('jobs:');
+  assert.ok(permissionsStart > -1, 'caller should declare workflow permissions');
+  assert.ok(permissionsStart < jobsStart, 'caller permissions should apply before jobs');
+  assert.equal(
+    workflow.slice(permissionsStart, jobsStart).replaceAll('\r\n', '\n').trim(),
+    ['permissions:', '  contents: read', '  pull-requests: write', '  issues: write'].join('\n'),
+  );
 });
 
 // #124 S3: the repo-update-log fragment ledger + its caller workflow are

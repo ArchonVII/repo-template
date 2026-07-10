@@ -27,6 +27,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
   triage:
     uses: ArchonVII/github-workflows/.github/workflows/anomaly-triage.yml@v1
