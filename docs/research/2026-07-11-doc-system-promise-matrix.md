@@ -132,6 +132,11 @@ Baseline surfaces untouched since 2026-06-15 (last: `ab1ed50`); active developme
 - `C:\jma\jma-history\scripts\wiki\doctor.mjs` is the semantic promotion gate in miniature (e.g. "hook configs call only package.json-backed commands") — step 5 generalizes this pattern rather than inventing one.
 - archon is a clean _before_ specimen: leave untouched until the baseline-release lane exists, then use it as the guinea pig for the first automated consumer-update PR (step 7). jma-history is the highest-value update target (active, gen-1→current jump) — its update PR must handle multi-generation upgrades.
 
+## Errata (2026-07-11, Lane C sweep)
+
+1. Phantom row 1 and the doc-map discussion cite "repo-template#290" — that issue does not exist. Correct genealogy: archon-setup#290 (CLOSED — the AGENTS.md dangling Librarian/capsule refs symptom) and its repo-template twin #131 (CLOSED 2026-06-29). The generator itself remains tracked via repo-template#124 lane T1, now delivered as repo-template#159 (lane C3 of ArchonVII/archon-setup#350).
+2. The verifier-amendment claim that hudson-bend's package.json "has no agent:start-task/status/prune/pr-body scripts at all" is stale as of 2026-07-11: all four are present at C:\jill\hudson-bend\package.json:17-20 (added post-matrix; hudson-bend still lacks agent:close-preflight/agent:pr-ready and scripts/doc-health/).
+
 ## Next — ratified plan step 2
 
 Every **phantom** and **retired** row above, plus **designed** rows whose text reads as current, becomes a remove-or-downgrade edit routed to its narrowest source of truth (repo-template source first, archon-setup mirrors/snapshot second, consumer repos via their own lanes). Edits ship as owner-handed one-shot prompts with GM verification — matrix rows are the work-list, not vibes.
