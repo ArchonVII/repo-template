@@ -56,6 +56,12 @@ consumer update path.
 When a repo has not adopted a future document yet, the charter still defines where that
 document belongs once introduced.
 
+The `docs:changelog` and `docs:status` commands named in the table above run through
+`package.json` scripts, and (like the sibling `docs:render` and `pr:contract` commands) a
+repo has them only when it installs the agent-lifecycle feature. A repo onboarded without
+that feature has no `npm run`, so it folds the changelog and renders status another way or
+not at all.
+
 ## Owner Intent Layer
 
 `VISION.md` is human-owned. **Elicit, do not author.** For any `Owner: human` surface, a
