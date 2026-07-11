@@ -32,6 +32,7 @@ Agents should not spend time rediscovering process files. Start here:
 - Doc health: `scripts/doc-health/`.
 - Legacy plans: `docs/superpowers/plans/` is history only; do not add new implementation plans there.
 - Friction ledger: for a non-bug workflow hiccup, append one row to `.claude/friction.md`, do not fix it mid-task, and keep working; bugs/security or off-task defects still go to `.archon/anomalies-thispr.md`.
+- Feature-gated bullets: the check map (`.agent/check-map.yml`), PR template (`.github/PULL_REQUEST_TEMPLATE.md`), `scripts/agent/` + `scripts/close/`, `scripts/doc-sweep/`, and `scripts/doc-health/` exist only where the repo installs the feature that provides each — the check-map, PR-template, agent-lifecycle, doc-sweep, and doc-health features respectively. Repos onboarded without a given feature skip its bullet.
 
 If these files are missing or unclear, stop searching and run:
 
@@ -101,6 +102,8 @@ Prefer repo helpers:
 - `npm run agent:status` - branch, upstream, PR, issue, dirty state, claims, and next action.
 - `npm run agent:prune` - retire merged and clean agent worktrees using GitHub PR evidence.
 - `npm run agent:pr-body -- [issue]` - print the committed PR template with issue filled.
+
+These `agent:*` helpers exist only when the agent-lifecycle feature (its `package.json` scripts) is installed; a repo onboarded without it has no `npm run` targets, so use the raw `git worktree add` command shown above.
 
 Do not run `git switch -c` in the primary checkout. If unsure where you are, run
 `bash .githooks/scripts/checkout-doctor.sh`.
