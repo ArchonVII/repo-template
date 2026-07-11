@@ -33,7 +33,7 @@ if (startupBaseline) {
   });
   console.log('\n' + formatStartupMap(startupBaseline, {
     repoPath: checkoutRoot,
-    archonSetupCommand: 'node <path-to-archon-setup>/bin/onboard.mjs',
+    archonSetupCommand: 'node bin/onboard.mjs',
     readiness,
   }));
 }

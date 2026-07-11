@@ -61,7 +61,7 @@ test('AGENTS exposes the startup map before workflow details', async () => {
   assert.match(body, /docs\/agent-process\/doc-health\.md/);
   assert.match(body, /scripts\/doc-health\//);
   assert.match(body, /scripts\/close\//);
-  assert.match(body, /node <path-to-archon-setup>\/bin\/onboard\.mjs <repo> --audit/);
+  assert.match(body, /node bin\/onboard\.mjs <path-to-this-repo> --audit/);
 });
 
 test('AGENTS doc-health contract is report-only and points to the runner', async () => {

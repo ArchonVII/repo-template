@@ -36,8 +36,11 @@ Agents should not spend time rediscovering process files. Start here:
 If these files are missing or unclear, stop searching and run:
 
 ```text
-node <path-to-archon-setup>/bin/onboard.mjs <repo> --audit
+# from a clone of ArchonVII/archon-setup (any location; target = this repo's path):
+node bin/onboard.mjs <path-to-this-repo> --audit
 ```
+
+No archon-setup checkout available? Stop and ask the owner — do not reconstruct process files by hand.
 
 <!-- END MANAGED AGENT START MAP -->
 
