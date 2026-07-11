@@ -224,7 +224,7 @@ export function checkStartupReadiness(baseline, { exists }) {
   }
   return { status: missing.length ? 'incomplete' : 'complete', present, missing };
 }
-export function formatStartupMap(baseline, { repoPath = '<repo>', archonSetupCommand = 'node <path-to-archon-setup>/bin/onboard.mjs', readiness = null } = {}) {
+export function formatStartupMap(baseline, { repoPath = '<repo>', archonSetupCommand = 'node bin/onboard.mjs', readiness = null } = {}) {
   const legacy = Array.isArray(baseline?.legacy) ? baseline.legacy : [];
   const lines = [
     'Agent startup map:',
@@ -242,7 +242,7 @@ export function formatStartupMap(baseline, { repoPath = '<repo>', archonSetupCom
   ];
   if (legacy.length) lines.push(`- Legacy plans:   ${legacy.join(', ')} (history only)`);
   if (readiness?.missing?.length) lines.push('', `Missing startup baseline paths: ${readiness.missing.join(', ')}`);
-  lines.push('', 'If these files are missing or unclear, stop searching and run:', `${archonSetupCommand} ${repoPath} --audit`);
+  lines.push('', 'If these files are missing or unclear, stop searching and run (from a clone of ArchonVII/archon-setup):', `${archonSetupCommand} ${repoPath} --audit`);
   return lines.join('\n');
 }
 export function formatStatusReport(s) {

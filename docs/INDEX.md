@@ -61,6 +61,10 @@ _Generated from docs/**/*.md frontmatter by `npm run docs:render` — do not edi
 
 - [README.md](plans/README.md)
 
+### research/
+
+- [2026-07-11-doc-system-promise-matrix.md](research/2026-07-11-doc-system-promise-matrix.md) — Evidence register — 27 doc-system promises across the ecosystem classified implemented/opt-in/designed/retired/phantom, adversarially verified; the step-2 remove-or-downgrade work-list. `CURRENT`
+
 ### superpowers/
 
 - [2026-06-01-agent-lifecycle-command-surface.md](superpowers/plans/2026-06-01-agent-lifecycle-command-surface.md)

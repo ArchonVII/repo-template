@@ -31,7 +31,7 @@ generated:
     generator: docs:render        # scripts/docs/nav.mjs — README "## Status" managed block
     block: status
     inputs: ["docs/CANON.md", ".agent/doc-map.yml"]
-  - path: docs/STATUS.md          # created with the status generator (S1 cont.); replaces hand-kept docs/project-status.md
+  - path: docs/STATUS.md          # PLANNED (S1 cont., #124 — not yet generated): will replace hand-kept docs/project-status.md when it lands; until then project-status.md stays live (wiki:doctor requires it)
     class: rendered
     generator: docs:status        # scripts/docs/status.mjs — in-flight PRs/issues, roadmap %, doc-health summary
     inputs: ["gh:prs", "gh:issues", "doc-health"]
@@ -84,8 +84,9 @@ human:
 
 # REQUIRED: the base floor every repo must carry. Owner 2026-06-27: VISION is OPT-IN (engines stay
 # lean), so it is NOT in the base — it and LIBRARIAN/wiki/project-capsules are added per selected
-# feature. The onboarding + .agent/startup-baseline.json `required` set is GENERATED from this list
-# so onboarding can never reference a doc it does not install (fixes ArchonVII/archon-setup#290).
+# feature. PLANNED (repo-template#124 T1, archon-setup#290 — not yet built): derive the onboarding
+# + .agent/startup-baseline.json `required` set from this list. TODAY the two lists are hand-
+# maintained independently — when you change one, reconcile the other by hand in the same PR.
 required:
   base:
     - AGENTS.md

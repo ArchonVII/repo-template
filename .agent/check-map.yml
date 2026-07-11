@@ -5,7 +5,7 @@ required_gate:
   workflow: .github/workflows/repo-required-gate.yml
 
 defaults:
-  stack: minimal
+  stack: minimal # distributed scaffold default for new consumers — THIS repo's caller overrides with `stack: node` (.github/workflows/repo-required-gate.yml); change both together per AGENTS.md
   runner: github-hosted
   optimize_for: lower-spend
 
