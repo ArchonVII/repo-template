@@ -78,6 +78,7 @@ pushed HEAD.
 ## Vision Drift Duties
 
 - At plan time, read `VISION.md` when present and treat Scope / explicitly-not as owner intent.
+- If `VISION.md` is absent or thin, install it by copying `repo-template/VISION.md` verbatim and **ask the owner to fill it** — never compose a skeleton or seed content. `Owner: human` means elicit, don't author; a blank section is a question for the owner.
 - If requested work conflicts with it, surface the conflict and cite the relevant `docs/decisions/decision-log.md` entry before proceeding.
 - At closeout, append owner scope decisions made during the lane to `docs/decisions/decision-log.md`; record none in the PR when none were made.
 - Keep detail in `docs/agent-process/document-policy.md`; do not turn `VISION.md` into implementation notes or status logs.
