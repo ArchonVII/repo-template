@@ -84,6 +84,25 @@ test('RELEASE_CHANGELOG_DECISION is substantive so the marker changelog section 
   assert.match(RELEASE_CHANGELOG_DECISION, /docs:changelog/);
 });
 
+test('isSubstantiveDecision accepts prose that mentions placeholder / not yet / N/A mid-sentence (friction 2026-07-11)', () => {
+  // Regression: the guard used to match these tokens anywhere, rejecting honest
+  // decisions. Line-anchoring mirrors scripts/pr-contract.mjs (github-workflows#112).
+  assert.equal(isSubstantiveDecision('This documents the placeholder-matching guard so future edits do not regress it'), true);
+  assert.equal(isSubstantiveDecision('Docs updated; the migration notes are N/A for this config-only change'), true);
+  assert.equal(isSubstantiveDecision('README refreshed; hydrology docs are not yet written and follow in a later PR'), true);
+});
+
+test('isSubstantiveDecision still rejects filler and leading-token decisions', () => {
+  assert.equal(isSubstantiveDecision('placeholder'), false);
+  assert.equal(isSubstantiveDecision('placeholder text'), false);
+  assert.equal(isSubstantiveDecision('TODO write this later'), false);
+  assert.equal(isSubstantiveDecision('N/A for this change'), false);
+  assert.equal(isSubstantiveDecision('Not yet decided at all'), false);
+  assert.equal(isSubstantiveDecision('decision: TODO right here'), false);
+  assert.equal(isSubstantiveDecision('none'), false);
+  assert.equal(isSubstantiveDecision('TODO'), false);
+});
+
 test('evaluateRequiredChecks fails closed when the required gate is unavailable or not green', () => {
   assert.deepEqual(evaluateRequiredChecks({
     checkRuns: [{ name: 'repo-required-gate / decision', status: 'completed', conclusion: 'success' }],

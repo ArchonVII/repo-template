@@ -61,7 +61,11 @@ export function readRequiredGateCheckName(root) {
 }
 
 const DOC_EXTENSIONS_RE = /\.(md|txt|png|jpg|jpeg|gif|svg|webp|bmp|ico|avif)$/i;
-const PLACEHOLDER_RE = /\b(TODO|TBD|FIXME|PLACEHOLDER|NOT YET|NONE YET|N\/A)\b/i;
+// Ambiguous status tokens are placeholders only when they LEAD a decision's
+// content (see isSubstantiveDecision) — mirrors scripts/pr-contract.mjs so a
+// legitimate decision that merely mentions "placeholder" / "not yet" / "N/A"
+// mid-sentence is accepted. Source: /page-gm 2026-07-13 + friction 2026-07-11.
+const LEADING_PLACEHOLDER_RE = /^(?:TODO|TBD|FIXME|NOT YET|NONE YET|N\/A)\b/i;
 
 // #124 S3: the marker's `changelog` DoD section stays required and substantive,
 // but CHANGELOG.md is release-class (folded at release-cut by docs:changelog,
@@ -454,7 +458,24 @@ export function writeCloseScanMarker(marker, path = markerPath()) {
 
 export function isSubstantiveDecision(value) {
   const text = String(value || '').trim();
-  return text.length >= 10 && !PLACEHOLDER_RE.test(text) && !/^(none|null|undefined)$/i.test(text);
+  if (text.length < 10) return false;
+  if (/^(?:none|null|undefined)$/i.test(text)) return false;
+  if (isOnlyPlaceholderFiller(text)) return false;
+  const lead = text
+    .replace(/^[-*]\s+\[[ xX]\]\s+/, '')
+    .replace(/^[-*]\s+/, '')
+    .trim();
+  const delabeled = lead.replace(/^[A-Za-z][A-Za-z -]{0,40}:\s+/, '');
+  return !LEADING_PLACEHOLDER_RE.test(lead) && !LEADING_PLACEHOLDER_RE.test(delabeled);
+}
+
+// A decision made only of the word "placeholder" (or exactly "placeholder text")
+// is filler, but prose that merely mentions the word is fine. Mirrors the
+// hasLiteralPlaceholderFiller semantics in scripts/pr-contract.mjs.
+function isOnlyPlaceholderFiller(text) {
+  const words = String(text || '').toLowerCase().match(/[a-z]+/g) || [];
+  return words.length > 0
+    && (words.every((word) => word === 'placeholder') || words.join(' ') === 'placeholder text');
 }
 
 export function listWorkflowFiles(root = process.cwd()) {
