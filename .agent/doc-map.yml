@@ -16,11 +16,6 @@ version: 1
 #                       state, so committing would false-fail a merge when the world moved with no diff).
 #   class: release   -> folded ONLY at release-cut from immutable git history (no per-PR changelog edits).
 generated:
-  - path: .agent/startup-baseline.json
-    class: committed
-    generator: docs:render        # scripts/docs/startup-baseline.mjs — doc floor + pinned Archon capability projection
-    block: startup-baseline
-    inputs: [".agent/doc-map.yml", ".agent/archon-capabilities.json"]
   - path: docs/INDEX.md
     class: committed
     generator: docs:render        # scripts/docs/index.mjs — walks docs/**/*.md frontmatter
@@ -89,7 +84,7 @@ human:
 
 # REQUIRED: the base floor every repo must carry. Owner 2026-06-27: VISION is OPT-IN (engines stay
 # lean), so it is NOT in the base — it and LIBRARIAN/wiki/project-capsules are added per selected
-# feature. `npm run docs:render` generates .agent/startup-baseline.json from this list plus the
+# feature. `npm run docs:baseline` generates .agent/startup-baseline.json from this list plus the
 # repo's effective feature set in the pinned Archon capability projection. There is no independent
 # startup-path list to reconcile by hand (repo-template#124 T1 / #159; archon-setup#290).
 required:

@@ -41,7 +41,6 @@ Doc system (generated from .agent/doc-map.yml by `npm run docs:render`):
 - docs/CANON.md — High-density register of what is true for this repo now vs. intended, plus locked decisions — read first. (Scaffold — fill per repo.)
 
 Generated surfaces (never hand-edit inside managed blocks):
-- .agent/startup-baseline.json [committed] regenerate: docs:render
 - docs/INDEX.md [committed] regenerate: docs:render
 - llms.txt [committed] regenerate: docs:render
 - README.md [committed] regenerate: docs:render

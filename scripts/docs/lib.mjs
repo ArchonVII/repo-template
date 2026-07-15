@@ -247,7 +247,6 @@ export const KNOWN_BLOCK_SURFACES = {
   'index-pages': 'docs/INDEX.md',
   nav: 'llms.txt',
   status: 'README.md',
-  'startup-baseline': '.agent/startup-baseline.json',
 };
 
 export function docMapPath(root) {

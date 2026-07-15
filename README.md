@@ -21,7 +21,7 @@ Active development.
 
 <!-- BEGIN ARCHONVII MANAGED BLOCK: status -->
 Docs are maintained by the self-maintaining docs system (`.agent/doc-map.yml`):
-4 committed generated surfaces (regenerate with `npm run docs:render`),
+3 committed generated surfaces (regenerate with `npm run docs:render`),
 1 rendered dashboard(s) (`npm run docs:status` — rendered, not committed),
 6 machine-checked docs. Contract: docs/agent-process/doc-system.md.
 <!-- END ARCHONVII MANAGED BLOCK: status -->

@@ -2,8 +2,9 @@
 // projection of archon-setup's capability manifest (repo-template#159).
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { readDocMap } from './lib.mjs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseGeneratorArgs, readDocMap } from './lib.mjs';
 
 export const CAPABILITY_SNAPSHOT_PATH = join('.agent', 'archon-capabilities.json');
 export const STARTUP_BASELINE_PATH = join('.agent', 'startup-baseline.json');
@@ -105,4 +106,18 @@ export function runStartupBaseline({ root, check = false }) {
   const changed = before.replace(/\r\n/g, '\n') !== generated.replace(/\r\n/g, '\n');
   if (changed && !check) writeFileSync(path, generated, 'utf8');
   return { changed };
+}
+
+const isMain = process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1]);
+if (isMain) {
+  const args = parseGeneratorArgs(process.argv.slice(2));
+  const result = runStartupBaseline(args);
+  if (args.check && result.changed) {
+    console.error('.agent/startup-baseline.json is stale — run: npm run docs:baseline');
+    process.exitCode = 1;
+  } else if (args.check) {
+    console.log('docs:baseline --check passed — startup baseline current.');
+  } else {
+    console.log(`${result.changed ? 'regenerated' : 'current'}  .agent/startup-baseline.json`);
+  }
 }

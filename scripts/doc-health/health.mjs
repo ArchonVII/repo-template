@@ -759,15 +759,15 @@ async function loadDocMapForCli(repoRoot) {
 // committed entry must declare that exact path or the checker would verify a
 // different file than the map promises (#146 round 7 — a typo'd path with a
 // recognized block must fail closed, not silently pass on the real surface).
+const KNOWN_BLOCK_SURFACES = {
+  'index-pages': 'docs/INDEX.md',
+  nav: 'llms.txt',
+  status: 'README.md',
+};
+
 async function loadRenderCheckForCli(repoRoot, docMap) {
   const committed = (docMap.generated || []).filter((g) => g.class === 'committed');
   if (committed.length === 0) return () => [];
-  let knownBlockSurfaces;
-  try {
-    ({ KNOWN_BLOCK_SURFACES: knownBlockSurfaces } = await import('../docs/lib.mjs'));
-  } catch {
-    return null;
-  }
   const runners = [];
   const blocks = new Set();
   for (const entry of committed) {
@@ -779,7 +779,7 @@ async function loadRenderCheckForCli(repoRoot, docMap) {
       });
       continue;
     }
-    const expected = knownBlockSurfaces[entry.block];
+    const expected = KNOWN_BLOCK_SURFACES[entry.block];
     if (expected && entry.path !== expected) {
       runners.push(() => {
         throw new Error(`doc-map declares block ${entry.block} at ${entry.path}, but its checker manages ${expected}`);
@@ -789,14 +789,6 @@ async function loadRenderCheckForCli(repoRoot, docMap) {
     blocks.add(entry.block);
   }
   try {
-    if (blocks.has('startup-baseline')) {
-      const { runStartupBaseline } = await import('../docs/startup-baseline.mjs');
-      runners.push(() => ({
-        name: '.agent/startup-baseline.json',
-        ...runStartupBaseline({ root: repoRoot, check: true }),
-      }));
-      blocks.delete('startup-baseline');
-    }
     if (blocks.has('index-pages')) {
       const { runIndex } = await import('../docs/index.mjs');
       runners.push(() => ({ name: 'docs/INDEX.md (index-pages)', ...runIndex({ root: repoRoot, check: true }) }));
