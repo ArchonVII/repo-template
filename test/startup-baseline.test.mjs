@@ -3,43 +3,36 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readDocMap } from '../scripts/docs/lib.mjs';
+import {
+  generateStartupBaseline,
+  readCapabilitySnapshot,
+} from '../scripts/docs/startup-baseline.mjs';
 
 const ROOT = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 
-test('startup baseline contract names canonical startup files and legacy plan path', async () => {
+test('startup baseline is generated from doc-map required.base plus the pinned capability projection', async () => {
   const baseline = JSON.parse(await readFile(join(ROOT, '.agent', 'startup-baseline.json'), 'utf8'));
-  assert.equal(baseline.version, '2026-07-04-s3-fragment-retirement');
-  for (const path of [
-    'AGENTS.md',
-    'docs/plans/README.md',
-    'docs/agent-process/document-policy.md',
-    'docs/agent-process/doc-health.md',
-    '.agent/check-map.yml',
-    '.agent/coordination/README.md',
-    '.github/PULL_REQUEST_TEMPLATE.md',
-    '.github/workflows/anomaly-triage.yml',
-    'package.json',
-    'scripts/agent/lib.mjs',
-    'scripts/agent/start-task.mjs',
-    'scripts/agent/status.mjs',
-    'scripts/agent/prune.mjs',
-    'scripts/agent/pr-body.mjs',
-    'scripts/close/lib.mjs',
-    'scripts/close/scan-complete.mjs',
-    'scripts/close/ci-guard.mjs',
-    'scripts/doc-sweep/lib.mjs',
-    'scripts/doc-sweep/git.mjs',
-    'scripts/doc-sweep/sweep.mjs',
-    'scripts/doc-health/lib.mjs',
-    'scripts/doc-health/health.mjs',
-    'docs/agent-process/doc-sweep.md',
-  ]) {
-    assert.ok(baseline.required.includes(path), `baseline required should include ${path}`);
-  }
-  for (const path of ['docs/plans/', 'docs/agent-process/', 'scripts/agent/', 'scripts/close/', 'scripts/doc-sweep/', 'scripts/doc-health/']) {
-    assert.ok(baseline.expectedDirectories.includes(path), `baseline directories should include ${path}`);
-  }
-  assert.ok(baseline.legacy.includes('docs/superpowers/plans/'));
+  const docMap = readDocMap(ROOT);
+  const capabilities = await readCapabilitySnapshot(ROOT);
+  const generated = generateStartupBaseline({ docMap, capabilities });
+
+  assert.deepEqual(baseline, generated);
+  assert.match(capabilities.source.commit, /^[0-9a-f]{40}$/);
+  assert.equal(capabilities.source.repository, 'ArchonVII/archon-setup');
+  assert.equal(capabilities.source.featuresPath, 'src/registry/features.json');
+  assert.equal(capabilities.source.profilesPath, 'src/registry/profiles.json');
+  assert.equal(capabilities.effectiveProfile, 'agent-standard');
+
+  const selected = new Set(capabilities.profile.features);
+  const capabilityFloor = capabilities.features
+    .filter((feature) => selected.has(feature.id))
+    .flatMap((feature) => feature.installs)
+    .filter((install) => install.contract === 'required')
+    .map((install) => install.path);
+  const expectedRequired = [...new Set([...docMap.required.base, ...capabilityFloor])].sort();
+  assert.deepEqual(generated.required, expectedRequired);
+  assert.deepEqual(generated.legacy, ['docs/superpowers/plans/']);
 });
 
 test('plans README declares the canonical plan location and legacy directory policy', async () => {

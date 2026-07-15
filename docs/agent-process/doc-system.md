@@ -43,8 +43,10 @@ PR hot path). Sections:
 - `human` — authorial prose; `heal_when` globs scope the bounded same-PR L3 heal
   (never blanket `src/**`; `VISION.md` is never auto-healed — owner decision 2026-06-27).
 - `required.base` — the doc floor every repo carries; onboarding derives its required
-  set from this list so it can never reference a doc it does not install
-  (fixes ArchonVII/archon-setup#290; consumed in T1).
+  set from this list so it can never reference a doc it does not install. For this
+  provider, `docs:render` unions that floor with the required installs in
+  `.agent/archon-capabilities.json` and writes `.agent/startup-baseline.json`
+  (fixes ArchonVII/archon-setup#290; delivered by repo-template#159).
 - `code_roots` — the keystone-rot guard: every top-level code root is owned by a
   `checked` doc or explicitly `unmapped_ok`; a NEW unmapped root blocks.
 
@@ -68,6 +70,11 @@ Missing markers throw — generators never append blocks silently. Current surfa
 - `docs/STATUS.md` — rendered-class dashboard (`scripts/docs/status.mjs`): open
   PRs/issues via `gh`, doc-health warning summary. Gitignored; degrades gracefully
   when `gh` is unavailable.
+- `.agent/startup-baseline.json` (`startup-baseline`) — full-file committed output
+  from `required.base` plus the provider's effective Archon capability profile.
+  `.agent/archon-capabilities.json` is a derived projection pinned to an immutable
+  `ArchonVII/archon-setup` commit; update the projection from that source instead of
+  hand-editing startup paths.
 
 ## Commands
 

@@ -5,6 +5,7 @@
 import { KNOWN_BLOCK_SURFACES, parseGeneratorArgs, readDocMap } from './lib.mjs';
 import { runIndex } from './index.mjs';
 import { runNav } from './nav.mjs';
+import { runStartupBaseline } from './startup-baseline.mjs';
 
 const args = parseGeneratorArgs(process.argv.slice(2));
 // Only the doc-map's declared committed blocks run — the remediation command
@@ -34,6 +35,9 @@ for (const entry of committed) {
 }
 const declared = new Set(committed.map((g) => g.block).filter(Boolean));
 const results = [];
+if (declared.has('startup-baseline')) {
+  results.push({ name: '.agent/startup-baseline.json', ...runStartupBaseline(args) });
+}
 if (declared.has('index-pages')) {
   results.push({ name: 'docs/INDEX.md (index-pages)', ...runIndex(args) });
 }
