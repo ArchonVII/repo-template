@@ -68,6 +68,15 @@ No archon-setup checkout available? Stop and ask the owner — do not reconstruc
 8. **Plan/status closeout required.** Any plan, progress file, handoff, audit, roadmap,
    status tracker, or coordination note created or used by the lane must be closed,
    narrowed, or marked superseded before review.
+9. **Atomic commits are not atomic PRs.** Amendments to work still under review —
+   reviewer findings, doc-line corrections, formatting fixes for the same issue/slice —
+   are follow-up commits pushed to the same open PR, never a new issue, branch, or PR.
+   Open a separate PR only for a separate issue/phase, unrelated housekeeping, or
+   material scope expansion.
+10. **Re-verify proportionally.** For a mechanical-only amendment (whitespace, a typo,
+    comment wording — no behavior change), confirm the diff is mechanical and rerun only
+    the check that flagged it; do not rerun full review, spec, or verification pipelines.
+    The PR gate rerun on push is the authoritative full check.
 
 ## Message protocol
 
