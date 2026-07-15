@@ -1,7 +1,7 @@
 // Generate repo-template's startup contract from its doc floor plus a pinned
 // projection of archon-setup's capability manifest (repo-template#159).
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseGeneratorArgs, readDocMap } from './lib.mjs';
@@ -98,12 +98,12 @@ export function serializeStartupBaseline(baseline) {
 
 export function runStartupBaseline({ root, check = false }) {
   const path = join(root, STARTUP_BASELINE_PATH);
-  const before = readFileSync(path, 'utf8');
+  const before = existsSync(path) ? readFileSync(path, 'utf8') : null;
   const generated = serializeStartupBaseline(generateStartupBaseline({
     docMap: readDocMap(root),
     capabilities: readCapabilitySnapshot(root),
   }));
-  const changed = before.replace(/\r\n/g, '\n') !== generated.replace(/\r\n/g, '\n');
+  const changed = before === null || before.replace(/\r\n/g, '\n') !== generated.replace(/\r\n/g, '\n');
   if (changed && !check) writeFileSync(path, generated, 'utf8');
   return { changed };
 }

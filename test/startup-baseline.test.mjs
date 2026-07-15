@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readDocMap } from '../scripts/docs/lib.mjs';
 import {
   generateStartupBaseline,
   readCapabilitySnapshot,
+  runStartupBaseline,
 } from '../scripts/docs/startup-baseline.mjs';
 
 const ROOT = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
@@ -33,6 +35,28 @@ test('startup baseline is generated from doc-map required.base plus the pinned c
   const expectedRequired = [...new Set([...docMap.required.base, ...capabilityFloor])].sort();
   assert.deepEqual(generated.required, expectedRequired);
   assert.deepEqual(generated.legacy, ['docs/superpowers/plans/']);
+});
+
+test('startup baseline generator recreates a missing output while check mode stays read-only', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'repo-template-baseline-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, '.agent'), { recursive: true });
+  await copyFile(join(ROOT, '.agent', 'doc-map.yml'), join(root, '.agent', 'doc-map.yml'));
+  await copyFile(
+    join(ROOT, '.agent', 'archon-capabilities.json'),
+    join(root, '.agent', 'archon-capabilities.json'),
+  );
+
+  assert.deepEqual(runStartupBaseline({ root, check: true }), { changed: true });
+  assert.deepEqual(runStartupBaseline({ root }), { changed: true });
+  const written = JSON.parse(await readFile(join(root, '.agent', 'startup-baseline.json'), 'utf8'));
+  assert.deepEqual(
+    written,
+    generateStartupBaseline({
+      docMap: readDocMap(root),
+      capabilities: readCapabilitySnapshot(root),
+    }),
+  );
 });
 
 test('plans README declares the canonical plan location and legacy directory policy', async () => {
