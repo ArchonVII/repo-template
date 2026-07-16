@@ -546,7 +546,7 @@ test('sweepRepo: live current-task.json claims the worktree — stale doc → sk
   assert.ok(!buckets.eligible.some((e) => e.path === 'docs/wip.md'), 'must not be eligible');
 });
 
-test('sweepRepo: stale current-task.json (past TASK_CLAIM_TTL_MS) does not claim — doc stays eligible', async () => {
+test('sweepRepo: past-TTL task claim WITH abandonment evidence (merged/closed PR) — doc eligible', async () => {
   const repo = makeTempRepo({ branch: 'main' });
   writeInRepo(repo, 'docs/abandoned.md', '# Abandoned lane doc\nsome content\n');
   setFakeOrigin(repo, 'archon-real');
@@ -557,7 +557,7 @@ test('sweepRepo: stale current-task.json (past TASK_CLAIM_TTL_MS) does not claim
   writeFileSync(join(repo, '.agent', 'current-task.json'), JSON.stringify({
     issue: 124,
     branch: 'main',
-    createdAt: new Date(now - 48 * 60 * 60 * 1000).toISOString(), // 48h: past the 24h TTL
+    createdAt: new Date(now - 48 * 60 * 60 * 1000).toISOString(), // 48h: past the 24h TTL...
   }));
 
   const buckets = await sweepRepo(repo, {
@@ -565,10 +565,11 @@ test('sweepRepo: stale current-task.json (past TASK_CLAIM_TTL_MS) does not claim
     apply: false,
     defaultBranch: 'other-default',
     scan: cleanScan,
+    branchAbandoned: () => true, // ...and the branch's PRs are all merged/closed (rt#174)
   });
 
   assert.ok(buckets.eligible.some((e) => e.path === 'docs/abandoned.md'),
-    `docs/abandoned.md must be eligible (task claim expired); eligible=${JSON.stringify(buckets.eligible)}`);
+    `docs/abandoned.md must be eligible (expired claim + death signal); eligible=${JSON.stringify(buckets.eligible)}`);
 });
 
 test('sweepRepo: close:dod refresh (lastActivityAt) extends an otherwise-expired task claim', async () => {
@@ -595,4 +596,32 @@ test('sweepRepo: close:dod refresh (lastActivityAt) extends an otherwise-expired
 
   assert.ok(buckets.skip.some((e) => e.path === 'docs/long-lane.md'),
     `docs/long-lane.md must be skip (claim refreshed by activity); skip=${JSON.stringify(buckets.skip)}`);
+});
+
+test('sweepRepo: past-TTL task claim without abandonment evidence stays live — doc NOT eligible (rt#174)', async () => {
+  const repo = makeTempRepo({ branch: 'main' });
+  writeInRepo(repo, 'docs/live-long-lane.md', '# Live long lane doc\nsome content\n');
+  setFakeOrigin(repo, 'archon-real');
+
+  const now = Date.now() + STALE_MS + 1000;
+
+  mkdirSync(join(repo, '.agent'), { recursive: true });
+  writeFileSync(join(repo, '.agent', 'current-task.json'), JSON.stringify({
+    issue: 124,
+    branch: 'main',
+    createdAt: new Date(now - 48 * 60 * 60 * 1000).toISOString(), // 48h: past the 24h TTL...
+  }));
+
+  const buckets = await sweepRepo(repo, {
+    now,
+    apply: false,
+    defaultBranch: 'other-default',
+    scan: cleanScan,
+    branchAbandoned: () => false, // ...but no merged/closed-PR death signal (rt#174)
+  });
+
+  assert.ok(!buckets.eligible.some((e) => e.path === 'docs/live-long-lane.md'),
+    `clock expiry alone must never harvest a lane (rt#174); eligible=${JSON.stringify(buckets.eligible)}`);
+  assert.ok(buckets.skip.some((e) => e.path === 'docs/live-long-lane.md'),
+    `doc must be skip (claim held live without death signal); skip=${JSON.stringify(buckets.skip)}`);
 });
