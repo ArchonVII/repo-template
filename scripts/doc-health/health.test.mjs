@@ -869,3 +869,27 @@ test('checkRepo: coverage probe ignores untracked artifacts', () => {
   assert.deepEqual(invalid.map((f) => f.path), ['tools'],
     'owns matching only an ignored artifact must not satisfy coverage');
 });
+
+test('hard-charter overbudget (AGENTS.md, VISION.md) blocks; README overbudget stays a warning', () => {
+  const repo = makeTempRepo();
+  // Pad each charter doc past its budget (CHARTER_BUDGETS: AGENTS 300, VISION 120, README 150).
+  writeInRepo(repo, 'AGENTS.md',
+    '# Agents\n\n## Doc Health\n\nSee `docs/agent-process/doc-health.md`.\n' + 'Padding line.\n'.repeat(300));
+  writeInRepo(repo, 'VISION.md', '# Vision\n' + 'Padding line.\n'.repeat(120));
+  writeInRepo(repo, 'README.md', '# Project\n\nSmall README.\n' + 'Padding line.\n'.repeat(150));
+  commitAll(repo, 'docs: seed overbudget charter docs (#0)');
+
+  const report = checkRepo(repo, { now: NOW });
+  const severityByPath = Object.fromEntries(
+    report.findings
+      .filter((f) => f.code === 'charter-overbudget')
+      .map((f) => [f.path, f.severity]),
+  );
+  assert.equal(severityByPath['AGENTS.md'], 'blocking',
+    'suite-asserted AGENTS budget must block the docs gate (rt#176; the #169 red-main incident)');
+  assert.equal(severityByPath['VISION.md'], 'blocking',
+    'suite-asserted VISION budget must block the docs gate (rt#176)');
+  assert.equal(severityByPath['README.md'], 'warning',
+    'README has no suite-asserted budget; keep report-only');
+  assert.equal(report.status, 'blocking');
+});

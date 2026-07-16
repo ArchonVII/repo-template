@@ -270,7 +270,7 @@ placement priority, budgets, and doc-health duties. If a rule needs more than 10
 ## Doc Health
 
 Run `node scripts/doc-health/health.mjs --repo <repo> --report <path>` for report-only document-policy drift checks.
-The checker emits warning findings and issue payloads; it never edits docs, opens gates, or blocks.
+The checker emits findings and issue payloads and never edits docs; findings are warnings except a small blocking subset that fails the PR docs gate.
 Full contract: `docs/agent-process/doc-health.md`.
 
 ## CHANGELOG

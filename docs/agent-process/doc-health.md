@@ -15,7 +15,11 @@ leaves all fixes to the normal issue -> branch -> PR lane.
 ## Contract
 
 - The runner is `node scripts/doc-health/health.mjs --repo <repo>`.
-- Findings are warnings; the checker does not create a blocking gate.
+- Most findings are warnings. A small blocking subset exits non-zero and fails the
+  `repo-required-gate / docs gate` job: the structural checks from #124 L2, plus
+  `charter-overbudget` on suite-asserted charters (`AGENTS.md`, `VISION.md` —
+  `HARD_CHARTER_DOCS` in `scripts/doc-health/lib.mjs`, rt#176: docs-only PRs skip
+  node CI, so these budgets must block in the docs lane).
 - The runner never rewrites docs or calls GitHub to file issues.
 - The only write it performs is the explicit `--report <path>` JSON output.
 - Current-truth and lifecycle interpretation reuses existing document-policy headers and wiki
