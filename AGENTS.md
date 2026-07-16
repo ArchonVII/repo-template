@@ -60,9 +60,9 @@ No archon-setup checkout available? Stop and ask the owner — do not reconstruc
 6. **PR bodies use the committed template.** If `.github/PULL_REQUEST_TEMPLATE.md` exists,
    fill it through `npm run agent:pr-body -- <issue>` or the committed file; do not
    freehand or leave scratch PR-body files in the worktree.
-7. **Changelog is release-class.** PRs carry no changelog edits — `CHANGELOG.md` is
-   folded from Conventional Commit history at release-cut by `npm run docs:changelog`.
-   Write a clear Conventional Commit subject; that is the changelog entry.
+7. **Changelog policy lives in this repo's `## CHANGELOG` section.** Follow it —
+   modes differ per repo — and never hand-edit changelog artifacts beyond what it
+   prescribes. Write clear Conventional Commit subjects either way.
 8. **Plan/status closeout required.** Any plan, progress file, handoff, audit, roadmap,
    status tracker, or coordination note created or used by the lane must be closed,
    narrowed, or marked superseded before review.
