@@ -68,7 +68,10 @@ function collectGitFailures({ expectedBranch }) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!args.repo || !args.pr) {
+  // A required value that is itself an option token means the caller wrote
+  // e.g. `--pr --json`; treat it as missing rather than passing it to gh.
+  const missing = (v) => !v || String(v).startsWith('--');
+  if (missing(args.repo) || missing(args.pr)) {
     process.stderr.write('Usage: npm run agent:close-preflight -- --repo OWNER/REPO --pr <number>\n');
     process.exitCode = 2;
     return;

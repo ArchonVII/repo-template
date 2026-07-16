@@ -44,3 +44,33 @@ test('agent-pr-ready guard hint renders the exact ci-guard invocation (#173)', (
   const body = readFileSync(join(ROOT, 'scripts', 'agent-pr-ready.mjs'), 'utf8');
   assert.match(body, /close:ci:guard -- --repo \$\{args\.repo\} --pr \$\{pr\.number\}/);
 });
+
+test('agent-pr-ready rejects option tokens as required values (#173 P2)', () => {
+  let failed = false, stderr = '';
+  try {
+    execFileSync(process.execPath,
+      [join(ROOT, 'scripts', 'agent-pr-ready.mjs'), '--repo', 'ArchonVII/repo-template', '--pr', '--json'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (err) {
+    failed = true;
+    stderr = String(err.stderr ?? '');
+  }
+  assert.ok(failed, 'must exit non-zero when --pr consumes a flag token');
+  assert.match(stderr, /Usage: npm run agent:pr-ready -- --repo OWNER\/REPO --pr <number>/);
+  assert.doesNotMatch(stderr, /^\s+at /m, 'no stack frames');
+});
+
+test('agent-close-preflight rejects option tokens as required values (#173 P2)', () => {
+  let failed = false, stderr = '';
+  try {
+    execFileSync(process.execPath,
+      [join(ROOT, 'scripts', 'agent-close-preflight.mjs'), '--repo', '--pr'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (err) {
+    failed = true;
+    stderr = String(err.stderr ?? '');
+  }
+  assert.ok(failed, 'must exit non-zero when --repo consumes a flag token');
+  assert.match(stderr, /Usage: npm run agent:close-preflight -- --repo OWNER\/REPO --pr <number>/);
+  assert.doesNotMatch(stderr, /^\s+at /m, 'no stack frames');
+});
