@@ -209,11 +209,13 @@ export const TASK_CLAIM_TTL_MS = 24 * 60 * 60 * 1000;
  * A lane's .agent/current-task.json (written by agent:start-task) IS its
  * doc-sweep claim — no separate claim file needed. The claim covers the whole
  * worktree on the task's branch; expiresAt derives from lastActivityAt
- * (refreshed by close:dod) or createdAt plus TASK_CLAIM_TTL_MS. Returned even
- * when already past expiry: an EXPIRED task claim is the positive death
- * signal classify() needs to make an abandoned lane's docs eligible.
+ * (refreshed by close:dod) or createdAt plus TASK_CLAIM_TTL_MS. A claim past
+ * that clock TTL surfaces as EXPIRED — classify()'s positive death signal —
+ * only when `branchAbandoned` corroborates (rt#174): lastActivityAt is written
+ * only at closeout, so a live lane routinely outlives the TTL. Without
+ * abandonment evidence the claim is held live and --apply never harvests it.
  */
-export function taskClaim(wt, { ttlMs = TASK_CLAIM_TTL_MS } = {}) {
+export function taskClaim(wt, { ttlMs = TASK_CLAIM_TTL_MS, now = Date.now(), branchAbandoned } = {}) {
   let task;
   try {
     task = JSON.parse(readFileSync(join(wt, '.agent', 'current-task.json'), 'utf8'));
@@ -222,12 +224,16 @@ export function taskClaim(wt, { ttlMs = TASK_CLAIM_TTL_MS } = {}) {
   }
   const at = Date.parse(task.lastActivityAt || task.createdAt || '');
   if (!Number.isFinite(at) || !task.branch) return null;
+  let expiresMs = at + ttlMs;
+  if (expiresMs <= now && !branchAbandoned?.(wt, task.branch)) {
+    expiresMs = now + ttlMs; // no death signal → hold the claim live (rt#174)
+  }
   return {
     repo: detectRepoName(wt),
     branch: task.branch,
     paths: ['**'],
     status: 'active',
-    expiresAt: new Date(at + ttlMs).toISOString(),
+    expiresAt: new Date(expiresMs).toISOString(),
   };
 }
 
@@ -239,7 +245,7 @@ export function taskClaim(wt, { ttlMs = TASK_CLAIM_TTL_MS } = {}) {
  * never makes a doc eligible — spec §4.3 H3). A live .agent/current-task.json is
  * appended as a synthesized whole-worktree claim (#124 S2 bookend).
  */
-function defaultLoadClaims(wt) {
+function defaultLoadClaims(wt, opts = {}) {
   const claimsDir = join(wt, '.agent', 'coordination', 'claims');
   let entries;
   try {
@@ -257,7 +263,7 @@ function defaultLoadClaims(wt) {
       // Unparseable claim — skip; fail-safe is handled in coveringClaimStatus
     }
   }
-  const fromTask = taskClaim(wt);
+  const fromTask = taskClaim(wt, opts);
   if (fromTask) claims.push(fromTask);
   return claims;
 }
@@ -287,6 +293,29 @@ function defaultHasOpenPR(wt, branch) {
   }
 }
 
+/**
+ * defaultBranchAbandoned(wt, branch) → boolean
+ *
+ * Positive abandonment evidence for a task-claim branch (rt#174): true iff gh
+ * shows at least one PR for `branch` and every one of them is MERGED/CLOSED.
+ * An OPEN PR means the lane is live. Any failure (gh missing or
+ * unauthenticated, no PRs at all) → false: without evidence the claim is held
+ * live — wall-clock alone never makes a lane harvestable.
+ */
+function defaultBranchAbandoned(wt, branch) {
+  try {
+    const out = execFileSync(
+      'gh', ['pr', 'list', '--head', branch, '--state', 'all', '--json', 'state'],
+      { cwd: wt, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    const states = JSON.parse(out).map((p) => p.state);
+    if (states.length === 0 || states.includes('OPEN')) return false;
+    return true; // only merged/closed PRs track the branch → positive death signal
+  } catch {
+    return false;
+  }
+}
+
 // ─── sweepRepo ────────────────────────────────────────────────────────────────
 
 /**
@@ -303,6 +332,7 @@ function defaultHasOpenPR(wt, branch) {
  * @param {(wt: string) => object[]} [opts.loadClaims] Claims loader; defaults to reading .agent/coordination/claims/*.json.
  * @param {boolean}  [opts.owner=false]   Owner gate (L2): authorizes commits on the primary-default lane.
  * @param {(wt: string, branch: string) => boolean} [opts.hasOpenPR] Worktree-lane gate (H1); defaults to a gh query.
+ * @param {(wt: string, branch: string) => boolean} [opts.branchAbandoned] Task-claim expiry corroboration (rt#174); defaults to a gh query for merged/closed-only PR state.
  * @param {boolean}  [opts.allowMainCommit=false] Pass the audited ALLOW_MAIN_COMMIT override on the primary-default lane.
  *
  * Returns buckets:
@@ -321,14 +351,16 @@ export async function sweepRepo(wt, {
   loadClaims,
   owner = false,
   hasOpenPR,
+  branchAbandoned,
   allowMainCommit = false,
   issueRef,
 } = {}) {
   // Resolve defaults
-  const resolvedDefaultBranch = defaultBranch ?? detectDefaultBranch(wt);
-  const resolvedScan          = scan          ?? defaultScan;
-  const resolvedLoadClaims    = loadClaims    ?? defaultLoadClaims;
-  const resolvedHasOpenPR     = hasOpenPR     ?? defaultHasOpenPR;
+  const resolvedDefaultBranch   = defaultBranch   ?? detectDefaultBranch(wt);
+  const resolvedScan            = scan            ?? defaultScan;
+  const resolvedLoadClaims      = loadClaims      ?? defaultLoadClaims;
+  const resolvedHasOpenPR       = hasOpenPR       ?? defaultHasOpenPR;
+  const resolvedBranchAbandoned = branchAbandoned ?? defaultBranchAbandoned;
 
   // Repo name for claim matching — detect from remote URL or common-dir (spec §4.3 I3).
   // basename(wt) is wrong for linked worktrees whose folder name differs from the repo name.
@@ -365,7 +397,7 @@ export async function sweepRepo(wt, {
   const candidates = enumerateCandidates(wt);
 
   // Load claims once for the entire sweep (spec §4.3 D3b)
-  const claims = resolvedLoadClaims(wt);
+  const claims = resolvedLoadClaims(wt, { now, branchAbandoned: resolvedBranchAbandoned });
 
   // ── Step 3–5: Per-candidate classification ────────────────────────────────
   for (const rawPath of candidates) {
