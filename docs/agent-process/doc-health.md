@@ -55,7 +55,8 @@ node scripts/doc-health/health.mjs --repo <path> [--report <path>] [--json]
 - `--changed-from <git-ref>` derives changed paths from `git diff --name-only <ref>...HEAD`.
 - `--now <iso-date>` pins time for deterministic fixtures and replay.
 
-The process exits zero when warnings exist. Non-zero exit is reserved for invalid invocation or
+The process exits `0` when clean or when only warnings exist, `1` when any blocking
+finding exists (this is the docs-gate signal), and `2` for invalid invocation or
 runtime errors.
 
 ## Report Shape
@@ -65,7 +66,7 @@ Reports use schema `doc-health.v1`:
 ```json
 {
   "schemaVersion": "doc-health.v1",
-  "status": "clean | warnings",
+  "status": "clean | warnings | blocking",
   "summary": { "findings": 0, "warnings": 0, "blocking": 0 },
   "findings": [],
   "issues": []
