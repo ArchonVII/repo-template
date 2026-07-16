@@ -68,6 +68,11 @@ function collectGitFailures({ expectedBranch }) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (!args.repo || !args.pr) {
+    process.stderr.write('Usage: npm run agent:close-preflight -- --repo OWNER/REPO --pr <number>\n');
+    process.exitCode = 2;
+    return;
+  }
   const pr = loadPrFromGh({ repo: args.repo, pr: args.pr });
   const contract = validatePrContract(pr, {
     branchPattern: args['branch-pattern'],

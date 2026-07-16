@@ -49,6 +49,11 @@ function runCloseCiGuard({ repo, pr, requiredCheck }) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (!args.repo || !args.pr) {
+    process.stderr.write('Usage: npm run agent:pr-ready -- --repo OWNER/REPO --pr <number>\n');
+    process.exitCode = 2;
+    return;
+  }
   const pr = loadPrFromGh({ repo: args.repo, pr: args.pr });
   const result = validatePrContract(pr, {
     branchPattern: args['branch-pattern'],
@@ -109,7 +114,7 @@ function main() {
       process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
     } else {
       if (guard.output) process.stderr.write(`${guard.output}\n`);
-      process.stderr.write('\nRefusing to run `gh pr ready`: close:ci:guard must pass for the current HEAD first (run `npm run close:ci:guard`).\n');
+      process.stderr.write(`\nRefusing to run \`gh pr ready\`: close:ci:guard must pass for the current HEAD first (run \`npm run close:ci:guard -- --repo ${args.repo} --pr ${pr.number}\`).\n`);
     }
     process.exitCode = 1;
     return;
