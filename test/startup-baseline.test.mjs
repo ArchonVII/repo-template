@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { CHARTER_BUDGETS } from '../scripts/doc-health/lib.mjs';
+
 const ROOT = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 
 test('startup baseline contract names canonical startup files and legacy plan path', async () => {
@@ -75,13 +77,15 @@ test('AGENTS doc-health contract is report-only and points to the runner', async
 test('AGENTS stays within the document-policy line budget', async () => {
   const body = await readFile(join(ROOT, 'AGENTS.md'), 'utf8');
   const lineCount = body.split(/\r?\n/).length;
-  assert.ok(lineCount <= 300, `AGENTS.md should be <=300 lines; got ${lineCount}`);
+  const budget = CHARTER_BUDGETS['AGENTS.md'];
+  assert.ok(lineCount <= budget, `AGENTS.md should be <=${budget} lines; got ${lineCount}`);
 });
 
 test('VISION template satisfies the owner-intent charter', async () => {
   const body = await readFile(join(ROOT, 'VISION.md'), 'utf8');
   const lineCount = body.split(/\r?\n/).length;
-  assert.ok(lineCount <= 120, `VISION.md should be <=120 lines; got ${lineCount}`);
+  const budget = CHARTER_BUDGETS['VISION.md'];
+  assert.ok(lineCount <= budget, `VISION.md should be <=${budget} lines; got ${lineCount}`);
   assert.match(body, /^> \*\*Status:\*\* draft$/m);
   assert.match(body, /^> \*\*Owner:\*\* human$/m);
   assert.match(body, /^> \*\*Last reviewed:\*\* YYYY-MM-DD$/m);
