@@ -49,6 +49,14 @@ function runCloseCiGuard({ repo, pr, requiredCheck }) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
+  // A required value that is itself an option token means the caller wrote
+  // e.g. `--pr --json`; treat it as missing rather than passing it to gh.
+  const missing = (v) => !v || String(v).startsWith('--');
+  if (missing(args.repo) || missing(args.pr)) {
+    process.stderr.write('Usage: npm run agent:pr-ready -- --repo OWNER/REPO --pr <number>\n');
+    process.exitCode = 2;
+    return;
+  }
   const pr = loadPrFromGh({ repo: args.repo, pr: args.pr });
   const result = validatePrContract(pr, {
     branchPattern: args['branch-pattern'],
@@ -109,7 +117,7 @@ function main() {
       process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
     } else {
       if (guard.output) process.stderr.write(`${guard.output}\n`);
-      process.stderr.write('\nRefusing to run `gh pr ready`: close:ci:guard must pass for the current HEAD first (run `npm run close:ci:guard`).\n');
+      process.stderr.write(`\nRefusing to run \`gh pr ready\`: close:ci:guard must pass for the current HEAD first (run \`npm run close:ci:guard -- --repo ${args.repo} --pr ${pr.number}\`).\n`);
     }
     process.exitCode = 1;
     return;
