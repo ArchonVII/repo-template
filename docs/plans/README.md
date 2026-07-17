@@ -1,5 +1,9 @@
 # Plans
 
+> **Consumer note:** this doc describes repo-template's reference conventions. Repos
+> onboarded without the corresponding feature/tooling (e.g. project capsules) follow
+> their own repo-local planning conventions where they differ.
+
 Active repo-facing implementation plans live here.
 
 Use:

@@ -8,6 +8,10 @@
 > **Supersedes:** none
 > **Superseded by:** none
 
+> **Consumer note:** this doc describes repo-template's reference implementation. Repos
+> onboarded without the corresponding feature/tooling (e.g. the close-scan marker scripts)
+> follow their own repo-local conventions where they differ.
+
 `AGENTS.md` carries the short agent-facing pointer (`## Message protocol`); this file owns
 the full rules. Presentation is a separate concern — see `styles/` for how each skin renders
 the banner. Protocol version: **1.0.0**.
