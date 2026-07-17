@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "repository": "ArchonVII/archon-setup",
+    "commit": "7e9ea5a0ddee047a22b7eedf23f337846e005812",
+    "featuresPath": "src/registry/features.json",
+    "profilesPath": "src/registry/profiles.json"
+  },
+  "effectiveProfile": "agent-standard",
+  "profile": {
+    "id": "agent-standard",
+    "features": [
+      "foundation.readme",
+      "foundation.license",
+      "foundation.gitignore",
+      "foundation.agents",
+      "foundation.claude-md",
+      "foundation.gemini-md",
+      "foundation.coordination",
+      "foundation.gitattributes",
+      "foundation.git-init",
+      "agent-lifecycle.baseline",
+      "agent-workflow.check-map",
+      "agent-workflow.anomaly-triage",
+      "agent-workflow.doc-sweep",
+      "agent-workflow.doc-health",
+      "foundation.pr-template",
+      "workflow.required-gate",
+      "foundation.hooks"
+    ]
+  },
+  "features": [
+    { "id": "foundation.readme", "installs": [] },
+    { "id": "foundation.license", "installs": [] },
+    { "id": "foundation.gitignore", "installs": [] },
+    {
+      "id": "foundation.agents",
+      "installs": [
+        { "path": "AGENTS.md", "kind": "file", "contract": "required" },
+        { "path": "docs/plans/README.md", "kind": "file", "contract": "required" },
+        { "path": "docs/agent-process/document-policy.md", "kind": "file", "contract": "required" }
+      ]
+    },
+    { "id": "foundation.claude-md", "installs": [] },
+    { "id": "foundation.gemini-md", "installs": [] },
+    {
+      "id": "foundation.coordination",
+      "installs": [
+        { "path": ".agent/coordination/README.md", "kind": "file", "contract": "required" }
+      ]
+    },
+    { "id": "foundation.gitattributes", "installs": [] },
+    { "id": "foundation.git-init", "installs": [] },
+    {
+      "id": "agent-lifecycle.baseline",
+      "installs": [
+        { "path": "scripts/agent/lib.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/agent/start-task.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/agent/status.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/agent/prune.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/agent/pr-body.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/pr-contract.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/close/lib.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/close/scan-complete.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/close/ci-guard.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/agent-close-preflight.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/agent-pr-ready.mjs", "kind": "file", "contract": "required" },
+        { "path": "package.json", "kind": "merge", "contract": "required" }
+      ]
+    },
+    {
+      "id": "agent-workflow.check-map",
+      "installs": [
+        { "path": ".agent/check-map.yml", "kind": "file", "contract": "required" }
+      ]
+    },
+    {
+      "id": "agent-workflow.anomaly-triage",
+      "installs": [
+        { "path": ".github/workflows/anomaly-triage.yml", "kind": "file", "contract": "required" }
+      ]
+    },
+    {
+      "id": "agent-workflow.doc-sweep",
+      "installs": [
+        { "path": "scripts/doc-sweep/lib.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/doc-sweep/git.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/doc-sweep/sweep.mjs", "kind": "file", "contract": "required" },
+        { "path": "docs/agent-process/doc-sweep.md", "kind": "file", "contract": "required" }
+      ]
+    },
+    {
+      "id": "agent-workflow.doc-health",
+      "installs": [
+        { "path": "scripts/doc-health/lib.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/doc-health/health.mjs", "kind": "file", "contract": "required" },
+        { "path": "docs/agent-process/doc-health.md", "kind": "file", "contract": "required" }
+      ]
+    },
+    {
+      "id": "foundation.pr-template",
+      "installs": [
+        { "path": ".github/PULL_REQUEST_TEMPLATE.md", "kind": "file", "contract": "required" }
+      ]
+    },
+    { "id": "workflow.required-gate", "installs": [] },
+    { "id": "foundation.hooks", "installs": [] }
+  ]
+}

@@ -1,37 +1,46 @@
 {
-  "version": "2026-07-04-s3-fragment-retirement",
+  "version": "2026-07-15-c3-generated+03e2fa55a773",
   "required": [
-    "AGENTS.md",
-    "docs/plans/README.md",
-    "docs/agent-process/document-policy.md",
-    "docs/agent-process/doc-health.md",
     ".agent/check-map.yml",
     ".agent/coordination/README.md",
+    ".agent/doc-map.yml",
     ".github/PULL_REQUEST_TEMPLATE.md",
     ".github/workflows/anomaly-triage.yml",
+    "AGENTS.md",
+    "docs/CANON.md",
+    "docs/INDEX.md",
+    "docs/agent-process/doc-health.md",
+    "docs/agent-process/doc-sweep.md",
+    "docs/agent-process/doc-system.md",
+    "docs/agent-process/document-policy.md",
+    "docs/plans/README.md",
     "package.json",
+    "scripts/agent-close-preflight.mjs",
+    "scripts/agent-pr-ready.mjs",
     "scripts/agent/lib.mjs",
+    "scripts/agent/pr-body.mjs",
+    "scripts/agent/prune.mjs",
     "scripts/agent/start-task.mjs",
     "scripts/agent/status.mjs",
-    "scripts/agent/prune.mjs",
-    "scripts/agent/pr-body.mjs",
+    "scripts/close/ci-guard.mjs",
     "scripts/close/lib.mjs",
     "scripts/close/scan-complete.mjs",
-    "scripts/close/ci-guard.mjs",
-    "scripts/doc-sweep/lib.mjs",
-    "scripts/doc-sweep/git.mjs",
-    "scripts/doc-sweep/sweep.mjs",
-    "scripts/doc-health/lib.mjs",
     "scripts/doc-health/health.mjs",
-    "docs/agent-process/doc-sweep.md"
+    "scripts/doc-health/lib.mjs",
+    "scripts/doc-sweep/git.mjs",
+    "scripts/doc-sweep/lib.mjs",
+    "scripts/doc-sweep/sweep.mjs",
+    "scripts/pr-contract.mjs"
   ],
   "expectedDirectories": [
-    "docs/plans/",
     "docs/agent-process/",
+    "docs/plans/",
     "scripts/agent/",
     "scripts/close/",
-    "scripts/doc-sweep/",
-    "scripts/doc-health/"
+    "scripts/doc-health/",
+    "scripts/doc-sweep/"
   ],
-  "legacy": ["docs/superpowers/plans/"]
+  "legacy": [
+    "docs/superpowers/plans/"
+  ]
 }
