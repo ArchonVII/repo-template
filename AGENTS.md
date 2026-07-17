@@ -20,7 +20,7 @@ Agents should not spend time rediscovering process files. Start here:
 - Document policy: `docs/agent-process/document-policy.md` - charters, lifecycle, placement rules.
 - Plans: `docs/plans/` - dated plan files for feature and cross-cutting work; one file per plan.
 - Agent process: `docs/agent-process/`.
-- Changelog: `CHANGELOG.md` - release-class; folded from Conventional Commits by `npm run docs:changelog` (no per-PR edits). `docs/repo-update-log.md` is the retired ledger's frozen archive.
+- Changelog: `CHANGELOG.md` - follow this repo's changelog policy (modes differ per repo). `docs/repo-update-log.md` is the retired ledger's frozen archive.
 - Check map: `.agent/check-map.yml`.
 - Coordination: `.agent/coordination/README.md`.
 - PR process: `.github/PULL_REQUEST_TEMPLATE.md`.
@@ -60,7 +60,7 @@ No archon-setup checkout available? Stop and ask the owner — do not reconstruc
 6. **PR bodies use the committed template.** If `.github/PULL_REQUEST_TEMPLATE.md` exists,
    fill it through `npm run agent:pr-body -- <issue>` or the committed file; do not
    freehand or leave scratch PR-body files in the worktree.
-7. **Changelog policy lives in this repo's `## CHANGELOG` section.** Follow it —
+7. **Changelog policy lives in this repo's changelog section.** Follow it —
    modes differ per repo — and never hand-edit changelog artifacts beyond what it
    prescribes. Write clear Conventional Commit subjects either way.
 8. **Plan/status closeout required.** Any plan, progress file, handoff, audit, roadmap,

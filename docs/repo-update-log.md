@@ -7,6 +7,10 @@
 > from Conventional Commits by `npm run docs:changelog`). This file is kept only as the
 > consolidated history of entries through 2026-06-13; do not append new entries here.
 
+> **Consumer note:** this archive and its retirement history describe repo-template's
+> reference implementation. Repos onboarded without the corresponding docs tooling
+> follow their own repo-local conventions where they differ.
+
 This log recorded agent-visible repository changes for later audit. It complemented `CHANGELOG.md`: the changelog is user-facing release history, while this file was the operational ledger for what changed and whether more propagation was needed — a role the `docs/STATUS.md` dashboard now fills.
 
 ## Entry Template

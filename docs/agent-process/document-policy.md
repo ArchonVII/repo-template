@@ -8,6 +8,10 @@
 > **Supersedes:** none
 > **Superseded by:** none
 
+> **Consumer note:** this doc describes repo-template's reference implementation. Repos
+> onboarded without the corresponding feature/tooling (doc-health, doc-sweep, `docs:*`
+> scripts) follow their own repo-local conventions where they differ.
+
 This file is the per-repo document-control contract. `AGENTS.md` carries the short
 agent-facing pointer; this file owns the full rules.
 
