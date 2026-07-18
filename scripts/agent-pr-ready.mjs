@@ -138,6 +138,7 @@ export function runAgentPrReady(argv, {
 
   promote({ repo: args.repo, pr: pr.number });
   payload.ready = true;
+  payload.pr.isDraft = false;
 
   if (args.json) {
     writeStdout(`${JSON.stringify(payload, null, 2)}\n`);

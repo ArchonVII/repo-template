@@ -256,3 +256,28 @@ test('agent-pr-ready keeps normal guarded promotion behavior', () => {
   assert.deepEqual(promoted, { repo: 'ArchonVII/repo-template', pr: 184 });
   assert.match(stdout, /Promoted PR #184 to ready for review/);
 });
+
+test('agent-pr-ready JSON reports the post-promotion PR state coherently', () => {
+  let promotionCalls = 0;
+  let stdout = '';
+
+  const exitCode = runAgentPrReady(
+    ['--repo', 'ArchonVII/repo-template', '--pr', '184', '--json'],
+    {
+      loadPr: () => validDraftPr(),
+      runGuard: () => ({ ok: true, output: 'Close CI guard passed.\n' }),
+      promote: () => { promotionCalls += 1; },
+      writeStdout: (value) => { stdout += value; },
+      writeStderr: (value) => assert.fail(`unexpected stderr: ${value}`),
+    },
+  );
+
+  const payload = JSON.parse(stdout);
+  assert.equal(exitCode, 0);
+  assert.equal(promotionCalls, 1);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.ready, true);
+  assert.equal(payload.pr.isDraft, false);
+  assert.equal(payload.dryRun, false);
+  assert.deepEqual(payload.ciGuard, { ok: true });
+});
