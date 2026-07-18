@@ -36,6 +36,17 @@ test('managed Agent Start Map block has no dangling capsule reference (archon-se
   assert.match(managed, /docs\/plans\//, 'managed block still routes plans to docs/plans/');
 });
 
+test('managed consumers discover the message protocol without an optional styles path (#185)', async () => {
+  const agents = await readFile(join(ROOT, 'AGENTS.md'), 'utf8');
+  const begin = agents.indexOf('<!-- BEGIN MANAGED AGENT START MAP -->');
+  const end = agents.indexOf('<!-- END MANAGED AGENT START MAP -->');
+  const managed = agents.slice(begin, end);
+  const protocol = await readFile(join(ROOT, 'docs', 'agent-process', 'message-protocol.md'), 'utf8');
+
+  assert.match(managed, /Message protocol: `docs\/agent-process\/message-protocol\.md`/);
+  assert.doesNotMatch(protocol, /`styles\/`/, 'the always-installed protocol must not point at optional styles');
+});
+
 test('Read First gates the Librarian-wiki docs behind the wiki feature (archon-setup#290)', async () => {
   const body = await readFile(join(ROOT, 'AGENTS.md'), 'utf8');
   const readFirst = section(body, 'Read First');

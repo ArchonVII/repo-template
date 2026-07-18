@@ -18,6 +18,7 @@ Per-tool addenda such as `CLAUDE.md` and `GEMINI.md` are adapters only; rules th
 Agents should not spend time rediscovering process files. Start here:
 
 - Document policy: `docs/agent-process/document-policy.md` - charters, lifecycle, placement rules.
+- Message protocol: `docs/agent-process/message-protocol.md` - terminal status tags and close-safety evidence.
 - Plans: `docs/plans/` - dated plan files for feature and cross-cutting work; one file per plan.
 - Agent process: `docs/agent-process/`.
 - Changelog: `CHANGELOG.md` - follow this repo's changelog policy (modes differ per repo). `docs/repo-update-log.md` is the retired ledger's frozen archive.
