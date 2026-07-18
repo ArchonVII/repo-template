@@ -17,7 +17,7 @@ import {
   listHookShellFiles,
   listWorkflowFiles,
   markerPath,
-  parseRequiredGateCheckName,
+  parseRequiredGateCheckNames,
   readDodCapture,
   writeCloseScanMarker,
 } from './lib.mjs';
@@ -286,10 +286,14 @@ function validatePolicyFiles(root) {
   const body = readFileSync(checkMap, 'utf8');
   const failures = [];
   if (!/^version: [0-9]+/m.test(body)) failures.push('missing `version: <number>`');
-  if (!/^required_gate:/m.test(body)) failures.push('missing `required_gate:`');
-  // Any declared gate is valid — repos may gate on e.g. `ci-success` instead of
-  // the repo-template default (#142, archon-setup#302).
-  if (!parseRequiredGateCheckName(body)) failures.push('missing required gate check name (`required_gate.check_name`)');
+  if (!/^required_gates?:/m.test(body)) {
+    failures.push('missing `required_gates:` (or legacy `required_gate:`)');
+  }
+  // Any non-empty ordered set of names is valid. Legacy singular declarations
+  // remain accepted, while empty or malformed plural lists fail closed.
+  if (parseRequiredGateCheckNames(body).length === 0) {
+    failures.push('missing required gate check name (`required_gates[].check_name`)');
+  }
   return {
     name: 'policy-validation',
     ok: failures.length === 0,

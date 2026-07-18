@@ -15,8 +15,10 @@ import {
   isSubstantiveDecision,
   matchDocMapTriggers,
   parseRequiredGateCheckName,
+  parseRequiredGateCheckNames,
   readDodCapture,
   readRequiredGateCheckName,
+  readRequiredGateCheckNames,
   writeDodSection,
 } from '../scripts/close/lib.mjs';
 import {
@@ -85,9 +87,12 @@ test('RELEASE_CHANGELOG_DECISION is substantive so the marker changelog section 
 });
 
 test('evaluateRequiredChecks fails closed when the required gate is unavailable or not green', () => {
-  assert.deepEqual(evaluateRequiredChecks({
+  const passing = evaluateRequiredChecks({
     checkRuns: [{ name: 'repo-required-gate / decision', status: 'completed', conclusion: 'success' }],
-  }), { ok: true, failures: [], matched: { name: 'repo-required-gate / decision', status: 'completed', conclusion: 'success' } });
+  });
+  assert.equal(passing.ok, true);
+  assert.deepEqual(passing.failures, []);
+  assert.equal(passing.matched.name, 'repo-required-gate / decision');
 
   assert.equal(evaluateRequiredChecks({
     checkRuns: [{ name: 'repo-required-gate / decision', state: 'SUCCESS', conclusion: 'success' }],
@@ -101,6 +106,41 @@ test('evaluateRequiredChecks fails closed when the required gate is unavailable 
   });
   assert.equal(pending.ok, false);
   assert.match(pending.failures[0], /not completed/i);
+});
+
+test('evaluateRequiredChecks requires every declared member and reports each failed member', () => {
+  const requiredCheckNames = ['repo-required-gate / decision', 'Unity CI / required'];
+  const passingRuns = [
+    { name: 'repo-required-gate / decision', state: 'SUCCESS' },
+    { name: 'Unity CI / required', status: 'completed', conclusion: 'success' },
+  ];
+
+  const passing = evaluateRequiredChecks({ checkRuns: passingRuns, requiredCheckNames });
+  assert.equal(passing.ok, true);
+  assert.deepEqual(passing.matches.map((check) => check.name), requiredCheckNames);
+
+  for (const [label, secondRun, expected] of [
+    ['missing', null, /unavailable/i],
+    ['queued', { name: 'Unity CI / required', state: 'QUEUED' }, /not completed/i],
+    ['pending', { name: 'Unity CI / required', state: 'PENDING' }, /not completed/i],
+    ['cancelled', { name: 'Unity CI / required', state: 'CANCELLED' }, /not successful/i],
+    ['failed', { name: 'Unity CI / required', state: 'FAILURE' }, /not successful/i],
+  ]) {
+    const result = evaluateRequiredChecks({
+      checkRuns: [passingRuns[0], ...(secondRun ? [secondRun] : [])],
+      requiredCheckNames,
+    });
+    assert.equal(result.ok, false, `${label} member must fail the aggregate`);
+    assert.match(result.failures.join('\n'), /Unity CI \/ required/);
+    assert.match(result.failures.join('\n'), expected);
+  }
+
+  const malformedDeclaration = evaluateRequiredChecks({
+    checkRuns: passingRuns,
+    requiredCheckNames: [],
+  });
+  assert.equal(malformedDeclaration.ok, false);
+  assert.match(malformedDeclaration.failures.join('\n'), /declaration/i);
 });
 
 // #142 (archon-setup#302): the guard and policy scan must honor the gate the
@@ -173,6 +213,52 @@ test('parseRequiredGateCheckName reads the declared gate out of a check-map body
   );
 });
 
+test('parseRequiredGateCheckNames reads an ordered plural declaration with YAML-compatible values', () => {
+  const body = [
+    'version: 1',
+    'required_gates: # stable aggregate checks',
+    '  - check_name: "repo-required-gate / decision" # node aggregate',
+    '    workflow: .github/workflows/repo-required-gate.yml',
+    '  # a second required aggregate',
+    "  - check_name: 'Unity CI / required'",
+    '    workflow: .github/workflows/unity-ci.yml',
+    'defaults:',
+    '  stack: node',
+  ].join('\r\n');
+
+  assert.deepEqual(parseRequiredGateCheckNames(body), [
+    'repo-required-gate / decision',
+    'Unity CI / required',
+  ]);
+  assert.equal(parseRequiredGateCheckName(body), 'repo-required-gate / decision');
+});
+
+test('parseRequiredGateCheckNames preserves legacy singular declarations', () => {
+  const legacy = 'version: 1\nrequired_gate:\n  check_name: legacy / required # stable gate\n';
+  assert.deepEqual(parseRequiredGateCheckNames(legacy), ['legacy / required']);
+  assert.equal(parseRequiredGateCheckName(legacy), 'legacy / required');
+});
+
+test('parseRequiredGateCheckNames fails closed for missing, empty, or malformed plural declarations', () => {
+  const bodies = [
+    'version: 1\ndefaults:\n  check_name: not-a-gate\n',
+    'version: 1\nrequired_gates: []\n',
+    'version: 1\nrequired_gates:\n',
+    'required_gates:\n  - workflow: .github/workflows/one.yml\n',
+    'required_gates:\n  - check_name: ""\n',
+    'required_gates:\n  - check_name: valid\n  - workflow: .github/workflows/missing-name.yml\n',
+    'required_gates:\n  - check_name: "unterminated\n',
+    'required_gates:\n  check_name: not-a-list-item\n',
+    'required_gates:\n  -check_name: missing-list-separator\n',
+    'required_gates:\n  -# missing separator\n    check_name: hidden-invalid-item\n',
+    'required_gates:\n  - check_name: valid\n  - workflow: missing-name.yml\n\ndefaults:\n  check_name: sneaky\nrequired_gate:\n  check_name: legacy-must-not-mask-malformed-plural\n',
+  ];
+
+  for (const body of bodies) {
+    assert.deepEqual(parseRequiredGateCheckNames(body), [], body);
+  }
+});
+
 test('parseRequiredGateCheckName returns null when the gate is not declared', () => {
   assert.equal(parseRequiredGateCheckName('version: 1\ndefaults:\n  stack: node\n'), null);
   assert.equal(parseRequiredGateCheckName('required_gate:\n  workflow: .github/workflows/x.yml\n'), null);
@@ -204,6 +290,26 @@ test('readRequiredGateCheckName reads .agent/check-map.yml from a repo root, nul
   }
 });
 
+test('readRequiredGateCheckNames reads every declared check in order and returns an empty list when absent', () => {
+  const root = mkdtempSync(join(tmpdir(), 'close-gates-checkmap-'));
+  try {
+    assert.deepEqual(readRequiredGateCheckNames(root), []);
+    mkdirSync(join(root, '.agent'), { recursive: true });
+    writeFileSync(join(root, '.agent', 'check-map.yml'), [
+      'version: 1',
+      'required_gates:',
+      '  - check_name: first / required',
+      '    workflow: first.yml',
+      '  - check_name: second / required',
+      '    workflow: second.yml',
+    ].join('\n'));
+    assert.deepEqual(readRequiredGateCheckNames(root), ['first / required', 'second / required']);
+    assert.equal(readRequiredGateCheckName(root), 'first / required');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('validatePolicyFiles accepts any declared gate name and rejects a missing one (#142)', () => {
   const root = mkdtempSync(join(tmpdir(), 'close-gate-policy-'));
   try {
@@ -216,15 +322,27 @@ test('validatePolicyFiles accepts any declared gate name and rejects a missing o
     // The repo-template default still passes.
     writeFileSync(
       join(root, '.agent', 'check-map.yml'),
-      'version: 1\nrequired_gate:\n  check_name: repo-required-gate / decision\n'
+      [
+        'version: 1',
+        'required_gates:',
+        '  - check_name: repo-required-gate / decision',
+        '    workflow: .github/workflows/repo-required-gate.yml',
+        '  - check_name: Unity CI / required',
+        '    workflow: .github/workflows/unity-ci.yml',
+      ].join('\n')
     );
     assert.equal(validatePolicyFiles(root).ok, true);
 
-    // Declaring the block without a name still fails.
-    writeFileSync(join(root, '.agent', 'check-map.yml'), 'version: 1\nrequired_gate:\n  workflow: x.yml\n');
-    const missingName = validatePolicyFiles(root);
-    assert.equal(missingName.ok, false);
-    assert.match(missingName.summary, /check name/i);
+    for (const malformed of [
+      'version: 1\nrequired_gates: []\n',
+      'version: 1\nrequired_gates:\n  - workflow: x.yml\n',
+      'version: 1\nrequired_gate:\n  workflow: x.yml\n',
+    ]) {
+      writeFileSync(join(root, '.agent', 'check-map.yml'), malformed);
+      const missingName = validatePolicyFiles(root);
+      assert.equal(missingName.ok, false);
+      assert.match(missingName.summary, /check name/i);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

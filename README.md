@@ -103,7 +103,8 @@ npm run agent:pr-ready -- --repo OWNER/REPO --pr <number>
 
 Agents must use these wrappers before promoting a draft PR. Do not run
 `gh pr ready` directly. The wrappers validate the PR title, body, branch, and
-changed files before allowing promotion.
+changed files before allowing promotion. `agent:pr-ready`, including
+`--dry-run`, also requires the close CI guard for the current `HEAD` to pass.
 
 Useful local checks:
 
@@ -123,11 +124,11 @@ git push
 npm run close:ci:guard -- --repo OWNER/REPO --pr <number>
 ```
 
-`close:scan:complete` runs local parity checks for the required gate and writes
+`close:scan:complete` runs local parity checks for the required gates and writes
 the ignored `.agent/close-scan/complete.json` marker for the current `HEAD`.
 `close:ci:guard` runs after push and fails if the marker is stale, PR evidence
-is invalid, the local branch is not identical to upstream, or
-`repo-required-gate / decision` is missing, pending, or not green.
+is invalid, the local branch is not identical to upstream, or any check declared
+under `.agent/check-map.yml`'s `required_gates` list is missing, pending, or not green.
 
 Verify hook behavior after edits with:
 

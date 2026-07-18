@@ -1,8 +1,8 @@
 version: 1
 
-required_gate:
-  check_name: repo-required-gate / decision
-  workflow: .github/workflows/repo-required-gate.yml
+required_gates:
+  - check_name: repo-required-gate / decision
+    workflow: .github/workflows/repo-required-gate.yml
 
 defaults:
   # distributed scaffold default for new consumers — THIS repo's caller overrides

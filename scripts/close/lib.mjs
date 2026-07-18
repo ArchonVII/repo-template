@@ -4,11 +4,10 @@ import { dirname, join, relative } from 'node:path';
 export const DEFAULT_REQUIRED_GATE = 'repo-required-gate / decision';
 export const DEFAULT_MARKER_PATH = '.agent/close-scan/complete.json';
 
-// #142 (archon-setup#302): the close guard and policy scan must honor the gate
-// the repo declares in .agent/check-map.yml (`required_gate.check_name`) instead
-// of assuming DEFAULT_REQUIRED_GATE. The check-map is deliberately simple YAML,
-// so a scoped regex read keeps repo-template at zero runtime deps (same approach
-// scan-complete already uses for the version/required_gate presence checks).
+// #142 / #184: the close guard and policy scan must honor every gate the repo
+// declares in .agent/check-map.yml (`required_gates[].check_name`, with legacy
+// `required_gate.check_name` compatibility). The check-map is deliberately
+// simple YAML, so a scoped line reader keeps repo-template at zero runtime deps.
 // Drop an unquoted trailing YAML comment (` # ...`). Quote-aware so a `#`
 // inside a quoted gate name survives; a bare `#` with no preceding whitespace
 // is part of the value, matching YAML's comment rule.
@@ -26,38 +25,142 @@ function stripTrailingYamlComment(value) {
   return value;
 }
 
-export function parseRequiredGateCheckName(body) {
-  const text = String(body || '');
-  // Capture only the lines immediately under `required_gate:` so a
-  // `check_name:` beneath some other top-level block never counts as the gate.
-  // The header may carry a trailing YAML comment (`required_gate: # gate`);
-  // anything else after the colon is an inline scalar, not the block shape.
-  // Within the block, indented content, comment-only, and blank lines are all
-  // valid YAML and must not end the capture; the first non-indented content
-  // line (the next top-level key) still does, so a blank line cannot leak the
-  // capture into a different block (check_name there stays out of reach).
-  const block = text.match(
-    /^required_gate:[ \t]*(?:#.*)?\r?\n((?:[ \t]+\S.*\r?\n?|[ \t]*#.*\r?\n?|[ \t]*\r?\n)*)/m
-  );
-  if (!block) return null;
-  const name = block[1].match(/^[ \t]+check_name:[ \t]*(.+?)[ \t]*\r?$/m);
-  if (!name) return null;
-  let value = stripTrailingYamlComment(name[1].trim()).trim();
-  if (
-    (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
-    (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
-  ) {
+function captureTopLevelBlock(text, key) {
+  return text.match(
+    new RegExp(
+      `^${key}:[ \\t]*(?:#.*)?\\r?\\n((?:[ \\t]+\\S.*\\r?\\n?|[ \\t]*#.*\\r?\\n?|[ \\t]*\\r?\\n)*)`,
+      'm',
+    ),
+  )?.[1] ?? null;
+}
+
+function parseCheckNameScalar(rawValue) {
+  let value = stripTrailingYamlComment(String(rawValue || '').trim()).trim();
+  if (!value) return null;
+
+  const first = value[0];
+  const last = value[value.length - 1];
+  if (first === '"' || first === "'") {
+    if (last !== first || value.length < 2) return null;
     value = value.slice(1, -1).trim();
+  } else if (last === '"' || last === "'") {
+    return null;
   }
-  return value || null;
+
+  if (!value || /^(?:null|~|\[\]|\{\})$/i.test(value)) return null;
+  return value;
+}
+
+function parseMappingProperty(content) {
+  const match = /^([A-Za-z_][A-Za-z0-9_-]*):(?:[ \t]*(.*))?$/.exec(content);
+  return match ? { key: match[1], value: match[2] || '' } : null;
+}
+
+function parseLegacyRequiredGate(text) {
+  const block = captureTopLevelBlock(text, 'required_gate');
+  if (block === null) return null;
+
+  const lines = block.split(/\r?\n/);
+  const directLines = lines
+    .map((line) => ({
+      indent: line.match(/^[ \t]*/)?.[0].length || 0,
+      content: line.trimStart(),
+    }))
+    .filter(({ content }) => content && !content.startsWith('#'));
+  if (directLines.length === 0) return null;
+
+  const directIndent = Math.min(...directLines.map(({ indent }) => indent));
+  const names = directLines
+    .filter(({ indent, content }) => indent === directIndent && content.startsWith('check_name:'))
+    .map(({ content }) => parseMappingProperty(content))
+    .filter((property) => property?.key === 'check_name')
+    .map((property) => parseCheckNameScalar(property.value));
+  return names.length === 1 ? names[0] : null;
+}
+
+function parsePluralRequiredGates(text) {
+  const block = captureTopLevelBlock(text, 'required_gates');
+  if (block === null) return [];
+
+  let itemIndent = null;
+  let current = null;
+  const names = [];
+
+  const finishItem = () => {
+    if (!current?.checkName || current.duplicateCheckName) return false;
+    names.push(current.checkName);
+    return true;
+  };
+
+  for (const line of block.split(/\r?\n/)) {
+    const content = line.trimStart();
+    if (!content || content.startsWith('#')) continue;
+
+    const indent = line.length - content.length;
+    const item = /^-([ \t]*)(.*)$/.exec(content);
+    if (item) {
+      if (indent === 0 || (itemIndent !== null && indent !== itemIndent)) return [];
+      if (current && !finishItem()) return [];
+      itemIndent ??= indent;
+      current = { checkName: null, duplicateCheckName: false, propertyIndent: null };
+
+      const separator = item[1];
+      const inline = item[2].trim();
+      if (!inline) continue;
+      if (!separator) return [];
+      if (inline.startsWith('#')) continue;
+      const property = parseMappingProperty(inline);
+      if (!property) return [];
+      current.propertyIndent = itemIndent + 1 + separator.length;
+      if (property.key === 'check_name') {
+        current.checkName = parseCheckNameScalar(property.value);
+        if (!current.checkName) return [];
+      }
+      continue;
+    }
+
+    if (!current || indent <= itemIndent) return [];
+    current.propertyIndent ??= indent;
+    if (indent < current.propertyIndent) return [];
+    if (indent > current.propertyIndent) continue;
+
+    const property = parseMappingProperty(content);
+    if (!property) return [];
+    if (property.key === 'check_name') {
+      if (current.checkName !== null) current.duplicateCheckName = true;
+      current.checkName = parseCheckNameScalar(property.value);
+      if (!current.checkName) return [];
+    }
+  }
+
+  if (!current || !finishItem()) return [];
+  return names;
+}
+
+export function parseRequiredGateCheckNames(body) {
+  const text = String(body || '');
+  // A present plural declaration is authoritative. If it is empty or
+  // malformed, do not fall back to a legacy block and accidentally pass open.
+  if (/^required_gates:/m.test(text)) return parsePluralRequiredGates(text);
+
+  const legacy = parseLegacyRequiredGate(text);
+  return legacy ? [legacy] : [];
+}
+
+export function parseRequiredGateCheckName(body) {
+  return parseRequiredGateCheckNames(body)[0] || null;
+}
+
+export function readRequiredGateCheckNames(root) {
+  try {
+    return parseRequiredGateCheckNames(readFileSync(join(root, '.agent', 'check-map.yml'), 'utf8'));
+  } catch {
+    return [];
+  }
 }
 
 export function readRequiredGateCheckName(root) {
-  try {
-    return parseRequiredGateCheckName(readFileSync(join(root, '.agent', 'check-map.yml'), 'utf8'));
-  } catch {
-    return null;
-  }
+  return readRequiredGateCheckNames(root)[0] || null;
 }
 
 const DOC_EXTENSIONS_RE = /\.(md|txt|png|jpg|jpeg|gif|svg|webp|bmp|ico|avif)$/i;
@@ -140,35 +243,58 @@ export function classifyCloseScanScope({ files = [], labels = [], stack = 'minim
   };
 }
 
-export function evaluateRequiredChecks({ checkRuns = [], requiredCheckName = DEFAULT_REQUIRED_GATE } = {}) {
-  const matched = checkRuns.find((check) => String(check.name || '') === requiredCheckName) || null;
-  if (!matched) {
+export function evaluateRequiredChecks({
+  checkRuns = [],
+  requiredCheckNames,
+  requiredCheckName = DEFAULT_REQUIRED_GATE,
+} = {}) {
+  const names = requiredCheckNames === undefined
+    ? [requiredCheckName]
+    : requiredCheckNames;
+  if (
+    !Array.isArray(names)
+    || names.length === 0
+    || names.some((name) => typeof name !== 'string' || !name.trim())
+  ) {
     return {
       ok: false,
-      failures: [`Required check \`${requiredCheckName}\` is unavailable for the current PR head.`],
+      failures: ['Required check declaration is missing, empty, or malformed.'],
       matched: null,
+      matches: [],
     };
   }
 
-  const status = String(matched.status || matched.state || '').toLowerCase();
-  const conclusion = String(matched.conclusion || '').toLowerCase();
-  const completedStates = new Set(['completed', 'success', 'successful']);
-  if (status && !completedStates.has(status) && !conclusion) {
-    return {
-      ok: false,
-      failures: [`Required check \`${requiredCheckName}\` is not completed yet (status: ${status}).`],
-      matched,
-    };
-  }
-  if (conclusion !== 'success' && status !== 'success' && status !== 'successful') {
-    return {
-      ok: false,
-      failures: [`Required check \`${requiredCheckName}\` is not successful (conclusion: ${conclusion || 'unknown'}).`],
-      matched,
-    };
+  const normalizedNames = names.map((name) => name.trim());
+  const failures = [];
+  const matches = [];
+  const pendingStates = new Set(['queued', 'pending', 'in_progress', 'requested', 'waiting', 'expected']);
+
+  for (const name of normalizedNames) {
+    const matched = checkRuns.find((check) => String(check.name || '') === name) || null;
+    if (!matched) {
+      failures.push(`Required check \`${name}\` is unavailable for the current PR head.`);
+      continue;
+    }
+    matches.push(matched);
+
+    const status = String(matched.status || matched.state || '').toLowerCase();
+    const conclusion = String(matched.conclusion || '').toLowerCase();
+    if (conclusion === 'success' || status === 'success' || status === 'successful') continue;
+    if (pendingStates.has(status) && !conclusion) {
+      failures.push(`Required check \`${name}\` is not completed yet (status: ${status}).`);
+      continue;
+    }
+    failures.push(
+      `Required check \`${name}\` is not successful (conclusion: ${conclusion || status || 'unknown'}).`,
+    );
   }
 
-  return { ok: true, failures: [], matched };
+  return {
+    ok: failures.length === 0,
+    failures,
+    matched: matches[0] || null,
+    matches,
+  };
 }
 
 // #124 S2: the closeout Definition of Done is exactly these four decisions,
