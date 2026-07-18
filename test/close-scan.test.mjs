@@ -239,6 +239,63 @@ test('parseRequiredGateCheckNames preserves legacy singular declarations', () =>
   assert.equal(parseRequiredGateCheckName(legacy), 'legacy / required');
 });
 
+test('parseRequiredGateCheckNames rejects unquoted YAML non-string scalar shapes', () => {
+  for (const value of [
+    '[first, second]',
+    '{first: second}',
+    'null',
+    '~',
+    'true',
+    'FALSE',
+    '42',
+    '-7',
+    '3.14',
+    '1.',
+    '1e3',
+    '0x10',
+    '.inf',
+    '.NaN',
+  ]) {
+    const plural = `required_gates:\n  - check_name: ${value}\n`;
+    const legacy = `required_gate:\n  check_name: ${value}\n`;
+    assert.deepEqual(parseRequiredGateCheckNames(plural), [], `plural: ${value}`);
+    assert.deepEqual(parseRequiredGateCheckNames(legacy), [], `legacy: ${value}`);
+  }
+});
+
+test('parseRequiredGateCheckNames preserves quoted strings that resemble YAML non-strings', () => {
+  const body = [
+    'required_gates:',
+    '  - check_name: "[first, second]"',
+    "  - check_name: '{first: second}'",
+    '  - check_name: "null"',
+    "  - check_name: 'true'",
+    '  - check_name: "42"',
+  ].join('\r\n');
+
+  assert.deepEqual(parseRequiredGateCheckNames(body), [
+    '[first, second]',
+    '{first: second}',
+    'null',
+    'true',
+    '42',
+  ]);
+  assert.deepEqual(
+    parseRequiredGateCheckNames('required_gate:\n  check_name: "[legacy, quoted]"\n'),
+    ['[legacy, quoted]'],
+  );
+});
+
+test('parseRequiredGateCheckNames rejects an over-indented sibling in a plural list item', () => {
+  const body = [
+    'required_gates:',
+    '  - check_name: repo-required-gate / decision',
+    '      workflow: .github/workflows/repo-required-gate.yml',
+  ].join('\n');
+
+  assert.deepEqual(parseRequiredGateCheckNames(body), []);
+});
+
 test('parseRequiredGateCheckNames fails closed for missing, empty, or malformed plural declarations', () => {
   const bodies = [
     'version: 1\ndefaults:\n  check_name: not-a-gate\n',
@@ -336,6 +393,9 @@ test('validatePolicyFiles accepts any declared gate name and rejects a missing o
     for (const malformed of [
       'version: 1\nrequired_gates: []\n',
       'version: 1\nrequired_gates:\n  - workflow: x.yml\n',
+      'version: 1\nrequired_gates:\n  - check_name: [first, second]\n',
+      'version: 1\nrequired_gates:\n  - check_name: {first: second}\n',
+      'version: 1\nrequired_gates:\n  - check_name: valid\n      workflow: x.yml\n',
       'version: 1\nrequired_gate:\n  workflow: x.yml\n',
     ]) {
       writeFileSync(join(root, '.agent', 'check-map.yml'), malformed);

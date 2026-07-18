@@ -43,11 +43,14 @@ function parseCheckNameScalar(rawValue) {
   if (first === '"' || first === "'") {
     if (last !== first || value.length < 2) return null;
     value = value.slice(1, -1).trim();
-  } else if (last === '"' || last === "'") {
-    return null;
+    return value || null;
   }
 
-  if (!value || /^(?:null|~|\[\]|\{\})$/i.test(value)) return null;
+  if (last === '"' || last === "'") return null;
+  const yamlNonString = /^(?:null|~|true|false)$/i.test(value)
+    || /^[\[{]/.test(value)
+    || /^[+-]?(?:(?:0|[1-9][0-9_]*)(?:\.[0-9_]*)?(?:e[+-]?[0-9_]+)?|0o[0-7_]+|0x[0-9a-f_]+|\.[0-9_]+(?:e[+-]?[0-9_]+)?|\.(?:inf|nan))$/i.test(value);
+  if (yamlNonString) return null;
   return value;
 }
 
@@ -122,7 +125,7 @@ function parsePluralRequiredGates(text) {
     if (!current || indent <= itemIndent) return [];
     current.propertyIndent ??= indent;
     if (indent < current.propertyIndent) return [];
-    if (indent > current.propertyIndent) continue;
+    if (indent > current.propertyIndent) return [];
 
     const property = parseMappingProperty(content);
     if (!property) return [];
