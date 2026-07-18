@@ -60,3 +60,37 @@ test('Librarian Wiki and Project Capsules sections are gated behind their featur
   const capsules = section(body, 'Project Capsules');
   assert.match(capsules, /Applies only when the repo adopts project capsules/);
 });
+
+test('coordination policy separates durable repo records from machine transport and runtime state (#185)', async () => {
+  const agents = await readFile(join(ROOT, 'AGENTS.md'), 'utf8');
+  const coordination = section(agents, 'Coordination');
+  const contract = await readFile(join(ROOT, '.agent', 'coordination', 'README.md'), 'utf8');
+
+  for (const body of [coordination, contract]) {
+    assert.match(body, /canonical for durable repository coordination/i);
+    assert.match(body, /machine-global.*transport queues/i);
+    assert.match(body, /ephemeral runtime claims and locks.*machine-local/i);
+    assert.doesNotMatch(body, /Do not read from or write to machine-global coordination boards/i);
+  }
+});
+
+test('document policy activation and plan authority remain capability-aware (#185)', async () => {
+  const agents = await readFile(join(ROOT, 'AGENTS.md'), 'utf8');
+  const docHealth = section(agents, 'Doc Health');
+  const policy = await readFile(join(ROOT, 'docs', 'agent-process', 'document-policy.md'), 'utf8');
+  const plans = await readFile(join(ROOT, 'docs', 'plans', 'README.md'), 'utf8');
+
+  assert.match(docHealth, /Applies only when the repo installs the doc-health feature/i);
+  assert.match(docHealth, /unrelated warnings do not prevent document-policy activation/i);
+
+  assert.match(policy, /ArchonVII\/jma-skills-data/);
+  assert.doesNotMatch(policy, /ArchonVII\/jma-skill-review/);
+  assert.match(policy, /imported charter remains transitional/i);
+  assert.match(policy, /declared prerequisite capabilities are installed/i);
+  assert.match(policy, /targeted policy checks pass/i);
+  assert.match(policy, /Run doc-health as part of that gate only when it is installed/i);
+  assert.match(policy, /unrelated warnings do not prevent activation/i);
+
+  assert.match(plans, /Only plans explicitly marked active or selected by the repo-local status\/index are authoritative/i);
+  assert.match(plans, /Capsule guidance applies only when the repo adopts project capsules/i);
+});

@@ -197,9 +197,9 @@ Renames, copies, and deletes of a ledger still require the normal branch/PR lane
 
 ## Coordination
 
-This repo is coordination-isolated. Do not read from or write to machine-global boards, and
-do not assume sibling repos exist. Use only `.agent/coordination/` for claims, locks,
-handoffs, or active boards. If claim acquisition fails, stop and report the conflict.
+`.agent/coordination/` is canonical for durable repository coordination; do not assume sibling repos exist.
+Machine-global staging and handoffs may be transport queues, and ephemeral runtime claims and locks may remain machine-local.
+Neither is durable repo authority. If claim acquisition fails, stop and report the conflict.
 
 ## Anomaly And Friction Ledgers
 
@@ -269,9 +269,9 @@ placement priority, budgets, and doc-health duties. If a rule needs more than 10
 
 ## Doc Health
 
-Run `node scripts/doc-health/health.mjs --repo <repo> --report <path>` for report-only document-policy drift checks.
-The checker emits findings and issue payloads and never edits docs; findings are warnings except a small blocking subset that fails the PR docs gate.
-Full contract: `docs/agent-process/doc-health.md`.
+**Applies only when the repo installs the doc-health feature.** Without it, skip the runner and use available repo-local targeted checks.
+When installed, run the report-only `node scripts/doc-health/health.mjs --repo <repo> --report <path>`; full contract: `docs/agent-process/doc-health.md`.
+The checker never edits docs. Targeted policy failures block; unrelated warnings do not prevent document-policy activation.
 
 ## CHANGELOG
 
