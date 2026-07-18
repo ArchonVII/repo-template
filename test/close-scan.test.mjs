@@ -146,6 +146,38 @@ test('evaluateRequiredChecks rejects contradictory or ambiguous represented stat
   }
 });
 
+test('evaluateRequiredChecks compares declared check names exactly', () => {
+  const exactName = ' gate ';
+  const exact = evaluateRequiredChecks({
+    requiredCheckNames: [exactName],
+    checkRuns: [{ name: exactName, state: 'SUCCESS' }],
+  });
+  assert.equal(exact.ok, true);
+
+  const trimmedOnly = evaluateRequiredChecks({
+    requiredCheckNames: [exactName],
+    checkRuns: [{ name: 'gate', state: 'SUCCESS' }],
+  });
+  assert.equal(trimmedOnly.ok, false);
+  assert.match(trimmedOnly.failures.join('\n'), /` gate ` is unavailable/);
+});
+
+test('evaluateRequiredChecks rejects duplicate and blank caller-supplied declarations', () => {
+  const duplicate = evaluateRequiredChecks({
+    requiredCheckNames: ['gate', 'gate'],
+    checkRuns: [{ name: 'gate', state: 'SUCCESS' }],
+  });
+  assert.equal(duplicate.ok, false);
+  assert.match(duplicate.failures.join('\n'), /duplicate/i);
+
+  const blank = evaluateRequiredChecks({
+    requiredCheckNames: ['   '],
+    checkRuns: [],
+  });
+  assert.equal(blank.ok, false);
+  assert.match(blank.failures.join('\n'), /malformed/i);
+});
+
 test('evaluateRequiredChecks requires every declared member and reports each failed member', () => {
   const requiredCheckNames = ['repo-required-gate / decision', 'Unity CI / required'];
   const passingRuns = [
@@ -275,6 +307,27 @@ test('parseRequiredGateCheckNames preserves legacy singular declarations', () =>
   const legacy = 'version: 1\nrequired_gate:\n  check_name: legacy / required # stable gate\n';
   assert.deepEqual(parseRequiredGateCheckNames(legacy), ['legacy / required']);
   assert.equal(parseRequiredGateCheckName(legacy), 'legacy / required');
+});
+
+test('parseRequiredGateCheckNames requires YAML separation after mapping colons', () => {
+  for (const body of [
+    'required_gates:\n  - check_name:gate\n',
+    'required_gates:\n  -\n    check_name:gate\n',
+    'required_gate:\n  check_name:gate\n',
+    'required_gates:\n  - check_name: gate\n    workflow:x.yml\n',
+    'required_gate:\n  check_name: gate\n  workflow:x.yml\n',
+  ]) {
+    assert.deepEqual(parseRequiredGateCheckNames(body), [], body);
+  }
+});
+
+test('parseRequiredGateCheckNames rejects duplicate decoded names', () => {
+  for (const body of [
+    'required_gates:\n  - check_name: gate\n  - check_name: gate\n',
+    'required_gates:\n  - check_name: gate\n  - check_name: "gate"\n',
+  ]) {
+    assert.deepEqual(parseRequiredGateCheckNames(body), [], body);
+  }
 });
 
 test('parseRequiredGateCheckNames accepts the supported plain check-name grammar', () => {
@@ -432,6 +485,8 @@ test('parseRequiredGateCheckNames rejects unquoted YAML non-string scalar shapes
     '-01',
     '01.5',
     '01e3',
+    '0b10',
+    '0B1_0',
     '0x10',
     '.inf',
     '.NaN',
@@ -452,6 +507,7 @@ test('parseRequiredGateCheckNames preserves quoted strings that resemble YAML no
     "  - check_name: 'true'",
     '  - check_name: "42"',
     "  - check_name: '01'",
+    '  - check_name: "0b10"',
   ].join('\r\n');
 
   assert.deepEqual(parseRequiredGateCheckNames(body), [
@@ -461,6 +517,7 @@ test('parseRequiredGateCheckNames preserves quoted strings that resemble YAML no
     'true',
     '42',
     '01',
+    '0b10',
   ]);
   assert.deepEqual(
     parseRequiredGateCheckNames('required_gate:\n  check_name: "[legacy, quoted]"\n'),
@@ -469,6 +526,10 @@ test('parseRequiredGateCheckNames preserves quoted strings that resemble YAML no
   assert.deepEqual(
     parseRequiredGateCheckNames('required_gate:\n  check_name: "01"\n'),
     ['01'],
+  );
+  assert.deepEqual(
+    parseRequiredGateCheckNames("required_gate:\n  check_name: '0b10'\n"),
+    ['0b10'],
   );
 });
 
@@ -588,6 +649,9 @@ test('validatePolicyFiles accepts any declared gate name and rejects a missing o
     writeFileSync(join(root, '.agent', 'check-map.yml'), 'version: 1\nrequired_gate:\n  check_name: "01"\n');
     assert.equal(validatePolicyFiles(root).ok, true);
 
+    writeFileSync(join(root, '.agent', 'check-map.yml'), 'version: 1\nrequired_gate:\n  check_name: "0b10"\n');
+    assert.equal(validatePolicyFiles(root).ok, true);
+
     // The repo-template default still passes.
     writeFileSync(
       join(root, '.agent', 'check-map.yml'),
@@ -609,11 +673,16 @@ test('validatePolicyFiles accepts any declared gate name and rejects a missing o
       'version: 1\nrequired_gates:\n  - check_name: {first: second}\n',
       'version: 1\nrequired_gates:\n  - check_name: valid\n      workflow: x.yml\n',
       'version: 1\nrequired_gates:\n  - check_name: 01\n',
+      'version: 1\nrequired_gates:\n  - check_name: 0b10\n',
+      'version: 1\nrequired_gates:\n  - check_name:gate\n',
+      'version: 1\nrequired_gates:\n  - check_name: gate\n  - check_name: gate\n',
       'version: 1\nrequired_gates:\n  - check_name: gate: broken\n',
       'version: 1\nrequired_gates:\n  - check_name: *gate\n',
       'version: 1\nrequired_gates:\n\t- check_name: valid\n',
       'version: 1\nrequired_gates:\n  - check_name: valid\nrequired_gates:\n  - check_name: |\n',
       'version: 1\nrequired_gate:\n  check_name: 01\n',
+      'version: 1\nrequired_gate:\n  check_name: 0b10\n',
+      'version: 1\nrequired_gate:\n  check_name:gate\n',
       'version: 1\nrequired_gate:\n  check_name: valid\n    broken: value\n',
       'version: 1\nrequired_gate:\n  workflow: x.yml\n',
     ]) {

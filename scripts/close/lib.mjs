@@ -13,7 +13,7 @@ export const DEFAULT_MARKER_PATH = '.agent/close-scan/complete.json';
 // use YAML's `''` escape, while double quotes support only `\"` and `\\`.
 // Unsupported YAML syntax fails closed instead of being misread as a name.
 const YAML_NON_STRING_SCALAR = /^(?:null|~|true|false)$/i;
-const YAML_NUMBER_SCALAR = /^[+-]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?(?:e[+-]?[0-9_]+)?|0o[0-7_]+|0x[0-9a-f_]+|\.[0-9_]+(?:e[+-]?[0-9_]+)?|\.(?:inf|nan))$/i;
+const YAML_NUMBER_SCALAR = /^[+-]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?(?:e[+-]?[0-9_]+)?|0b[01_]+|0o[0-7_]+|0x[0-9a-f_]+|\.[0-9_]+(?:e[+-]?[0-9_]+)?|\.(?:inf|nan))$/i;
 const YAML_PLAIN_CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 const YAML_PLAIN_FORBIDDEN_LEADING = /^(?:[-?:](?:\s|$)|[\[\]{},#&*!|>'"%@`])/u;
 function stripTrailingYamlComment(value) {
@@ -92,9 +92,8 @@ function parseCheckNameScalar(rawValue) {
 }
 
 function parseMappingProperty(content) {
-  const match = /^([A-Za-z_][A-Za-z0-9_-]*):(.*)$/.exec(content);
-  if (!match || /^ *\t/.test(match[2])) return null;
-  return { key: match[1], value: match[2].replace(/^ +/, '') };
+  const match = /^([A-Za-z_][A-Za-z0-9_-]*):(?:$| +(.*))$/.exec(content);
+  return match ? { key: match[1], value: match[2] ?? '' } : null;
 }
 
 function parseLegacyRequiredGate(block) {
@@ -132,9 +131,11 @@ function parsePluralRequiredGates(block) {
   let itemIndent = null;
   let current = null;
   const names = [];
+  const seenNames = new Set();
 
   const finishItem = () => {
-    if (!current?.checkName) return false;
+    if (!current?.checkName || seenNames.has(current.checkName)) return false;
+    seenNames.add(current.checkName);
     names.push(current.checkName);
     return true;
   };
@@ -321,13 +322,21 @@ export function evaluateRequiredChecks({
     };
   }
 
-  const normalizedNames = names.map((name) => name.trim());
+  if (new Set(names).size !== names.length) {
+    return {
+      ok: false,
+      failures: ['Required check declaration contains duplicate check names.'],
+      matched: null,
+      matches: [],
+    };
+  }
+
   const failures = [];
   const matches = [];
   const pendingStates = new Set(['queued', 'pending', 'in_progress', 'requested', 'waiting', 'expected']);
   const successfulStates = new Set(['success', 'successful']);
 
-  for (const name of normalizedNames) {
+  for (const name of names) {
     const matched = checkRuns.find((check) => String(check.name || '') === name) || null;
     if (!matched) {
       failures.push(`Required check \`${name}\` is unavailable for the current PR head.`);
