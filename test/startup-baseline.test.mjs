@@ -10,11 +10,12 @@ const ROOT = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
 
 test('startup baseline contract names canonical startup files and legacy plan path', async () => {
   const baseline = JSON.parse(await readFile(join(ROOT, '.agent', 'startup-baseline.json'), 'utf8'));
-  assert.equal(baseline.version, '2026-07-04-s3-fragment-retirement');
+  assert.equal(baseline.version, '2026-07-18-message-protocol');
   for (const path of [
     'AGENTS.md',
     'docs/plans/README.md',
     'docs/agent-process/document-policy.md',
+    'docs/agent-process/message-protocol.md',
     'docs/agent-process/doc-health.md',
     '.agent/check-map.yml',
     '.agent/coordination/README.md',
