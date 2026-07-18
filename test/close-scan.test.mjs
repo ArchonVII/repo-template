@@ -252,6 +252,12 @@ test('parseRequiredGateCheckNames rejects unquoted YAML non-string scalar shapes
     '3.14',
     '1.',
     '1e3',
+    '01',
+    '00',
+    '+01',
+    '-01',
+    '01.5',
+    '01e3',
     '0x10',
     '.inf',
     '.NaN',
@@ -271,6 +277,7 @@ test('parseRequiredGateCheckNames preserves quoted strings that resemble YAML no
     '  - check_name: "null"',
     "  - check_name: 'true'",
     '  - check_name: "42"',
+    "  - check_name: '01'",
   ].join('\r\n');
 
   assert.deepEqual(parseRequiredGateCheckNames(body), [
@@ -279,11 +286,29 @@ test('parseRequiredGateCheckNames preserves quoted strings that resemble YAML no
     'null',
     'true',
     '42',
+    '01',
   ]);
   assert.deepEqual(
     parseRequiredGateCheckNames('required_gate:\n  check_name: "[legacy, quoted]"\n'),
     ['[legacy, quoted]'],
   );
+  assert.deepEqual(
+    parseRequiredGateCheckNames('required_gate:\n  check_name: "01"\n'),
+    ['01'],
+  );
+});
+
+test('parseRequiredGateCheckNames preserves plain names that merely contain digits', () => {
+  for (const value of [
+    'build-01 / required',
+    '01-build / required',
+    'gate 01 / required',
+    'v1.2 / required',
+    '123 / required',
+  ]) {
+    const body = `required_gates:\n  - check_name: ${value}\n`;
+    assert.deepEqual(parseRequiredGateCheckNames(body), [value], value);
+  }
 });
 
 test('parseRequiredGateCheckNames rejects an over-indented sibling in a plural list item', () => {
@@ -294,6 +319,16 @@ test('parseRequiredGateCheckNames rejects an over-indented sibling in a plural l
   ].join('\n');
 
   assert.deepEqual(parseRequiredGateCheckNames(body), []);
+});
+
+test('parseRequiredGateCheckNames rejects nested or unexpected content in a legacy mapping', () => {
+  for (const body of [
+    'required_gate:\n  check_name: valid\n    broken: value\n',
+    'required_gate:\n  check_name: valid\n    workflow: .github/workflows/over-indented.yml\n',
+    'required_gate:\n  check_name: valid\n  not-a-mapping-line\n',
+  ]) {
+    assert.deepEqual(parseRequiredGateCheckNames(body), [], body);
+  }
 });
 
 test('parseRequiredGateCheckNames fails closed for missing, empty, or malformed plural declarations', () => {
@@ -376,6 +411,9 @@ test('validatePolicyFiles accepts any declared gate name and rejects a missing o
     writeFileSync(join(root, '.agent', 'check-map.yml'), 'version: 1\nrequired_gate:\n  check_name: ci-success\n');
     assert.equal(validatePolicyFiles(root).ok, true);
 
+    writeFileSync(join(root, '.agent', 'check-map.yml'), 'version: 1\nrequired_gate:\n  check_name: "01"\n');
+    assert.equal(validatePolicyFiles(root).ok, true);
+
     // The repo-template default still passes.
     writeFileSync(
       join(root, '.agent', 'check-map.yml'),
@@ -396,6 +434,9 @@ test('validatePolicyFiles accepts any declared gate name and rejects a missing o
       'version: 1\nrequired_gates:\n  - check_name: [first, second]\n',
       'version: 1\nrequired_gates:\n  - check_name: {first: second}\n',
       'version: 1\nrequired_gates:\n  - check_name: valid\n      workflow: x.yml\n',
+      'version: 1\nrequired_gates:\n  - check_name: 01\n',
+      'version: 1\nrequired_gate:\n  check_name: 01\n',
+      'version: 1\nrequired_gate:\n  check_name: valid\n    broken: value\n',
       'version: 1\nrequired_gate:\n  workflow: x.yml\n',
     ]) {
       writeFileSync(join(root, '.agent', 'check-map.yml'), malformed);

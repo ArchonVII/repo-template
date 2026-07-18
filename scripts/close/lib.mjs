@@ -49,7 +49,7 @@ function parseCheckNameScalar(rawValue) {
   if (last === '"' || last === "'") return null;
   const yamlNonString = /^(?:null|~|true|false)$/i.test(value)
     || /^[\[{]/.test(value)
-    || /^[+-]?(?:(?:0|[1-9][0-9_]*)(?:\.[0-9_]*)?(?:e[+-]?[0-9_]+)?|0o[0-7_]+|0x[0-9a-f_]+|\.[0-9_]+(?:e[+-]?[0-9_]+)?|\.(?:inf|nan))$/i.test(value);
+    || /^[+-]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?(?:e[+-]?[0-9_]+)?|0o[0-7_]+|0x[0-9a-f_]+|\.[0-9_]+(?:e[+-]?[0-9_]+)?|\.(?:inf|nan))$/i.test(value);
   if (yamlNonString) return null;
   return value;
 }
@@ -73,10 +73,11 @@ function parseLegacyRequiredGate(text) {
   if (directLines.length === 0) return null;
 
   const directIndent = Math.min(...directLines.map(({ indent }) => indent));
-  const names = directLines
-    .filter(({ indent, content }) => indent === directIndent && content.startsWith('check_name:'))
-    .map(({ content }) => parseMappingProperty(content))
-    .filter((property) => property?.key === 'check_name')
+  if (directLines.some(({ indent }) => indent !== directIndent)) return null;
+  const properties = directLines.map(({ content }) => parseMappingProperty(content));
+  if (properties.some((property) => property === null)) return null;
+  const names = properties
+    .filter((property) => property.key === 'check_name')
     .map((property) => parseCheckNameScalar(property.value));
   return names.length === 1 ? names[0] : null;
 }
