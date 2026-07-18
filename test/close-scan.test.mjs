@@ -108,6 +108,44 @@ test('evaluateRequiredChecks fails closed when the required gate is unavailable 
   assert.match(pending.failures[0], /not completed/i);
 });
 
+test('evaluateRequiredChecks rejects contradictory or ambiguous represented states', () => {
+  const contradictory = [
+    [
+      'failed state with successful conclusion',
+      { state: 'FAILURE', conclusion: 'success' },
+      /not successful/i,
+    ],
+    [
+      'successful state with failed conclusion',
+      { state: 'SUCCESS', conclusion: 'failure' },
+      /not successful/i,
+    ],
+    [
+      'pending state with successful conclusion',
+      { state: 'PENDING', conclusion: 'success' },
+      /not completed/i,
+    ],
+    [
+      'completed status with failed state and successful conclusion',
+      { status: 'completed', state: 'FAILURE', conclusion: 'success' },
+      /not successful/i,
+    ],
+    [
+      'unknown state with successful conclusion',
+      { state: 'MYSTERY', conclusion: 'success' },
+      /not successful/i,
+    ],
+  ];
+
+  for (const [label, fields, expected] of contradictory) {
+    const result = evaluateRequiredChecks({
+      checkRuns: [{ name: 'repo-required-gate / decision', ...fields }],
+    });
+    assert.equal(result.ok, false, label);
+    assert.match(result.failures.join('\n'), expected, label);
+  }
+});
+
 test('evaluateRequiredChecks requires every declared member and reports each failed member', () => {
   const requiredCheckNames = ['repo-required-gate / decision', 'Unity CI / required'];
   const passingRuns = [
@@ -246,6 +284,16 @@ test('parseRequiredGateCheckNames accepts the supported plain check-name grammar
     'gate#1',
     'release:linux',
     'C++ / test',
+    'node@20',
+    'gate, suffix',
+    'gate]suffix',
+    'gate{segment',
+    'ci*gate',
+    "team's / gate",
+    '6" screen / gate',
+    '-prefixed',
+    '?query',
+    ':namespace',
   ];
 
   for (const value of values) {
@@ -282,6 +330,8 @@ test('parseRequiredGateCheckNames rejects unsupported plain YAML scalar syntax',
     ['directives indicator', '%gate'],
     ['reserved at indicator', '@gate'],
     ['reserved backtick indicator', '`gate'],
+    ['terminal mapping colon', 'gate:'],
+    ['control character', 'gate\u0007suffix'],
   ];
 
   for (const [label, value] of unsupported) {

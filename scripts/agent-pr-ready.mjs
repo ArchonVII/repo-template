@@ -77,7 +77,7 @@ export function runAgentPrReady(argv, {
 
   const payload = {
     ok: result.ok,
-    ready: false,
+    ready: !pr.isDraft,
     dryRun: Boolean(args['dry-run']),
     pr: {
       number: pr.number,
@@ -115,7 +115,6 @@ export function runAgentPrReady(argv, {
   payload.ciGuard = { ok: guard.ok };
   if (!guard.ok) {
     payload.ok = false;
-    payload.ready = false;
     if (args.json) {
       writeStdout(`${JSON.stringify(payload, null, 2)}\n`);
     } else {
@@ -129,8 +128,10 @@ export function runAgentPrReady(argv, {
   if (args['dry-run']) {
     if (args.json) {
       writeStdout(`${JSON.stringify(payload, null, 2)}\n`);
-    } else {
+    } else if (pr.isDraft) {
       writeStdout(`${format(result)}\nDry run: close CI guard passed for the current HEAD; would promote PR #${pr.number}.\n`);
+    } else {
+      writeStdout(`${format(result)}\nDry run: close CI guard passed for the current HEAD; PR #${pr.number} is already ready for review.\n`);
     }
     return 0;
   }

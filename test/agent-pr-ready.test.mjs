@@ -103,6 +103,58 @@ function validDraftPr() {
   };
 }
 
+function validReadyPr() {
+  return { ...validDraftPr(), isDraft: false };
+}
+
+test('agent-pr-ready JSON reports an already-ready PR as ready without side effects', () => {
+  let guardCalls = 0;
+  let promotionCalls = 0;
+  let stdout = '';
+
+  const exitCode = runAgentPrReady(
+    ['--repo', 'ArchonVII/repo-template', '--pr', '184', '--json'],
+    {
+      loadPr: () => validReadyPr(),
+      runGuard: () => { guardCalls += 1; return { ok: true, output: '' }; },
+      promote: () => { promotionCalls += 1; },
+      writeStdout: (value) => { stdout += value; },
+      writeStderr: (value) => assert.fail(`unexpected stderr: ${value}`),
+    },
+  );
+
+  const payload = JSON.parse(stdout);
+  assert.equal(exitCode, 0);
+  assert.equal(guardCalls, 0);
+  assert.equal(promotionCalls, 0);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.ready, true);
+  assert.equal(payload.pr.isDraft, false);
+});
+
+test('agent-pr-ready dry-run guards an already-ready PR and reports a no-op', () => {
+  let guardCalls = 0;
+  let promotionCalls = 0;
+  let stdout = '';
+
+  const exitCode = runAgentPrReady(
+    ['--repo', 'ArchonVII/repo-template', '--pr', '184', '--dry-run'],
+    {
+      loadPr: () => validReadyPr(),
+      runGuard: () => { guardCalls += 1; return { ok: true, output: 'Close CI guard passed.\n' }; },
+      promote: () => { promotionCalls += 1; },
+      writeStdout: (value) => { stdout += value; },
+      writeStderr: (value) => assert.fail(`unexpected stderr: ${value}`),
+    },
+  );
+
+  assert.equal(exitCode, 0);
+  assert.equal(guardCalls, 1);
+  assert.equal(promotionCalls, 0);
+  assert.match(stdout, /already ready for review/i);
+  assert.doesNotMatch(stdout, /would promote/i);
+});
+
 test('agent-pr-ready dry-run evaluates the close CI guard and never promotes', () => {
   let guardCalls = 0;
   let promotionCalls = 0;

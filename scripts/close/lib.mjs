@@ -7,26 +7,18 @@ export const DEFAULT_MARKER_PATH = '.agent/close-scan/complete.json';
 // #142 / #184: honor every gate declared by the intentionally small supported
 // subset of .agent/check-map.yml without adding a runtime YAML dependency. A
 // relevant declaration is one spaces-indented sequence/mapping whose values
-// are single-line strings. Plain strings allow common GitHub check-name
-// characters (letters, digits, spaces, / - _ . ( ) # + and unambiguous `:`).
+// are single-line strings. Plain strings allow printable characters except
+// where YAML gives an indicator structural meaning at the start or after `:`.
 // More expressive YAML remains available by quoting the scalar: single quotes
 // use YAML's `''` escape, while double quotes support only `\"` and `\\`.
 // Unsupported YAML syntax fails closed instead of being misread as a name.
 const YAML_NON_STRING_SCALAR = /^(?:null|~|true|false)$/i;
 const YAML_NUMBER_SCALAR = /^[+-]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?(?:e[+-]?[0-9_]+)?|0o[0-7_]+|0x[0-9a-f_]+|\.[0-9_]+(?:e[+-]?[0-9_]+)?|\.(?:inf|nan))$/i;
-const SAFE_PLAIN_CHECK_NAME = /^[A-Za-z0-9 /_.()#+:-]+$/;
+const YAML_PLAIN_CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+const YAML_PLAIN_FORBIDDEN_LEADING = /^(?:[-?:](?:\s|$)|[\[\]{},#&*!|>'"%@`])/u;
 function stripTrailingYamlComment(value) {
-  let inSingle = false;
-  let inDouble = false;
-  for (let i = 0; i < value.length; i += 1) {
-    const ch = value[i];
-    if (ch === "'" && !inDouble) inSingle = !inSingle;
-    else if (ch === '"' && !inSingle) inDouble = !inDouble;
-    else if (ch === '#' && !inSingle && !inDouble && /\s/.test(value[i - 1] || ' ')) {
-      return value.slice(0, i).trimEnd();
-    }
-  }
-  return value;
+  const commentIndex = value.search(/ +#/);
+  return commentIndex === -1 ? value : value.slice(0, commentIndex).trimEnd();
 }
 
 function parseQuotedScalar(value, quote) {
@@ -87,7 +79,7 @@ function captureTopLevelBlock(text, key) {
 
 function parseCheckNameScalar(rawValue) {
   const raw = String(rawValue ?? '');
-  if (raw.includes('\t')) return null;
+  if (YAML_PLAIN_CONTROL.test(raw)) return null;
   const source = raw.trim();
   if (!source) return null;
   if (source[0] === "'" || source[0] === '"') return parseQuotedScalar(source, source[0]);
@@ -95,8 +87,7 @@ function parseCheckNameScalar(rawValue) {
   const value = stripTrailingYamlComment(source).trim();
   if (!value || value.startsWith('#')) return null;
   if (YAML_NON_STRING_SCALAR.test(value) || YAML_NUMBER_SCALAR.test(value)) return null;
-  if (!SAFE_PLAIN_CHECK_NAME.test(value)) return null;
-  if (/^-(?: |$)/.test(value) || /:(?: |$)/.test(value)) return null;
+  if (YAML_PLAIN_FORBIDDEN_LEADING.test(value) || /:(?:\s|$)/.test(value)) return null;
   return value;
 }
 
@@ -334,6 +325,7 @@ export function evaluateRequiredChecks({
   const failures = [];
   const matches = [];
   const pendingStates = new Set(['queued', 'pending', 'in_progress', 'requested', 'waiting', 'expected']);
+  const successfulStates = new Set(['success', 'successful']);
 
   for (const name of normalizedNames) {
     const matched = checkRuns.find((check) => String(check.name || '') === name) || null;
@@ -343,15 +335,24 @@ export function evaluateRequiredChecks({
     }
     matches.push(matched);
 
-    const status = String(matched.status || matched.state || '').toLowerCase();
-    const conclusion = String(matched.conclusion || '').toLowerCase();
-    if (conclusion === 'success' || status === 'success' || status === 'successful') continue;
-    if (pendingStates.has(status) && !conclusion) {
-      failures.push(`Required check \`${name}\` is not completed yet (status: ${status}).`);
+    const represented = [
+      ['status', matched.status],
+      ['state', matched.state],
+      ['conclusion', matched.conclusion],
+    ]
+      .map(([field, value]) => [field, String(value ?? '').toLowerCase()])
+      .filter(([, value]) => value);
+    const pending = represented.find(([, value]) => pendingStates.has(value));
+    if (pending) {
+      failures.push(`Required check \`${name}\` is not completed yet (${pending[0]}: ${pending[1]}).`);
       continue;
     }
+    const contradictory = represented.find(([field, value]) => (
+      !successfulStates.has(value) && !(field === 'status' && value === 'completed')
+    ));
+    if (!contradictory && represented.some(([, value]) => successfulStates.has(value))) continue;
     failures.push(
-      `Required check \`${name}\` is not successful (conclusion: ${conclusion || status || 'unknown'}).`,
+      `Required check \`${name}\` is not successful (${contradictory?.[0] || 'state'}: ${contradictory?.[1] || 'unknown'}).`,
     );
   }
 
