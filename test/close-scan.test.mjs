@@ -15,8 +15,10 @@ import {
   isSubstantiveDecision,
   matchDocMapTriggers,
   parseRequiredGateCheckName,
+  parseRequiredGateCheckNames,
   readDodCapture,
   readRequiredGateCheckName,
+  readRequiredGateCheckNames,
   writeDodSection,
 } from '../scripts/close/lib.mjs';
 import {
@@ -85,9 +87,12 @@ test('RELEASE_CHANGELOG_DECISION is substantive so the marker changelog section 
 });
 
 test('evaluateRequiredChecks fails closed when the required gate is unavailable or not green', () => {
-  assert.deepEqual(evaluateRequiredChecks({
+  const passing = evaluateRequiredChecks({
     checkRuns: [{ name: 'repo-required-gate / decision', status: 'completed', conclusion: 'success' }],
-  }), { ok: true, failures: [], matched: { name: 'repo-required-gate / decision', status: 'completed', conclusion: 'success' } });
+  });
+  assert.equal(passing.ok, true);
+  assert.deepEqual(passing.failures, []);
+  assert.equal(passing.matched.name, 'repo-required-gate / decision');
 
   assert.equal(evaluateRequiredChecks({
     checkRuns: [{ name: 'repo-required-gate / decision', state: 'SUCCESS', conclusion: 'success' }],
@@ -101,6 +106,111 @@ test('evaluateRequiredChecks fails closed when the required gate is unavailable 
   });
   assert.equal(pending.ok, false);
   assert.match(pending.failures[0], /not completed/i);
+});
+
+test('evaluateRequiredChecks rejects contradictory or ambiguous represented states', () => {
+  const contradictory = [
+    [
+      'failed state with successful conclusion',
+      { state: 'FAILURE', conclusion: 'success' },
+      /not successful/i,
+    ],
+    [
+      'successful state with failed conclusion',
+      { state: 'SUCCESS', conclusion: 'failure' },
+      /not successful/i,
+    ],
+    [
+      'pending state with successful conclusion',
+      { state: 'PENDING', conclusion: 'success' },
+      /not completed/i,
+    ],
+    [
+      'completed status with failed state and successful conclusion',
+      { status: 'completed', state: 'FAILURE', conclusion: 'success' },
+      /not successful/i,
+    ],
+    [
+      'unknown state with successful conclusion',
+      { state: 'MYSTERY', conclusion: 'success' },
+      /not successful/i,
+    ],
+  ];
+
+  for (const [label, fields, expected] of contradictory) {
+    const result = evaluateRequiredChecks({
+      checkRuns: [{ name: 'repo-required-gate / decision', ...fields }],
+    });
+    assert.equal(result.ok, false, label);
+    assert.match(result.failures.join('\n'), expected, label);
+  }
+});
+
+test('evaluateRequiredChecks compares declared check names exactly', () => {
+  const exactName = ' gate ';
+  const exact = evaluateRequiredChecks({
+    requiredCheckNames: [exactName],
+    checkRuns: [{ name: exactName, state: 'SUCCESS' }],
+  });
+  assert.equal(exact.ok, true);
+
+  const trimmedOnly = evaluateRequiredChecks({
+    requiredCheckNames: [exactName],
+    checkRuns: [{ name: 'gate', state: 'SUCCESS' }],
+  });
+  assert.equal(trimmedOnly.ok, false);
+  assert.match(trimmedOnly.failures.join('\n'), /` gate ` is unavailable/);
+});
+
+test('evaluateRequiredChecks rejects duplicate and blank caller-supplied declarations', () => {
+  const duplicate = evaluateRequiredChecks({
+    requiredCheckNames: ['gate', 'gate'],
+    checkRuns: [{ name: 'gate', state: 'SUCCESS' }],
+  });
+  assert.equal(duplicate.ok, false);
+  assert.match(duplicate.failures.join('\n'), /duplicate/i);
+
+  const blank = evaluateRequiredChecks({
+    requiredCheckNames: ['   '],
+    checkRuns: [],
+  });
+  assert.equal(blank.ok, false);
+  assert.match(blank.failures.join('\n'), /malformed/i);
+});
+
+test('evaluateRequiredChecks requires every declared member and reports each failed member', () => {
+  const requiredCheckNames = ['repo-required-gate / decision', 'Unity CI / required'];
+  const passingRuns = [
+    { name: 'repo-required-gate / decision', state: 'SUCCESS' },
+    { name: 'Unity CI / required', status: 'completed', conclusion: 'success' },
+  ];
+
+  const passing = evaluateRequiredChecks({ checkRuns: passingRuns, requiredCheckNames });
+  assert.equal(passing.ok, true);
+  assert.deepEqual(passing.matches.map((check) => check.name), requiredCheckNames);
+
+  for (const [label, secondRun, expected] of [
+    ['missing', null, /unavailable/i],
+    ['queued', { name: 'Unity CI / required', state: 'QUEUED' }, /not completed/i],
+    ['pending', { name: 'Unity CI / required', state: 'PENDING' }, /not completed/i],
+    ['cancelled', { name: 'Unity CI / required', state: 'CANCELLED' }, /not successful/i],
+    ['failed', { name: 'Unity CI / required', state: 'FAILURE' }, /not successful/i],
+  ]) {
+    const result = evaluateRequiredChecks({
+      checkRuns: [passingRuns[0], ...(secondRun ? [secondRun] : [])],
+      requiredCheckNames,
+    });
+    assert.equal(result.ok, false, `${label} member must fail the aggregate`);
+    assert.match(result.failures.join('\n'), /Unity CI \/ required/);
+    assert.match(result.failures.join('\n'), expected);
+  }
+
+  const malformedDeclaration = evaluateRequiredChecks({
+    checkRuns: passingRuns,
+    requiredCheckNames: [],
+  });
+  assert.equal(malformedDeclaration.ok, false);
+  assert.match(malformedDeclaration.failures.join('\n'), /declaration/i);
 });
 
 // #142 (archon-setup#302): the guard and policy scan must honor the gate the
@@ -173,6 +283,309 @@ test('parseRequiredGateCheckName reads the declared gate out of a check-map body
   );
 });
 
+test('parseRequiredGateCheckNames reads an ordered plural declaration with YAML-compatible values', () => {
+  const body = [
+    'version: 1',
+    'required_gates: # stable aggregate checks',
+    '  - check_name: "repo-required-gate / decision" # node aggregate',
+    '    workflow: .github/workflows/repo-required-gate.yml',
+    '  # a second required aggregate',
+    "  - check_name: 'Unity CI / required'",
+    '    workflow: .github/workflows/unity-ci.yml',
+    'defaults:',
+    '  stack: node',
+  ].join('\r\n');
+
+  assert.deepEqual(parseRequiredGateCheckNames(body), [
+    'repo-required-gate / decision',
+    'Unity CI / required',
+  ]);
+  assert.equal(parseRequiredGateCheckName(body), 'repo-required-gate / decision');
+});
+
+test('parseRequiredGateCheckNames preserves legacy singular declarations', () => {
+  const legacy = 'version: 1\nrequired_gate:\n  check_name: legacy / required # stable gate\n';
+  assert.deepEqual(parseRequiredGateCheckNames(legacy), ['legacy / required']);
+  assert.equal(parseRequiredGateCheckName(legacy), 'legacy / required');
+});
+
+test('parseRequiredGateCheckNames requires YAML separation after mapping colons', () => {
+  for (const body of [
+    'required_gates:\n  - check_name:gate\n',
+    'required_gates:\n  -\n    check_name:gate\n',
+    'required_gate:\n  check_name:gate\n',
+    'required_gates:\n  - check_name: gate\n    workflow:x.yml\n',
+    'required_gate:\n  check_name: gate\n  workflow:x.yml\n',
+  ]) {
+    assert.deepEqual(parseRequiredGateCheckNames(body), [], body);
+  }
+});
+
+test('parseRequiredGateCheckNames rejects duplicate decoded names', () => {
+  for (const body of [
+    'required_gates:\n  - check_name: gate\n  - check_name: gate\n',
+    'required_gates:\n  - check_name: gate\n  - check_name: "gate"\n',
+  ]) {
+    assert.deepEqual(parseRequiredGateCheckNames(body), [], body);
+  }
+});
+
+test('parseRequiredGateCheckNames accepts the supported plain check-name grammar', () => {
+  const values = [
+    'repo-required-gate / decision',
+    'build_01.test (linux)',
+    'gate#1',
+    'release:linux',
+    'C++ / test',
+    'node@20',
+    'gate, suffix',
+    'gate]suffix',
+    'gate{segment',
+    'ci*gate',
+    "team's / gate",
+    '6" screen / gate',
+    '-prefixed',
+    '?query',
+    ':namespace',
+  ];
+
+  for (const value of values) {
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gates:\n  - check_name: ${value} # trailing comment\n`),
+      [value],
+      `plural: ${value}`,
+    );
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gate:\n  check_name: ${value} # trailing comment\n`),
+      [value],
+      `legacy: ${value}`,
+    );
+  }
+});
+
+test('parseRequiredGateCheckNames rejects unsupported plain YAML scalar syntax', () => {
+  const unsupported = [
+    ['colon-space', 'gate: broken'],
+    ['sequence indicator', '- gate'],
+    ['mapping-key indicator', '? gate'],
+    ['mapping-value indicator', ': gate'],
+    ['comment indicator', '# gate'],
+    ['flow-sequence open', '[gate'],
+    ['flow-sequence close', ']gate'],
+    ['flow-mapping open', '{gate'],
+    ['flow-mapping close', '}gate'],
+    ['flow separator', ',gate'],
+    ['alias', '*gate'],
+    ['anchor', '&gate'],
+    ['tag', '!gate'],
+    ['literal block scalar', '|'],
+    ['folded block scalar', '>'],
+    ['directives indicator', '%gate'],
+    ['reserved at indicator', '@gate'],
+    ['reserved backtick indicator', '`gate'],
+    ['terminal mapping colon', 'gate:'],
+    ['control character', 'gate\u0007suffix'],
+  ];
+
+  for (const [label, value] of unsupported) {
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gates:\n  - check_name: ${value}\n`),
+      [],
+      `plural ${label}: ${value}`,
+    );
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gate:\n  check_name: ${value}\n`),
+      [],
+      `legacy ${label}: ${value}`,
+    );
+  }
+});
+
+test('parseRequiredGateCheckNames decodes the supported quoted scalar subset', () => {
+  const supported = [
+    ['single-quote doubling', "'team''s / gate'", "team's / gate"],
+    ['double-quoted quote escape', '"team \\"quoted\\" / gate"', 'team "quoted" / gate'],
+    ['double-quoted backslash escape', '"windows \\\\ gate"', 'windows \\ gate'],
+    ['quoted collection lookalike', "'[one, two]'", '[one, two]'],
+    ['quoted numeric lookalike', '"01"', '01'],
+  ];
+
+  for (const [label, value, expected] of supported) {
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gates:\n  - check_name: ${value} # comment\n`),
+      [expected],
+      `plural ${label}`,
+    );
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gate:\n  check_name: ${value} # comment\n`),
+      [expected],
+      `legacy ${label}`,
+    );
+  }
+
+  for (const value of [
+    "'team's / gate'",
+    '"line\\nbreak"',
+    '"unicode \\u0041"',
+    '"unknown \\q escape"',
+  ]) {
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gates:\n  - check_name: ${value}\n`),
+      [],
+      `unsupported plural quoted scalar: ${value}`,
+    );
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gate:\n  check_name: ${value}\n`),
+      [],
+      `unsupported legacy quoted scalar: ${value}`,
+    );
+  }
+});
+
+test('parseRequiredGateCheckNames rejects tab indentation and duplicate schema blocks', () => {
+  const malformed = [
+    ['tab-indented plural item', 'required_gates:\n\t- check_name: valid\n'],
+    ['space-tab-indented plural item', 'required_gates:\n  \t- check_name: valid\n'],
+    ['tab-separated plural property', 'required_gates:\n  - \tcheck_name: valid\n'],
+    ['tab-indented legacy property', 'required_gate:\n\tcheck_name: valid\n'],
+    ['duplicate plural blocks', 'required_gates:\n  - check_name: first\nrequired_gates:\n  - check_name: second\n'],
+    ['valid then malformed duplicate plural block', 'required_gates:\n  - check_name: valid\nrequired_gates:\n  - check_name: |\n'],
+    ['duplicate legacy blocks', 'required_gate:\n  check_name: first\nrequired_gate:\n  check_name: second\n'],
+    ['duplicate legacy blocks beside plural', 'required_gates:\n  - check_name: plural\nrequired_gate:\n  check_name: first\nrequired_gate:\n  check_name: second\n'],
+  ];
+
+  for (const [label, body] of malformed) {
+    assert.deepEqual(parseRequiredGateCheckNames(body), [], label);
+  }
+
+  assert.deepEqual(parseRequiredGateCheckNames([
+    'required_gate:',
+    '  check_name: legacy',
+    'required_gates:',
+    '  - check_name: plural',
+  ].join('\n')), ['plural']);
+});
+
+test('parseRequiredGateCheckNames rejects unquoted YAML non-string scalar shapes', () => {
+  for (const value of [
+    '[first, second]',
+    '{first: second}',
+    'null',
+    '~',
+    'true',
+    'FALSE',
+    '42',
+    '-7',
+    '3.14',
+    '1.',
+    '1e3',
+    '01',
+    '00',
+    '+01',
+    '-01',
+    '01.5',
+    '01e3',
+    '0b10',
+    '0B1_0',
+    '0x10',
+    '.inf',
+    '.NaN',
+  ]) {
+    const plural = `required_gates:\n  - check_name: ${value}\n`;
+    const legacy = `required_gate:\n  check_name: ${value}\n`;
+    assert.deepEqual(parseRequiredGateCheckNames(plural), [], `plural: ${value}`);
+    assert.deepEqual(parseRequiredGateCheckNames(legacy), [], `legacy: ${value}`);
+  }
+});
+
+test('parseRequiredGateCheckNames preserves quoted strings that resemble YAML non-strings', () => {
+  const body = [
+    'required_gates:',
+    '  - check_name: "[first, second]"',
+    "  - check_name: '{first: second}'",
+    '  - check_name: "null"',
+    "  - check_name: 'true'",
+    '  - check_name: "42"',
+    "  - check_name: '01'",
+    '  - check_name: "0b10"',
+  ].join('\r\n');
+
+  assert.deepEqual(parseRequiredGateCheckNames(body), [
+    '[first, second]',
+    '{first: second}',
+    'null',
+    'true',
+    '42',
+    '01',
+    '0b10',
+  ]);
+  assert.deepEqual(
+    parseRequiredGateCheckNames('required_gate:\n  check_name: "[legacy, quoted]"\n'),
+    ['[legacy, quoted]'],
+  );
+  assert.deepEqual(
+    parseRequiredGateCheckNames('required_gate:\n  check_name: "01"\n'),
+    ['01'],
+  );
+  assert.deepEqual(
+    parseRequiredGateCheckNames("required_gate:\n  check_name: '0b10'\n"),
+    ['0b10'],
+  );
+});
+
+test('parseRequiredGateCheckNames preserves plain names that merely contain digits', () => {
+  for (const value of [
+    'build-01 / required',
+    '01-build / required',
+    'gate 01 / required',
+    'v1.2 / required',
+    '123 / required',
+  ]) {
+    const body = `required_gates:\n  - check_name: ${value}\n`;
+    assert.deepEqual(parseRequiredGateCheckNames(body), [value], value);
+  }
+});
+
+test('parseRequiredGateCheckNames rejects an over-indented sibling in a plural list item', () => {
+  const body = [
+    'required_gates:',
+    '  - check_name: repo-required-gate / decision',
+    '      workflow: .github/workflows/repo-required-gate.yml',
+  ].join('\n');
+
+  assert.deepEqual(parseRequiredGateCheckNames(body), []);
+});
+
+test('parseRequiredGateCheckNames rejects nested or unexpected content in a legacy mapping', () => {
+  for (const body of [
+    'required_gate:\n  check_name: valid\n    broken: value\n',
+    'required_gate:\n  check_name: valid\n    workflow: .github/workflows/over-indented.yml\n',
+    'required_gate:\n  check_name: valid\n  not-a-mapping-line\n',
+  ]) {
+    assert.deepEqual(parseRequiredGateCheckNames(body), [], body);
+  }
+});
+
+test('parseRequiredGateCheckNames fails closed for missing, empty, or malformed plural declarations', () => {
+  const bodies = [
+    'version: 1\ndefaults:\n  check_name: not-a-gate\n',
+    'version: 1\nrequired_gates: []\n',
+    'version: 1\nrequired_gates:\n',
+    'required_gates:\n  - workflow: .github/workflows/one.yml\n',
+    'required_gates:\n  - check_name: ""\n',
+    'required_gates:\n  - check_name: valid\n  - workflow: .github/workflows/missing-name.yml\n',
+    'required_gates:\n  - check_name: "unterminated\n',
+    'required_gates:\n  check_name: not-a-list-item\n',
+    'required_gates:\n  -check_name: missing-list-separator\n',
+    'required_gates:\n  -# missing separator\n    check_name: hidden-invalid-item\n',
+    'required_gates:\n  - check_name: valid\n  - workflow: missing-name.yml\n\ndefaults:\n  check_name: sneaky\nrequired_gate:\n  check_name: legacy-must-not-mask-malformed-plural\n',
+  ];
+
+  for (const body of bodies) {
+    assert.deepEqual(parseRequiredGateCheckNames(body), [], body);
+  }
+});
+
 test('parseRequiredGateCheckName returns null when the gate is not declared', () => {
   assert.equal(parseRequiredGateCheckName('version: 1\ndefaults:\n  stack: node\n'), null);
   assert.equal(parseRequiredGateCheckName('required_gate:\n  workflow: .github/workflows/x.yml\n'), null);
@@ -204,6 +617,26 @@ test('readRequiredGateCheckName reads .agent/check-map.yml from a repo root, nul
   }
 });
 
+test('readRequiredGateCheckNames reads every declared check in order and returns an empty list when absent', () => {
+  const root = mkdtempSync(join(tmpdir(), 'close-gates-checkmap-'));
+  try {
+    assert.deepEqual(readRequiredGateCheckNames(root), []);
+    mkdirSync(join(root, '.agent'), { recursive: true });
+    writeFileSync(join(root, '.agent', 'check-map.yml'), [
+      'version: 1',
+      'required_gates:',
+      '  - check_name: first / required',
+      '    workflow: first.yml',
+      '  - check_name: second / required',
+      '    workflow: second.yml',
+    ].join('\n'));
+    assert.deepEqual(readRequiredGateCheckNames(root), ['first / required', 'second / required']);
+    assert.equal(readRequiredGateCheckName(root), 'first / required');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('validatePolicyFiles accepts any declared gate name and rejects a missing one (#142)', () => {
   const root = mkdtempSync(join(tmpdir(), 'close-gate-policy-'));
   try {
@@ -213,18 +646,51 @@ test('validatePolicyFiles accepts any declared gate name and rejects a missing o
     writeFileSync(join(root, '.agent', 'check-map.yml'), 'version: 1\nrequired_gate:\n  check_name: ci-success\n');
     assert.equal(validatePolicyFiles(root).ok, true);
 
+    writeFileSync(join(root, '.agent', 'check-map.yml'), 'version: 1\nrequired_gate:\n  check_name: "01"\n');
+    assert.equal(validatePolicyFiles(root).ok, true);
+
+    writeFileSync(join(root, '.agent', 'check-map.yml'), 'version: 1\nrequired_gate:\n  check_name: "0b10"\n');
+    assert.equal(validatePolicyFiles(root).ok, true);
+
     // The repo-template default still passes.
     writeFileSync(
       join(root, '.agent', 'check-map.yml'),
-      'version: 1\nrequired_gate:\n  check_name: repo-required-gate / decision\n'
+      [
+        'version: 1',
+        'required_gates:',
+        '  - check_name: repo-required-gate / decision',
+        '    workflow: .github/workflows/repo-required-gate.yml',
+        '  - check_name: Unity CI / required',
+        '    workflow: .github/workflows/unity-ci.yml',
+      ].join('\n')
     );
     assert.equal(validatePolicyFiles(root).ok, true);
 
-    // Declaring the block without a name still fails.
-    writeFileSync(join(root, '.agent', 'check-map.yml'), 'version: 1\nrequired_gate:\n  workflow: x.yml\n');
-    const missingName = validatePolicyFiles(root);
-    assert.equal(missingName.ok, false);
-    assert.match(missingName.summary, /check name/i);
+    for (const malformed of [
+      'version: 1\nrequired_gates: []\n',
+      'version: 1\nrequired_gates:\n  - workflow: x.yml\n',
+      'version: 1\nrequired_gates:\n  - check_name: [first, second]\n',
+      'version: 1\nrequired_gates:\n  - check_name: {first: second}\n',
+      'version: 1\nrequired_gates:\n  - check_name: valid\n      workflow: x.yml\n',
+      'version: 1\nrequired_gates:\n  - check_name: 01\n',
+      'version: 1\nrequired_gates:\n  - check_name: 0b10\n',
+      'version: 1\nrequired_gates:\n  - check_name:gate\n',
+      'version: 1\nrequired_gates:\n  - check_name: gate\n  - check_name: gate\n',
+      'version: 1\nrequired_gates:\n  - check_name: gate: broken\n',
+      'version: 1\nrequired_gates:\n  - check_name: *gate\n',
+      'version: 1\nrequired_gates:\n\t- check_name: valid\n',
+      'version: 1\nrequired_gates:\n  - check_name: valid\nrequired_gates:\n  - check_name: |\n',
+      'version: 1\nrequired_gate:\n  check_name: 01\n',
+      'version: 1\nrequired_gate:\n  check_name: 0b10\n',
+      'version: 1\nrequired_gate:\n  check_name:gate\n',
+      'version: 1\nrequired_gate:\n  check_name: valid\n    broken: value\n',
+      'version: 1\nrequired_gate:\n  workflow: x.yml\n',
+    ]) {
+      writeFileSync(join(root, '.agent', 'check-map.yml'), malformed);
+      const missingName = validatePolicyFiles(root);
+      assert.equal(missingName.ok, false);
+      assert.match(missingName.summary, /check name/i);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

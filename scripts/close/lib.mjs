@@ -4,60 +4,221 @@ import { dirname, join, relative } from 'node:path';
 export const DEFAULT_REQUIRED_GATE = 'repo-required-gate / decision';
 export const DEFAULT_MARKER_PATH = '.agent/close-scan/complete.json';
 
-// #142 (archon-setup#302): the close guard and policy scan must honor the gate
-// the repo declares in .agent/check-map.yml (`required_gate.check_name`) instead
-// of assuming DEFAULT_REQUIRED_GATE. The check-map is deliberately simple YAML,
-// so a scoped regex read keeps repo-template at zero runtime deps (same approach
-// scan-complete already uses for the version/required_gate presence checks).
-// Drop an unquoted trailing YAML comment (` # ...`). Quote-aware so a `#`
-// inside a quoted gate name survives; a bare `#` with no preceding whitespace
-// is part of the value, matching YAML's comment rule.
+// #142 / #184: honor every gate declared by the intentionally small supported
+// subset of .agent/check-map.yml without adding a runtime YAML dependency. A
+// relevant declaration is one spaces-indented sequence/mapping whose values
+// are single-line strings. Plain strings allow printable characters except
+// where YAML gives an indicator structural meaning at the start or after `:`.
+// More expressive YAML remains available by quoting the scalar: single quotes
+// use YAML's `''` escape, while double quotes support only `\"` and `\\`.
+// Unsupported YAML syntax fails closed instead of being misread as a name.
+const YAML_NON_STRING_SCALAR = /^(?:null|~|true|false)$/i;
+const YAML_NUMBER_SCALAR = /^[+-]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?(?:e[+-]?[0-9_]+)?|0b[01_]+|0o[0-7_]+|0x[0-9a-f_]+|\.[0-9_]+(?:e[+-]?[0-9_]+)?|\.(?:inf|nan))$/i;
+const YAML_PLAIN_CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+const YAML_PLAIN_FORBIDDEN_LEADING = /^(?:[-?:](?:\s|$)|[\[\]{},#&*!|>'"%@`])/u;
 function stripTrailingYamlComment(value) {
-  let inSingle = false;
-  let inDouble = false;
-  for (let i = 0; i < value.length; i += 1) {
-    const ch = value[i];
-    if (ch === "'" && !inDouble) inSingle = !inSingle;
-    else if (ch === '"' && !inSingle) inDouble = !inDouble;
-    else if (ch === '#' && !inSingle && !inDouble && /\s/.test(value[i - 1] || ' ')) {
-      return value.slice(0, i).trimEnd();
+  const commentIndex = value.search(/ +#/);
+  return commentIndex === -1 ? value : value.slice(0, commentIndex).trimEnd();
+}
+
+function parseQuotedScalar(value, quote) {
+  let decoded = '';
+  for (let index = 1; index < value.length; index += 1) {
+    const ch = value[index];
+    if (/[\u0000-\u001f\u007f]/.test(ch)) return null;
+
+    if (quote === "'" && ch === "'" && value[index + 1] === "'") {
+      decoded += "'";
+      index += 1;
+      continue;
     }
+
+    if (quote === '"' && ch === '\\') {
+      const escaped = value[index + 1];
+      if (escaped !== '"' && escaped !== '\\') return null;
+      decoded += escaped;
+      index += 1;
+      continue;
+    }
+
+    if (ch === quote) {
+      const tail = value.slice(index + 1);
+      if (tail && !/^ +#.*$/.test(tail)) return null;
+      return decoded.trim() ? decoded : null;
+    }
+    decoded += ch;
   }
+  return null;
+}
+
+function captureTopLevelBlock(text, key) {
+  const lines = text.split(/\r?\n/);
+  const declarationLines = [];
+  const prefix = `${key}:`;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index].startsWith(prefix)) declarationLines.push(index);
+  }
+
+  if (declarationLines.length !== 1) {
+    return { count: declarationLines.length, block: null };
+  }
+
+  const declarationLine = declarationLines[0];
+  const headerTail = lines[declarationLine].slice(prefix.length);
+  if (!/^(?: *| +#.*)$/.test(headerTail)) return { count: 1, block: null };
+
+  const blockLines = [];
+  for (let index = declarationLine + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line && !line.startsWith(' ') && !line.startsWith('\t') && !line.startsWith('#')) break;
+    blockLines.push(line);
+  }
+  return { count: 1, block: blockLines.join('\n') };
+}
+
+function parseCheckNameScalar(rawValue) {
+  const raw = String(rawValue ?? '');
+  if (YAML_PLAIN_CONTROL.test(raw)) return null;
+  const source = raw.trim();
+  if (!source) return null;
+  if (source[0] === "'" || source[0] === '"') return parseQuotedScalar(source, source[0]);
+
+  const value = stripTrailingYamlComment(source).trim();
+  if (!value || value.startsWith('#')) return null;
+  if (YAML_NON_STRING_SCALAR.test(value) || YAML_NUMBER_SCALAR.test(value)) return null;
+  if (YAML_PLAIN_FORBIDDEN_LEADING.test(value) || /:(?:\s|$)/.test(value)) return null;
   return value;
 }
 
-export function parseRequiredGateCheckName(body) {
-  const text = String(body || '');
-  // Capture only the lines immediately under `required_gate:` so a
-  // `check_name:` beneath some other top-level block never counts as the gate.
-  // The header may carry a trailing YAML comment (`required_gate: # gate`);
-  // anything else after the colon is an inline scalar, not the block shape.
-  // Within the block, indented content, comment-only, and blank lines are all
-  // valid YAML and must not end the capture; the first non-indented content
-  // line (the next top-level key) still does, so a blank line cannot leak the
-  // capture into a different block (check_name there stays out of reach).
-  const block = text.match(
-    /^required_gate:[ \t]*(?:#.*)?\r?\n((?:[ \t]+\S.*\r?\n?|[ \t]*#.*\r?\n?|[ \t]*\r?\n)*)/m
-  );
-  if (!block) return null;
-  const name = block[1].match(/^[ \t]+check_name:[ \t]*(.+?)[ \t]*\r?$/m);
-  if (!name) return null;
-  let value = stripTrailingYamlComment(name[1].trim()).trim();
-  if (
-    (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
-    (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
-  ) {
-    value = value.slice(1, -1).trim();
+function parseMappingProperty(content) {
+  const match = /^([A-Za-z_][A-Za-z0-9_-]*):(?:$| +(.*))$/.exec(content);
+  return match ? { key: match[1], value: match[2] ?? '' } : null;
+}
+
+function parseLegacyRequiredGate(block) {
+  if (block === null) return null;
+
+  const lines = block.split(/\r?\n/);
+  const directLines = lines
+    .map((line) => {
+      const indentation = line.match(/^[ \t]*/)?.[0] || '';
+      return { indentation, indent: indentation.length, content: line.slice(indentation.length) };
+    })
+    .filter(({ content }) => content && !content.startsWith('#'));
+  if (directLines.length === 0) return null;
+  if (directLines.some(({ indentation }) => indentation.includes('\t'))) return null;
+
+  const directIndent = Math.min(...directLines.map(({ indent }) => indent));
+  if (directIndent === 0 || directLines.some(({ indent }) => indent !== directIndent)) return null;
+  const properties = directLines.map(({ content }) => parseMappingProperty(content));
+  if (properties.some((property) => property === null)) return null;
+  const keys = new Set();
+  let checkName = null;
+  for (const property of properties) {
+    if (keys.has(property.key)) return null;
+    keys.add(property.key);
+    const value = parseCheckNameScalar(property.value);
+    if (!value) return null;
+    if (property.key === 'check_name') checkName = value;
   }
-  return value || null;
+  return checkName;
+}
+
+function parsePluralRequiredGates(block) {
+  if (block === null) return [];
+
+  let itemIndent = null;
+  let current = null;
+  const names = [];
+  const seenNames = new Set();
+
+  const finishItem = () => {
+    if (!current?.checkName || seenNames.has(current.checkName)) return false;
+    seenNames.add(current.checkName);
+    names.push(current.checkName);
+    return true;
+  };
+
+  for (const line of block.split(/\r?\n/)) {
+    if (line.includes('\t')) return [];
+    const indentation = line.match(/^[ \t]*/)?.[0] || '';
+    const content = line.slice(indentation.length);
+    if (!content || content.startsWith('#')) continue;
+
+    const indent = indentation.length;
+    const item = /^-( *)(.*)$/.exec(content);
+    if (item) {
+      if (indent === 0 || (itemIndent !== null && indent !== itemIndent)) return [];
+      if (current && !finishItem()) return [];
+      itemIndent ??= indent;
+      current = { checkName: null, propertyIndent: null, keys: new Set() };
+
+      const separator = item[1];
+      const inline = item[2].trim();
+      if (!inline) continue;
+      if (!separator) return [];
+      if (inline.startsWith('#')) continue;
+      const property = parseMappingProperty(inline);
+      if (!property) return [];
+      current.propertyIndent = itemIndent + 1 + separator.length;
+      const value = parseCheckNameScalar(property.value);
+      if (!value) return [];
+      current.keys.add(property.key);
+      if (property.key === 'check_name') {
+        current.checkName = value;
+      }
+      continue;
+    }
+
+    if (!current || indent <= itemIndent) return [];
+    current.propertyIndent ??= indent;
+    if (indent < current.propertyIndent) return [];
+    if (indent > current.propertyIndent) return [];
+
+    const property = parseMappingProperty(content);
+    if (!property) return [];
+    if (current.keys.has(property.key)) return [];
+    current.keys.add(property.key);
+    const value = parseCheckNameScalar(property.value);
+    if (!value) return [];
+    if (property.key === 'check_name') {
+      current.checkName = value;
+    }
+  }
+
+  if (!current || !finishItem()) return [];
+  return names;
+}
+
+export function parseRequiredGateCheckNames(body) {
+  const text = String(body || '');
+  const plural = captureTopLevelBlock(text, 'required_gates');
+  const legacy = captureTopLevelBlock(text, 'required_gate');
+  if (plural.count > 1 || legacy.count > 1) return [];
+
+  // A present plural declaration is authoritative. If it is empty or
+  // malformed, do not fall back to a legacy block and accidentally pass open.
+  if (plural.count === 1) return parsePluralRequiredGates(plural.block);
+
+  const legacyName = legacy.count === 1 ? parseLegacyRequiredGate(legacy.block) : null;
+  return legacyName ? [legacyName] : [];
+}
+
+export function parseRequiredGateCheckName(body) {
+  return parseRequiredGateCheckNames(body)[0] || null;
+}
+
+export function readRequiredGateCheckNames(root) {
+  try {
+    return parseRequiredGateCheckNames(readFileSync(join(root, '.agent', 'check-map.yml'), 'utf8'));
+  } catch {
+    return [];
+  }
 }
 
 export function readRequiredGateCheckName(root) {
-  try {
-    return parseRequiredGateCheckName(readFileSync(join(root, '.agent', 'check-map.yml'), 'utf8'));
-  } catch {
-    return null;
-  }
+  return readRequiredGateCheckNames(root)[0] || null;
 }
 
 const DOC_EXTENSIONS_RE = /\.(md|txt|png|jpg|jpeg|gif|svg|webp|bmp|ico|avif)$/i;
@@ -140,35 +301,76 @@ export function classifyCloseScanScope({ files = [], labels = [], stack = 'minim
   };
 }
 
-export function evaluateRequiredChecks({ checkRuns = [], requiredCheckName = DEFAULT_REQUIRED_GATE } = {}) {
-  const matched = checkRuns.find((check) => String(check.name || '') === requiredCheckName) || null;
-  if (!matched) {
+export function evaluateRequiredChecks({
+  checkRuns = [],
+  requiredCheckNames,
+  requiredCheckName = DEFAULT_REQUIRED_GATE,
+} = {}) {
+  const names = requiredCheckNames === undefined
+    ? [requiredCheckName]
+    : requiredCheckNames;
+  if (
+    !Array.isArray(names)
+    || names.length === 0
+    || names.some((name) => typeof name !== 'string' || !name.trim())
+  ) {
     return {
       ok: false,
-      failures: [`Required check \`${requiredCheckName}\` is unavailable for the current PR head.`],
+      failures: ['Required check declaration is missing, empty, or malformed.'],
       matched: null,
+      matches: [],
     };
   }
 
-  const status = String(matched.status || matched.state || '').toLowerCase();
-  const conclusion = String(matched.conclusion || '').toLowerCase();
-  const completedStates = new Set(['completed', 'success', 'successful']);
-  if (status && !completedStates.has(status) && !conclusion) {
+  if (new Set(names).size !== names.length) {
     return {
       ok: false,
-      failures: [`Required check \`${requiredCheckName}\` is not completed yet (status: ${status}).`],
-      matched,
-    };
-  }
-  if (conclusion !== 'success' && status !== 'success' && status !== 'successful') {
-    return {
-      ok: false,
-      failures: [`Required check \`${requiredCheckName}\` is not successful (conclusion: ${conclusion || 'unknown'}).`],
-      matched,
+      failures: ['Required check declaration contains duplicate check names.'],
+      matched: null,
+      matches: [],
     };
   }
 
-  return { ok: true, failures: [], matched };
+  const failures = [];
+  const matches = [];
+  const pendingStates = new Set(['queued', 'pending', 'in_progress', 'requested', 'waiting', 'expected']);
+  const successfulStates = new Set(['success', 'successful']);
+
+  for (const name of names) {
+    const matched = checkRuns.find((check) => String(check.name || '') === name) || null;
+    if (!matched) {
+      failures.push(`Required check \`${name}\` is unavailable for the current PR head.`);
+      continue;
+    }
+    matches.push(matched);
+
+    const represented = [
+      ['status', matched.status],
+      ['state', matched.state],
+      ['conclusion', matched.conclusion],
+    ]
+      .map(([field, value]) => [field, String(value ?? '').toLowerCase()])
+      .filter(([, value]) => value);
+    const pending = represented.find(([, value]) => pendingStates.has(value));
+    if (pending) {
+      failures.push(`Required check \`${name}\` is not completed yet (${pending[0]}: ${pending[1]}).`);
+      continue;
+    }
+    const contradictory = represented.find(([field, value]) => (
+      !successfulStates.has(value) && !(field === 'status' && value === 'completed')
+    ));
+    if (!contradictory && represented.some(([, value]) => successfulStates.has(value))) continue;
+    failures.push(
+      `Required check \`${name}\` is not successful (${contradictory?.[0] || 'state'}: ${contradictory?.[1] || 'unknown'}).`,
+    );
+  }
+
+  return {
+    ok: failures.length === 0,
+    failures,
+    matched: matches[0] || null,
+    matches,
+  };
 }
 
 // #124 S2: the closeout Definition of Done is exactly these four decisions,
