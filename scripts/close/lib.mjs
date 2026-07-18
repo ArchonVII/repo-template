@@ -4,13 +4,17 @@ import { dirname, join, relative } from 'node:path';
 export const DEFAULT_REQUIRED_GATE = 'repo-required-gate / decision';
 export const DEFAULT_MARKER_PATH = '.agent/close-scan/complete.json';
 
-// #142 / #184: the close guard and policy scan must honor every gate the repo
-// declares in .agent/check-map.yml (`required_gates[].check_name`, with legacy
-// `required_gate.check_name` compatibility). The check-map is deliberately
-// simple YAML, so a scoped line reader keeps repo-template at zero runtime deps.
-// Drop an unquoted trailing YAML comment (` # ...`). Quote-aware so a `#`
-// inside a quoted gate name survives; a bare `#` with no preceding whitespace
-// is part of the value, matching YAML's comment rule.
+// #142 / #184: honor every gate declared by the intentionally small supported
+// subset of .agent/check-map.yml without adding a runtime YAML dependency. A
+// relevant declaration is one spaces-indented sequence/mapping whose values
+// are single-line strings. Plain strings allow common GitHub check-name
+// characters (letters, digits, spaces, / - _ . ( ) # + and unambiguous `:`).
+// More expressive YAML remains available by quoting the scalar: single quotes
+// use YAML's `''` escape, while double quotes support only `\"` and `\\`.
+// Unsupported YAML syntax fails closed instead of being misread as a name.
+const YAML_NON_STRING_SCALAR = /^(?:null|~|true|false)$/i;
+const YAML_NUMBER_SCALAR = /^[+-]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?(?:e[+-]?[0-9_]+)?|0o[0-7_]+|0x[0-9a-f_]+|\.[0-9_]+(?:e[+-]?[0-9_]+)?|\.(?:inf|nan))$/i;
+const SAFE_PLAIN_CHECK_NAME = /^[A-Za-z0-9 /_.()#+:-]+$/;
 function stripTrailingYamlComment(value) {
   let inSingle = false;
   let inDouble = false;
@@ -25,65 +29,113 @@ function stripTrailingYamlComment(value) {
   return value;
 }
 
+function parseQuotedScalar(value, quote) {
+  let decoded = '';
+  for (let index = 1; index < value.length; index += 1) {
+    const ch = value[index];
+    if (/[\u0000-\u001f\u007f]/.test(ch)) return null;
+
+    if (quote === "'" && ch === "'" && value[index + 1] === "'") {
+      decoded += "'";
+      index += 1;
+      continue;
+    }
+
+    if (quote === '"' && ch === '\\') {
+      const escaped = value[index + 1];
+      if (escaped !== '"' && escaped !== '\\') return null;
+      decoded += escaped;
+      index += 1;
+      continue;
+    }
+
+    if (ch === quote) {
+      const tail = value.slice(index + 1);
+      if (tail && !/^ +#.*$/.test(tail)) return null;
+      return decoded.trim() ? decoded : null;
+    }
+    decoded += ch;
+  }
+  return null;
+}
+
 function captureTopLevelBlock(text, key) {
-  return text.match(
-    new RegExp(
-      `^${key}:[ \\t]*(?:#.*)?\\r?\\n((?:[ \\t]+\\S.*\\r?\\n?|[ \\t]*#.*\\r?\\n?|[ \\t]*\\r?\\n)*)`,
-      'm',
-    ),
-  )?.[1] ?? null;
+  const lines = text.split(/\r?\n/);
+  const declarationLines = [];
+  const prefix = `${key}:`;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index].startsWith(prefix)) declarationLines.push(index);
+  }
+
+  if (declarationLines.length !== 1) {
+    return { count: declarationLines.length, block: null };
+  }
+
+  const declarationLine = declarationLines[0];
+  const headerTail = lines[declarationLine].slice(prefix.length);
+  if (!/^(?: *| +#.*)$/.test(headerTail)) return { count: 1, block: null };
+
+  const blockLines = [];
+  for (let index = declarationLine + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line && !line.startsWith(' ') && !line.startsWith('\t') && !line.startsWith('#')) break;
+    blockLines.push(line);
+  }
+  return { count: 1, block: blockLines.join('\n') };
 }
 
 function parseCheckNameScalar(rawValue) {
-  let value = stripTrailingYamlComment(String(rawValue || '').trim()).trim();
-  if (!value) return null;
+  const raw = String(rawValue ?? '');
+  if (raw.includes('\t')) return null;
+  const source = raw.trim();
+  if (!source) return null;
+  if (source[0] === "'" || source[0] === '"') return parseQuotedScalar(source, source[0]);
 
-  const first = value[0];
-  const last = value[value.length - 1];
-  if (first === '"' || first === "'") {
-    if (last !== first || value.length < 2) return null;
-    value = value.slice(1, -1).trim();
-    return value || null;
-  }
-
-  if (last === '"' || last === "'") return null;
-  const yamlNonString = /^(?:null|~|true|false)$/i.test(value)
-    || /^[\[{]/.test(value)
-    || /^[+-]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?(?:e[+-]?[0-9_]+)?|0o[0-7_]+|0x[0-9a-f_]+|\.[0-9_]+(?:e[+-]?[0-9_]+)?|\.(?:inf|nan))$/i.test(value);
-  if (yamlNonString) return null;
+  const value = stripTrailingYamlComment(source).trim();
+  if (!value || value.startsWith('#')) return null;
+  if (YAML_NON_STRING_SCALAR.test(value) || YAML_NUMBER_SCALAR.test(value)) return null;
+  if (!SAFE_PLAIN_CHECK_NAME.test(value)) return null;
+  if (/^-(?: |$)/.test(value) || /:(?: |$)/.test(value)) return null;
   return value;
 }
 
 function parseMappingProperty(content) {
-  const match = /^([A-Za-z_][A-Za-z0-9_-]*):(?:[ \t]*(.*))?$/.exec(content);
-  return match ? { key: match[1], value: match[2] || '' } : null;
+  const match = /^([A-Za-z_][A-Za-z0-9_-]*):(.*)$/.exec(content);
+  if (!match || /^ *\t/.test(match[2])) return null;
+  return { key: match[1], value: match[2].replace(/^ +/, '') };
 }
 
-function parseLegacyRequiredGate(text) {
-  const block = captureTopLevelBlock(text, 'required_gate');
+function parseLegacyRequiredGate(block) {
   if (block === null) return null;
 
   const lines = block.split(/\r?\n/);
   const directLines = lines
-    .map((line) => ({
-      indent: line.match(/^[ \t]*/)?.[0].length || 0,
-      content: line.trimStart(),
-    }))
+    .map((line) => {
+      const indentation = line.match(/^[ \t]*/)?.[0] || '';
+      return { indentation, indent: indentation.length, content: line.slice(indentation.length) };
+    })
     .filter(({ content }) => content && !content.startsWith('#'));
   if (directLines.length === 0) return null;
+  if (directLines.some(({ indentation }) => indentation.includes('\t'))) return null;
 
   const directIndent = Math.min(...directLines.map(({ indent }) => indent));
-  if (directLines.some(({ indent }) => indent !== directIndent)) return null;
+  if (directIndent === 0 || directLines.some(({ indent }) => indent !== directIndent)) return null;
   const properties = directLines.map(({ content }) => parseMappingProperty(content));
   if (properties.some((property) => property === null)) return null;
-  const names = properties
-    .filter((property) => property.key === 'check_name')
-    .map((property) => parseCheckNameScalar(property.value));
-  return names.length === 1 ? names[0] : null;
+  const keys = new Set();
+  let checkName = null;
+  for (const property of properties) {
+    if (keys.has(property.key)) return null;
+    keys.add(property.key);
+    const value = parseCheckNameScalar(property.value);
+    if (!value) return null;
+    if (property.key === 'check_name') checkName = value;
+  }
+  return checkName;
 }
 
-function parsePluralRequiredGates(text) {
-  const block = captureTopLevelBlock(text, 'required_gates');
+function parsePluralRequiredGates(block) {
   if (block === null) return [];
 
   let itemIndent = null;
@@ -91,22 +143,24 @@ function parsePluralRequiredGates(text) {
   const names = [];
 
   const finishItem = () => {
-    if (!current?.checkName || current.duplicateCheckName) return false;
+    if (!current?.checkName) return false;
     names.push(current.checkName);
     return true;
   };
 
   for (const line of block.split(/\r?\n/)) {
-    const content = line.trimStart();
+    if (line.includes('\t')) return [];
+    const indentation = line.match(/^[ \t]*/)?.[0] || '';
+    const content = line.slice(indentation.length);
     if (!content || content.startsWith('#')) continue;
 
-    const indent = line.length - content.length;
-    const item = /^-([ \t]*)(.*)$/.exec(content);
+    const indent = indentation.length;
+    const item = /^-( *)(.*)$/.exec(content);
     if (item) {
       if (indent === 0 || (itemIndent !== null && indent !== itemIndent)) return [];
       if (current && !finishItem()) return [];
       itemIndent ??= indent;
-      current = { checkName: null, duplicateCheckName: false, propertyIndent: null };
+      current = { checkName: null, propertyIndent: null, keys: new Set() };
 
       const separator = item[1];
       const inline = item[2].trim();
@@ -116,9 +170,11 @@ function parsePluralRequiredGates(text) {
       const property = parseMappingProperty(inline);
       if (!property) return [];
       current.propertyIndent = itemIndent + 1 + separator.length;
+      const value = parseCheckNameScalar(property.value);
+      if (!value) return [];
+      current.keys.add(property.key);
       if (property.key === 'check_name') {
-        current.checkName = parseCheckNameScalar(property.value);
-        if (!current.checkName) return [];
+        current.checkName = value;
       }
       continue;
     }
@@ -130,10 +186,12 @@ function parsePluralRequiredGates(text) {
 
     const property = parseMappingProperty(content);
     if (!property) return [];
+    if (current.keys.has(property.key)) return [];
+    current.keys.add(property.key);
+    const value = parseCheckNameScalar(property.value);
+    if (!value) return [];
     if (property.key === 'check_name') {
-      if (current.checkName !== null) current.duplicateCheckName = true;
-      current.checkName = parseCheckNameScalar(property.value);
-      if (!current.checkName) return [];
+      current.checkName = value;
     }
   }
 
@@ -143,12 +201,16 @@ function parsePluralRequiredGates(text) {
 
 export function parseRequiredGateCheckNames(body) {
   const text = String(body || '');
+  const plural = captureTopLevelBlock(text, 'required_gates');
+  const legacy = captureTopLevelBlock(text, 'required_gate');
+  if (plural.count > 1 || legacy.count > 1) return [];
+
   // A present plural declaration is authoritative. If it is empty or
   // malformed, do not fall back to a legacy block and accidentally pass open.
-  if (/^required_gates:/m.test(text)) return parsePluralRequiredGates(text);
+  if (plural.count === 1) return parsePluralRequiredGates(plural.block);
 
-  const legacy = parseLegacyRequiredGate(text);
-  return legacy ? [legacy] : [];
+  const legacyName = legacy.count === 1 ? parseLegacyRequiredGate(legacy.block) : null;
+  return legacyName ? [legacyName] : [];
 }
 
 export function parseRequiredGateCheckName(body) {

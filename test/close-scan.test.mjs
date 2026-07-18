@@ -239,6 +239,130 @@ test('parseRequiredGateCheckNames preserves legacy singular declarations', () =>
   assert.equal(parseRequiredGateCheckName(legacy), 'legacy / required');
 });
 
+test('parseRequiredGateCheckNames accepts the supported plain check-name grammar', () => {
+  const values = [
+    'repo-required-gate / decision',
+    'build_01.test (linux)',
+    'gate#1',
+    'release:linux',
+    'C++ / test',
+  ];
+
+  for (const value of values) {
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gates:\n  - check_name: ${value} # trailing comment\n`),
+      [value],
+      `plural: ${value}`,
+    );
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gate:\n  check_name: ${value} # trailing comment\n`),
+      [value],
+      `legacy: ${value}`,
+    );
+  }
+});
+
+test('parseRequiredGateCheckNames rejects unsupported plain YAML scalar syntax', () => {
+  const unsupported = [
+    ['colon-space', 'gate: broken'],
+    ['sequence indicator', '- gate'],
+    ['mapping-key indicator', '? gate'],
+    ['mapping-value indicator', ': gate'],
+    ['comment indicator', '# gate'],
+    ['flow-sequence open', '[gate'],
+    ['flow-sequence close', ']gate'],
+    ['flow-mapping open', '{gate'],
+    ['flow-mapping close', '}gate'],
+    ['flow separator', ',gate'],
+    ['alias', '*gate'],
+    ['anchor', '&gate'],
+    ['tag', '!gate'],
+    ['literal block scalar', '|'],
+    ['folded block scalar', '>'],
+    ['directives indicator', '%gate'],
+    ['reserved at indicator', '@gate'],
+    ['reserved backtick indicator', '`gate'],
+  ];
+
+  for (const [label, value] of unsupported) {
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gates:\n  - check_name: ${value}\n`),
+      [],
+      `plural ${label}: ${value}`,
+    );
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gate:\n  check_name: ${value}\n`),
+      [],
+      `legacy ${label}: ${value}`,
+    );
+  }
+});
+
+test('parseRequiredGateCheckNames decodes the supported quoted scalar subset', () => {
+  const supported = [
+    ['single-quote doubling', "'team''s / gate'", "team's / gate"],
+    ['double-quoted quote escape', '"team \\"quoted\\" / gate"', 'team "quoted" / gate'],
+    ['double-quoted backslash escape', '"windows \\\\ gate"', 'windows \\ gate'],
+    ['quoted collection lookalike', "'[one, two]'", '[one, two]'],
+    ['quoted numeric lookalike', '"01"', '01'],
+  ];
+
+  for (const [label, value, expected] of supported) {
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gates:\n  - check_name: ${value} # comment\n`),
+      [expected],
+      `plural ${label}`,
+    );
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gate:\n  check_name: ${value} # comment\n`),
+      [expected],
+      `legacy ${label}`,
+    );
+  }
+
+  for (const value of [
+    "'team's / gate'",
+    '"line\\nbreak"',
+    '"unicode \\u0041"',
+    '"unknown \\q escape"',
+  ]) {
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gates:\n  - check_name: ${value}\n`),
+      [],
+      `unsupported plural quoted scalar: ${value}`,
+    );
+    assert.deepEqual(
+      parseRequiredGateCheckNames(`required_gate:\n  check_name: ${value}\n`),
+      [],
+      `unsupported legacy quoted scalar: ${value}`,
+    );
+  }
+});
+
+test('parseRequiredGateCheckNames rejects tab indentation and duplicate schema blocks', () => {
+  const malformed = [
+    ['tab-indented plural item', 'required_gates:\n\t- check_name: valid\n'],
+    ['space-tab-indented plural item', 'required_gates:\n  \t- check_name: valid\n'],
+    ['tab-separated plural property', 'required_gates:\n  - \tcheck_name: valid\n'],
+    ['tab-indented legacy property', 'required_gate:\n\tcheck_name: valid\n'],
+    ['duplicate plural blocks', 'required_gates:\n  - check_name: first\nrequired_gates:\n  - check_name: second\n'],
+    ['valid then malformed duplicate plural block', 'required_gates:\n  - check_name: valid\nrequired_gates:\n  - check_name: |\n'],
+    ['duplicate legacy blocks', 'required_gate:\n  check_name: first\nrequired_gate:\n  check_name: second\n'],
+    ['duplicate legacy blocks beside plural', 'required_gates:\n  - check_name: plural\nrequired_gate:\n  check_name: first\nrequired_gate:\n  check_name: second\n'],
+  ];
+
+  for (const [label, body] of malformed) {
+    assert.deepEqual(parseRequiredGateCheckNames(body), [], label);
+  }
+
+  assert.deepEqual(parseRequiredGateCheckNames([
+    'required_gate:',
+    '  check_name: legacy',
+    'required_gates:',
+    '  - check_name: plural',
+  ].join('\n')), ['plural']);
+});
+
 test('parseRequiredGateCheckNames rejects unquoted YAML non-string scalar shapes', () => {
   for (const value of [
     '[first, second]',
@@ -435,6 +559,10 @@ test('validatePolicyFiles accepts any declared gate name and rejects a missing o
       'version: 1\nrequired_gates:\n  - check_name: {first: second}\n',
       'version: 1\nrequired_gates:\n  - check_name: valid\n      workflow: x.yml\n',
       'version: 1\nrequired_gates:\n  - check_name: 01\n',
+      'version: 1\nrequired_gates:\n  - check_name: gate: broken\n',
+      'version: 1\nrequired_gates:\n  - check_name: *gate\n',
+      'version: 1\nrequired_gates:\n\t- check_name: valid\n',
+      'version: 1\nrequired_gates:\n  - check_name: valid\nrequired_gates:\n  - check_name: |\n',
       'version: 1\nrequired_gate:\n  check_name: 01\n',
       'version: 1\nrequired_gate:\n  check_name: valid\n    broken: value\n',
       'version: 1\nrequired_gate:\n  workflow: x.yml\n',
