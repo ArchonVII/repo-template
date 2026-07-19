@@ -11,6 +11,12 @@
 Append owner intent decisions below, newest first. Keep entries short: one decision line,
 one lane reference, and one why line.
 
+## 2026-07-18 - Keep imported policy capability-aware
+
+- **Decision:** Durable coordination stays repo-local; machine-global queues are transport only, imported document policy activates after installed prerequisites and targeted checks, and only explicitly active or repo-selected plans are authoritative.
+- **Lane:** https://github.com/ArchonVII/repo-template/issues/185
+- **Why:** Pigafetta onboarding exposed absolute provider wording that conflicted with capability-gated consumers and transport-only machine state.
+
 ## 2026-06-15 - Adopt the agent message protocol
 
 - **Decision:** Status-tag taxonomy (~8 tags + a `⚠ RISK` overlay) with a human/agent lane split and a machine-backed `SAFE TO CLEAR`; keep `JUDGMENT CALL`, fold `RESEARCH` into a decision, home in `AGENTS.md` + a versioned vocab doc.

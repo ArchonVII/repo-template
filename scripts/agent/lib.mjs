@@ -229,6 +229,7 @@ export function formatStartupMap(baseline, { repoPath = '<repo>', archonSetupCom
   const lines = [
     'Agent startup map:',
     '- Document policy: docs/agent-process/document-policy.md',
+    '- Message protocol: docs/agent-process/message-protocol.md',
     '- Plans:          docs/plans/',
     '- Agent process:  docs/agent-process/',
     '- Changelog:       CHANGELOG.md (follow this repo\'s changelog policy)',

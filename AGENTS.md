@@ -18,6 +18,7 @@ Per-tool addenda such as `CLAUDE.md` and `GEMINI.md` are adapters only; rules th
 Agents should not spend time rediscovering process files. Start here:
 
 - Document policy: `docs/agent-process/document-policy.md` - charters, lifecycle, placement rules.
+- Message protocol: `docs/agent-process/message-protocol.md` - terminal status tags and close-safety evidence.
 - Plans: `docs/plans/` - dated plan files for feature and cross-cutting work; one file per plan.
 - Agent process: `docs/agent-process/`.
 - Changelog: `CHANGELOG.md` - follow this repo's changelog policy (modes differ per repo). `docs/repo-update-log.md` is the retired ledger's frozen archive.
@@ -197,9 +198,9 @@ Renames, copies, and deletes of a ledger still require the normal branch/PR lane
 
 ## Coordination
 
-This repo is coordination-isolated. Do not read from or write to machine-global boards, and
-do not assume sibling repos exist. Use only `.agent/coordination/` for claims, locks,
-handoffs, or active boards. If claim acquisition fails, stop and report the conflict.
+`.agent/coordination/` is canonical for durable repository coordination; do not assume sibling repos exist.
+Machine-global staging and handoffs may be transport queues, and ephemeral runtime claims and locks may remain machine-local.
+Neither is durable repo authority. If claim acquisition fails, stop and report the conflict.
 
 ## Anomaly And Friction Ledgers
 
@@ -269,9 +270,9 @@ placement priority, budgets, and doc-health duties. If a rule needs more than 10
 
 ## Doc Health
 
-Run `node scripts/doc-health/health.mjs --repo <repo> --report <path>` for report-only document-policy drift checks.
-The checker emits findings and issue payloads and never edits docs; findings are warnings except a small blocking subset that fails the PR docs gate.
-Full contract: `docs/agent-process/doc-health.md`.
+**Applies only when the repo installs the doc-health feature.** Without it, skip the runner and use available repo-local targeted checks.
+When installed, run the report-only `node scripts/doc-health/health.mjs --repo <repo> --report <path>`; full contract: `docs/agent-process/doc-health.md`.
+The checker never edits docs. Targeted policy failures block; unrelated warnings do not prevent document-policy activation.
 
 ## CHANGELOG
 

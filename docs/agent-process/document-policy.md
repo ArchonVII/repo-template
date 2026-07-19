@@ -15,6 +15,11 @@
 This file is the per-repo document-control contract. `AGENTS.md` carries the short
 agent-facing pointer; this file owns the full rules.
 
+## Consumer Activation
+
+For a consumer repo, the imported charter remains transitional until its declared prerequisite capabilities are installed and its targeted policy checks pass.
+Run doc-health as part of that gate only when it is installed; otherwise use the repo's available targeted validation. Unrelated warnings do not prevent activation.
+
 ## Binding Rules
 
 1. Every durable document answers one clear question and has one canonical home.
@@ -32,7 +37,7 @@ agent-facing pointer; this file owns the full rules.
 | Workflow provider | Reusable workflow bodies and example callers                              | `ArchonVII/github-workflows` | Consumers pin thin callers to a released ref.                              |
 | Repo scaffold     | `AGENTS.md`, `.agent/**`, hooks, lifecycle scripts, baseline process docs | `ArchonVII/repo-template`    | New and updated repos consume through template or snapshots.               |
 | Integrator        | Snapshots, onboarding, feature registry, audit/update catalog             | `ArchonVII/archon-setup`     | Refresh snapshots after provider changes; do not edit snapshots as source. |
-| Shared skills     | Skill source, skill loading policy, repair targets                        | `ArchonVII/jma-skill-review` | Repair skill source first; do not copy runtime cache files into repos.     |
+| Shared skills     | Skill source, skill loading policy, repair targets                        | `ArchonVII/jma-skills-data`  | Repair skill source first; do not copy runtime cache files into repos.     |
 
 Edit the narrowest source of truth first, then propagate through the normal snapshot or
 consumer update path.
@@ -47,7 +52,7 @@ consumer update path.
 | `VISION.md`                                | What experience are we building, and what is out of scope?   | human                 | 120 lines             | Experience, north star, scope, explicitly-not section      | Implementation detail, task lists, status logs         |
 | `docs/decisions/decision-log.md`           | What did the owner decide, when?                             | human, agent-appended | append-only           | Newest decision first with date, lane, one-line why        | Rationale essays, technical ADR content                |
 | `CHANGELOG.md` (release-class)             | What shipped for users?                                      | `docs:changelog`      | folded at release-cut | Conventional Commit history rendered into `[Unreleased]`   | Operational update notes, internal-only maintenance    |
-| `docs/STATUS.md` (planned under #124 — not yet generated; `docs/repo-update-log.md` stays the frozen archive meanwhile) | What changed operationally / is in flight? | `docs:status` | rendered on demand | Open PRs/issues, roadmap %, doc-health summary | User-facing release notes |
+| `docs/STATUS.md` (when `docs:status` is installed; otherwise use the repo-selected status surface) | What changed operationally / is in flight? | `docs:status` | rendered on demand | Open PRs/issues, roadmap %, doc-health summary | User-facing release notes |
 | `ARCHITECTURE.md` / `docs/architecture/**` | Where do subsystems live and what boundaries matter?         | agents                | as needed             | System map and boundary rules before rationale             | Per-file documentation, transient plans                |
 | `docs/plans/**`                            | What implementation plan is active or historical?            | agents                | as needed             | Status, owner, source issue, next action, closeout state   | Project vision, ADR replacement, stale active guidance |
 | `projects/<slug>/PLAN.md`                  | What is the front door for one feature?                      | agents                | as needed             | Current state, next safe action, blocker, invariants       | Duplicate specs, code, generated artifacts             |

@@ -4,7 +4,7 @@
 > **Owner:** ecosystem
 > **Scope:** meta-layer
 > **Source of truth:** yes
-> **Last reviewed:** 2026-06-15
+> **Last reviewed:** 2026-07-18
 > **Supersedes:** none
 > **Superseded by:** none
 
@@ -12,9 +12,8 @@
 > onboarded without the corresponding feature/tooling (e.g. the close-scan marker scripts)
 > follow their own repo-local conventions where they differ.
 
-`AGENTS.md` carries the short agent-facing pointer (`## Message protocol`); this file owns
-the full rules. Presentation is a separate concern — see `styles/` for how each skin renders
-the banner. Protocol version: **1.0.0**.
+`AGENTS.md` carries short pointers in its managed Agent Start Map and local Message protocol
+section; this file owns the full rules. Protocol version: **1.0.0**.
 
 ## Why
 
@@ -96,8 +95,8 @@ In a repo with **no close-scan tooling**, `SAFE TO CLEAR` falls back to an expli
 
 ## Rendering
 
-The structure (banner → *For you* → *My work*, one primary tag) is identical across styles;
-only the banner's skin differs:
+The protocol does not require a styles directory. The structure (banner → *For you* →
+*My work*, one primary tag) stays the same when a repo provides its own presentation skin:
 
 - **plain** — a bold lead line with an emoji/word marker.
 - **bbs-1998** (emoji-banned) — a bracket-label text banner: `[ NEEDS YOU: TECHNICAL DECISION ]`,

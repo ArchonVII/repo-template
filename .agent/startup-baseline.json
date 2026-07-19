@@ -1,9 +1,10 @@
 {
-  "version": "2026-07-04-s3-fragment-retirement",
+  "version": "2026-07-18-message-protocol",
   "required": [
     "AGENTS.md",
     "docs/plans/README.md",
     "docs/agent-process/document-policy.md",
+    "docs/agent-process/message-protocol.md",
     "docs/agent-process/doc-health.md",
     ".agent/check-map.yml",
     ".agent/coordination/README.md",

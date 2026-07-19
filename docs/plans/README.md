@@ -4,7 +4,7 @@
 > onboarded without the corresponding feature/tooling (e.g. project capsules) follow
 > their own repo-local planning conventions where they differ.
 
-Active repo-facing implementation plans live here.
+Supported repo-facing implementation plans live here. Only plans explicitly marked active or selected by the repo-local status/index are authoritative; all others are non-blocking history.
 
 Use:
 
@@ -18,7 +18,6 @@ remaining steps clear enough for another agent to resume.
 `docs/superpowers/plans/` is legacy/history only. Do not add new implementation
 plans there unless a repo-specific migration note says otherwise.
 
-> **Project capsules:** active *feature* work now lives in a project capsule at
-> `projects/<slug>/PLAN.md` (see `docs/agent-process/project-capsules.md`). Use
-> `docs/plans/` only for loose or cross-cutting plans that aren't a single feature;
-> don't start a new `docs/plans/` file for feature work once `projects/` is in use.
+> **Project capsules:** Capsule guidance applies only when the repo adopts project capsules.
+> Once adopted, active *feature* work lives at `projects/<slug>/PLAN.md` (see
+> `docs/agent-process/project-capsules.md`); otherwise continue using `docs/plans/`.
