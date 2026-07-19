@@ -1,5 +1,5 @@
 {
-  "version": "2026-07-18-message-protocol",
+  "version": "2026-07-19-agent-start-task-carry",
   "required": [
     "AGENTS.md",
     "docs/plans/README.md",
@@ -12,6 +12,7 @@
     ".github/workflows/anomaly-triage.yml",
     "package.json",
     "scripts/agent/lib.mjs",
+    "scripts/agent/carry.mjs",
     "scripts/agent/start-task.mjs",
     "scripts/agent/status.mjs",
     "scripts/agent/prune.mjs",

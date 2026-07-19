@@ -2,20 +2,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { sanitizeSlug, buildBranchName, parseGitStatusPorcelain, assertCheckoutIsSafe, filterIssueBranches } from './lib.mjs';
+import { cleanupVerifiedCarry, copyCarryPathsAndVerify } from './carry.mjs';
+import { PRECISE_STATUS_ARGS, sanitizeSlug, buildBranchName, parseGitStatusPorcelain, parseStartTaskArgs, toCheckoutRelativePath, minimizeCarryPaths, assertCheckoutIsSafe, filterIssueBranches } from './lib.mjs';
 
 const DEFAULT_AGENT = 'codex';
 const [, , issueArg, ...rest] = process.argv;
-const args = parseArgs(rest);
+let args;
+try { args = parseStartTaskArgs(rest); }
+catch (error) { fail(`${error.message}\n${usage()}`); }
 
 if (!issueArg || !/^\d+$/.test(issueArg)) {
-  fail('Usage: npm run agent:start-task -- <issue-number> [--agent <name>] [--slug <slug>]');
+  fail(usage());
 }
 
 // Bootstrap the checkout root directly (do not route through git() — it depends on this value).
 const checkoutRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: process.cwd(), encoding: 'utf8' }).trim();
 const repoName = path.basename(checkoutRoot);
 const agent = args.agent || DEFAULT_AGENT;
+const carryPaths = resolveCarryPaths(args.carry);
 
 const issue = JSON.parse(gh(['issue', 'view', issueArg, '--json', 'number,title,url,state']));
 if (issue.state !== 'OPEN') fail(`Issue #${issueArg} is not open (state: ${issue.state}).`);
@@ -24,9 +28,10 @@ const defaultBranch = gh(['repo', 'view', '--json', 'defaultBranchRef', '--jq', 
 
 try {
   assertCheckoutIsSafe({
-    statusEntries: parseGitStatusPorcelain(git(['status', '--porcelain=1', '-z'], { trim: false })),
+    statusEntries: parseGitStatusPorcelain(git([...PRECISE_STATUS_ARGS], { trim: false })),
     currentBranch: git(['branch', '--show-current']),
     defaultBranch,
+    carryPaths,
   });
 } catch (error) { fail(error.message); }
 
@@ -41,6 +46,8 @@ if (branchExists(branchName)) fail(`Branch already exists: ${branchName}`);
 if (fs.existsSync(worktreePath)) fail(`Worktree path already exists: ${worktreePath}`);
 
 git(['worktree', 'add', '-b', branchName, worktreePath, `origin/${defaultBranch}`]);
+
+if (carryPaths.length > 0) transplantCarryPaths({ carryPaths, worktreePath });
 
 // Install dependencies in the fresh worktree so a node-stack agent can run tests
 // immediately (archon-setup#292). node_modules is gitignored, so a new worktree has
@@ -60,6 +67,7 @@ fs.writeFileSync(path.join(worktreePath, '.agent', 'current-task.json'), JSON.st
 console.log(`Ready to implement #${issue.number}: ${issue.title}`);
 console.log(`Branch:   ${branchName}`);
 console.log(`Worktree: ${worktreePath}`);
+if (carryPaths.length > 0) console.log(`Carried:  ${carryPaths.join(', ')}`);
 console.log('\nNext steps:');
 console.log(`  1. cd "${worktreePath}"`);
 console.log('  2. npm run agent:status');
@@ -97,9 +105,37 @@ function installWorktreeDeps(wt) {
     console.warn('[start-task] Run `npm ci` manually in the worktree if you need dependencies.');
   }
 }
-function parseArgs(argv) {
-  const out = {};
-  for (let i = 0; i < argv.length; i += 1) if (argv[i].startsWith('--')) { out[argv[i].slice(2)] = argv[i + 1]; i += 1; }
-  return out;
+
+function resolveCarryPaths(rawCarryPaths) {
+  const resolved = [];
+  for (const rawPath of rawCarryPaths) {
+    let relativePath;
+    try {
+      relativePath = toCheckoutRelativePath(rawPath, { checkoutRoot, baseDir: process.cwd() });
+    } catch (error) { fail(error.message); }
+    const absolutePath = path.join(checkoutRoot, relativePath);
+    try { fs.lstatSync(absolutePath); }
+    catch { fail(`Carry path not found: ${rawPath}. Paths with spaces must be quoted.`); }
+    resolved.push(relativePath);
+  }
+  return minimizeCarryPaths(resolved);
+}
+
+function transplantCarryPaths({ carryPaths, worktreePath }) {
+  try {
+    copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+  } catch (error) {
+    fail(`Carry copy failed; the source checkout was not cleaned. ${error.message}`);
+  }
+
+  try {
+    cleanupVerifiedCarry({ checkoutRoot, carryPaths });
+  } catch (error) {
+    fail(`Carry cleanup failed after destination verification. The verified copy is in ${worktreePath}; recover the source from there if needed. ${error.message}`);
+  }
+}
+
+function usage() {
+  return 'Usage: npm run agent:start-task -- <issue-number> [--agent <name>] [--slug <slug>] [--carry <path...>]';
 }
 function fail(m) { console.error(m); process.exit(1); }

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeSlug, buildBranchName, parseIssueFromBranch, filterIssueBranches, populatePrBodyTemplate, parseGitStatusPorcelain, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, classifyPrMergeSignal, classifyPruneRetirement, inferNextAction, formatStatusReport, detectClaimsInstalled, checkStartupReadiness, formatStartupMap, primaryRootFromCommonDir } from '../../scripts/agent/lib.mjs';
+import path from 'node:path';
+import { PRECISE_STATUS_ARGS, sanitizeSlug, buildBranchName, parseIssueFromBranch, filterIssueBranches, populatePrBodyTemplate, parseGitStatusPorcelain, parseStartTaskArgs, toCheckoutRelativePath, minimizeCarryPaths, collectCarriedStatusEntries, assertCheckoutIsSafe, parseWorktreeList, classifyPruneCandidates, classifyPrMergeSignal, classifyPruneRetirement, inferNextAction, formatStatusReport, detectClaimsInstalled, checkStartupReadiness, formatStartupMap, primaryRootFromCommonDir } from '../../scripts/agent/lib.mjs';
 
 test('sanitizeSlug lowercases, hyphenates, trims, caps at 6 words', () => {
   assert.equal(sanitizeSlug('Add OAuth Flow!'), 'add-oauth-flow');
@@ -79,8 +80,77 @@ test('parseGitStatusPorcelain splits NUL records into {status,path}', () => {
   ]);
   assert.deepEqual(parseGitStatusPorcelain(''), []);
 });
+test('carry safety requests every untracked file instead of collapsed directories', () => {
+  assert.deepEqual(PRECISE_STATUS_ARGS, ['status', '--porcelain=1', '-z', '--untracked-files=all']);
+});
+test('parseGitStatusPorcelain preserves rename origin paths', () => {
+  assert.deepEqual(parseGitStatusPorcelain('R  docs/new name.md\0docs/old name.md\0'), [
+    { status: 'R ', path: 'docs/new name.md', originalPath: 'docs/old name.md' },
+  ]);
+});
+test('parseStartTaskArgs accepts paths with spaces and repeated carry groups', () => {
+  assert.deepEqual(parseStartTaskArgs([
+    '--agent', 'codex',
+    '--carry', '.claude/napkin.md', '.claude/noticed.md',
+    '--slug', 'ledger repair',
+    '--carry', 'docs/CI log download',
+  ]), {
+    agent: 'codex',
+    slug: 'ledger repair',
+    carry: ['.claude/napkin.md', '.claude/noticed.md', 'docs/CI log download'],
+  });
+});
+test('parseStartTaskArgs rejects empty carry groups and unknown flags', () => {
+  assert.throws(() => parseStartTaskArgs(['--carry', '--agent', 'codex']), /at least one path/i);
+  assert.throws(() => parseStartTaskArgs(['--wat', 'value']), /unknown option/i);
+});
+test('toCheckoutRelativePath accepts paths inside the checkout and rejects root/outside/.git', () => {
+  const checkoutRoot = path.resolve('test-checkout-root');
+  assert.equal(toCheckoutRelativePath('docs/input.txt', { checkoutRoot, baseDir: checkoutRoot }), 'docs/input.txt');
+  assert.throws(() => toCheckoutRelativePath(checkoutRoot, { checkoutRoot, baseDir: checkoutRoot }), /checkout root/i);
+  assert.throws(() => toCheckoutRelativePath(path.dirname(checkoutRoot), { checkoutRoot, baseDir: checkoutRoot }), /outside/i);
+  assert.throws(() => toCheckoutRelativePath('.git/config', { checkoutRoot, baseDir: checkoutRoot }), /\.git/i);
+});
+test('minimizeCarryPaths de-duplicates paths and removes children covered by a parent', () => {
+  assert.deepEqual(minimizeCarryPaths(['docs/input.txt', 'docs', 'docs/input.txt', 'other.txt']), ['docs', 'other.txt']);
+});
+test('collectCarriedStatusEntries covers only explicitly carried files and directories', () => {
+  const statusEntries = [
+    { status: '??', path: '.claude/napkin.md' },
+    { status: ' M', path: 'docs/input/file.txt' },
+    { status: '??', path: 'unrelated.txt' },
+  ];
+  assert.deepEqual(collectCarriedStatusEntries({
+    statusEntries,
+    carryPaths: ['.claude/napkin.md', 'docs/input'],
+  }), {
+    carriedEntries: statusEntries.slice(0, 2),
+    unexpectedEntries: statusEntries.slice(2),
+  });
+});
 test('assertCheckoutIsSafe throws when dirty', () => {
   assert.throws(() => assertCheckoutIsSafe({ statusEntries: [{ status: ' M', path: 'a' }], currentBranch: 'main', defaultBranch: 'main' }), /dirty/i);
+});
+test('assertCheckoutIsSafe allows only dirty entries covered by carry paths', () => {
+  const carried = assertCheckoutIsSafe({
+    statusEntries: [
+      { status: '??', path: '.claude/napkin.md' },
+      { status: '??', path: '.claude/noticed.md' },
+    ],
+    currentBranch: 'main',
+    defaultBranch: 'main',
+    carryPaths: ['.claude/napkin.md', '.claude/noticed.md'],
+  });
+  assert.equal(carried.length, 2);
+  assert.throws(() => assertCheckoutIsSafe({
+    statusEntries: [
+      { status: '??', path: '.claude/napkin.md' },
+      { status: '??', path: '.claude/noticed.md' },
+    ],
+    currentBranch: 'main',
+    defaultBranch: 'main',
+    carryPaths: ['.claude/napkin.md'],
+  }), /\.claude\/noticed\.md/);
 });
 test('assertCheckoutIsSafe throws when not on the default branch', () => {
   assert.throws(() => assertCheckoutIsSafe({ statusEntries: [], currentBranch: 'agent/x/1-y', defaultBranch: 'main' }), /default branch/i);
