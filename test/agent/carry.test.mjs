@@ -49,6 +49,62 @@ test('copyCarryPathsAndVerify copies multiple files and a directory with spaces 
   });
 });
 
+test('copyCarryPathsAndVerify carries a tracked deletion into the worktree', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    fs.writeFileSync(path.join(checkoutRoot, 'deleted.txt'), 'baseline\n');
+    git(checkoutRoot, ['add', 'deleted.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+
+    fs.writeFileSync(path.join(worktreePath, 'deleted.txt'), 'baseline\n');
+    fs.rmSync(path.join(checkoutRoot, 'deleted.txt'));
+
+    copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['deleted.txt'],
+    });
+
+    assert.equal(fs.existsSync(path.join(worktreePath, 'deleted.txt')), false);
+    cleanupVerifiedCarry({ checkoutRoot, carryPaths: ['deleted.txt'] });
+    assert.equal(git(checkoutRoot, ['status', '--porcelain=1']), '');
+    assert.equal(fs.readFileSync(path.join(checkoutRoot, 'deleted.txt'), 'utf8'), 'baseline\n');
+  });
+});
+
+test('copyCarryPathsAndVerify carries both sides of a staged rename and restores the source checkout', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    fs.writeFileSync(path.join(checkoutRoot, 'old-name.txt'), 'renamed\n');
+    git(checkoutRoot, ['add', 'old-name.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+
+    fs.writeFileSync(path.join(worktreePath, 'old-name.txt'), 'renamed\n');
+    fs.renameSync(
+      path.join(checkoutRoot, 'old-name.txt'),
+      path.join(checkoutRoot, 'new-name.txt'),
+    );
+    git(checkoutRoot, ['add', '--all']);
+
+    const carryPaths = ['old-name.txt', 'new-name.txt'];
+    copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+
+    assert.equal(fs.existsSync(path.join(worktreePath, 'old-name.txt')), false);
+    assert.equal(fs.readFileSync(path.join(worktreePath, 'new-name.txt'), 'utf8'), 'renamed\n');
+
+    cleanupVerifiedCarry({ checkoutRoot, carryPaths });
+    assert.equal(git(checkoutRoot, ['status', '--porcelain=1']), '');
+    assert.equal(fs.readFileSync(path.join(checkoutRoot, 'old-name.txt'), 'utf8'), 'renamed\n');
+    assert.equal(fs.existsSync(path.join(checkoutRoot, 'new-name.txt')), false);
+  });
+});
+
 test('removeCarrySources removes only the explicit verified roots', () => {
   withTempRoots(({ checkoutRoot }) => {
     fs.mkdirSync(path.join(checkoutRoot, 'inputs'), { recursive: true });
