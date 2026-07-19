@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 import {
   ACTIVE_PLAN_STALE_MS,
   CHARTER_BUDGETS,
-  HARD_CHARTER_DOCS,
   REVIEW_STALE_MS,
   TOOL_STUB_BUDGETS,
   docMapGlobToRegExp,
@@ -377,8 +376,6 @@ function checkLineBudgets(root, byRel, findings) {
     if (lines > budget) {
       addFinding(findings, {
         code: 'charter-overbudget',
-        // Suite-asserted charters block the docs gate (rt#176); others warn.
-        severity: HARD_CHARTER_DOCS.has(rel) ? 'blocking' : 'warning',
         path: rel,
         line: 1,
         message: `${rel} has ${lines} lines; charter budget is ${budget}.`,
