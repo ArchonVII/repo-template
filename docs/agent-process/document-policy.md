@@ -26,7 +26,7 @@ Run doc-health as part of that gate only when it is installed; otherwise use the
 2. The first screen of an agent-read document must contain binding rules or links to them.
 3. Long rules use a short `AGENTS.md` contract plus a detail doc in `docs/agent-process/`.
 4. Distributor-maintained sections use managed blocks.
-5. Docs over their charter budget move detail down the hierarchy instead of growing forever.
+5. A charter budget overrun triggers review for detail that can move down the hierarchy; the budget is advisory, not a hard cap.
 6. Doc-health tools report drift; they do not rewrite durable docs.
 
 ## Source-Of-Truth Hierarchy

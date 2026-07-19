@@ -117,11 +117,10 @@ abandoned lane's docs eligible for recovery.
 
 ## The blocking subset (L2)
 
-`scripts/doc-health/health.mjs` splits findings by severity. Everything that predates
-L2 stays a **warning** (review cadence, supersession, placeholders, stale terms —
-dashboard food, never gate food), with one post-L2 exception: suite-asserted charter
-budgets block (rt#176, table below). The other **blocking** findings all come from
-the doc-map contract and only exist when `.agent/doc-map.yml` does:
+`scripts/doc-health/health.mjs` splits findings by severity. Advisory findings stay
+**warnings** (review cadence, supersession, placeholders, stale terms, and charter budgets —
+dashboard food, never gate food). **Blocking** findings come from the doc-map contract
+and only exist when `.agent/doc-map.yml` does:
 
 | code | fires when | scope |
 | --- | --- | --- |
@@ -132,7 +131,6 @@ the doc-map contract and only exist when `.agent/doc-map.yml` does:
 | `generated-block-stale` / `generated-block-check-failed` | a committed-class surface differs from regeneration, or the generators are unavailable/broken | always |
 | `dangling-relative-link` (escalated) | a dead link in a `checked` doc declaring `links` | only when the doc is **re-triggered** |
 | `path-ref-missing` | a backtick repo path in a `checked` doc declaring `path-refs` does not exist | blocking when re-triggered, warning otherwise |
-| `charter-overbudget` (hard charters only) | `AGENTS.md` or `VISION.md` exceeds its `CHARTER_BUDGETS` entry (`HARD_CHARTER_DOCS` in `scripts/doc-health/lib.mjs`; rt#176 — the node suite hard-asserts these budgets and docs-only PRs skip node CI) | always, even without a doc-map; other charters (`README.md`) stay warnings |
 
 Coverage validation is deliberately **root-granular**: a mapping is valid when the
 named doc provably owns *something* under the root (per the epic's keystone-rot
