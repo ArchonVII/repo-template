@@ -8,13 +8,17 @@ const ROOT = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
 
 test('startup baseline contract names canonical startup files and legacy plan path', async () => {
   const baseline = JSON.parse(await readFile(join(ROOT, '.agent', 'startup-baseline.json'), 'utf8'));
-  assert.equal(baseline.version, '2026-07-19-agent-start-task-carry');
+  assert.equal(baseline.version, '2026-07-19-doc-system-runtime');
   for (const path of [
     'AGENTS.md',
     'docs/plans/README.md',
     'docs/agent-process/document-policy.md',
     'docs/agent-process/message-protocol.md',
     'docs/agent-process/doc-health.md',
+    'docs/agent-process/doc-system.md',
+    '.agent/doc-map.yml',
+    'docs/CANON.md',
+    'docs/INDEX.md',
     '.agent/check-map.yml',
     '.agent/coordination/README.md',
     '.github/PULL_REQUEST_TEMPLATE.md',
@@ -34,11 +38,17 @@ test('startup baseline contract names canonical startup files and legacy plan pa
     'scripts/doc-sweep/sweep.mjs',
     'scripts/doc-health/lib.mjs',
     'scripts/doc-health/health.mjs',
+    'scripts/docs/lib.mjs',
+    'scripts/docs/index.mjs',
+    'scripts/docs/nav.mjs',
+    'scripts/docs/render.mjs',
+    'scripts/docs/status.mjs',
+    'scripts/docs/changelog.mjs',
     'docs/agent-process/doc-sweep.md',
   ]) {
     assert.ok(baseline.required.includes(path), `baseline required should include ${path}`);
   }
-  for (const path of ['docs/plans/', 'docs/agent-process/', 'scripts/agent/', 'scripts/close/', 'scripts/doc-sweep/', 'scripts/doc-health/']) {
+  for (const path of ['docs/plans/', 'docs/agent-process/', 'scripts/agent/', 'scripts/close/', 'scripts/doc-sweep/', 'scripts/doc-health/', 'scripts/docs/']) {
     assert.ok(baseline.expectedDirectories.includes(path), `baseline directories should include ${path}`);
   }
   assert.ok(baseline.legacy.includes('docs/superpowers/plans/'));
