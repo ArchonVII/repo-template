@@ -166,10 +166,13 @@ export function collectCarriedStatusEntries({ statusEntries, carryPaths = [] }) 
   const carriedEntries = [];
   const unexpectedEntries = [];
   for (const entry of statusEntries) {
-    const covered = normalizedCarryPaths.some((carryPath) => (
+    const destinationCovered = normalizedCarryPaths.some((carryPath) => (
       isPathInsideCarryPath(entry.path, carryPath)
-      || (entry.originalPath && isPathInsideCarryPath(entry.originalPath, carryPath))
     ));
+    const originalCovered = !entry.status.includes('R') || normalizedCarryPaths.some((carryPath) => (
+      entry.originalPath && isPathInsideCarryPath(entry.originalPath, carryPath)
+    ));
+    const covered = destinationCovered && originalCovered;
     (covered ? carriedEntries : unexpectedEntries).push(entry);
   }
   return { carriedEntries, unexpectedEntries };
@@ -351,7 +354,7 @@ function ensureFinalNewline(value) {
   return value.endsWith('\n') ? value : `${value}\n`;
 }
 
-function isPathInsideCarryPath(filePath, carryPath) {
+export function isPathInsideCarryPath(filePath, carryPath) {
   const normalizedFilePath = normalizeRepoRelativePath(filePath);
   const normalizedCarryPath = normalizeRepoRelativePath(carryPath);
   return normalizedFilePath === normalizedCarryPath || normalizedFilePath.startsWith(`${normalizedCarryPath}/`);

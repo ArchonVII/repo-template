@@ -52,13 +52,14 @@ function hashFileSync(filePath) {
 }
 
 export function assertPathCopiesMatch(sourcePath, destinationPath) {
-  const sourceManifest = buildPathManifest(sourcePath);
-  let destinationManifest;
-  try {
-    destinationManifest = buildPathManifest(destinationPath);
-  } catch (error) {
-    throw new Error(`Carry verification failed for ${sourcePath}: ${error.message}`);
+  const sourceStats = lstatIfPresent(sourcePath);
+  const destinationStats = lstatIfPresent(destinationPath);
+  if (!sourceStats || !destinationStats) {
+    if (!sourceStats && !destinationStats) return;
+    throw new Error(`Carry verification failed for ${sourcePath}: source and destination existence differs; source was not cleaned.`);
   }
+  const sourceManifest = buildPathManifest(sourcePath);
+  const destinationManifest = buildPathManifest(destinationPath);
   if (JSON.stringify(sourceManifest) !== JSON.stringify(destinationManifest)) {
     throw new Error(`Carry verification failed for ${sourcePath}: destination content differs; source was not cleaned.`);
   }
@@ -70,7 +71,11 @@ export function copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths
     const destinationPath = resolveInside(worktreePath, carryPath);
     fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
     fs.rmSync(destinationPath, { recursive: true, force: true });
-    const stats = fs.lstatSync(sourcePath);
+    const stats = lstatIfPresent(sourcePath);
+    if (!stats) {
+      assertPathCopiesMatch(sourcePath, destinationPath);
+      continue;
+    }
     if (stats.isDirectory()) {
       fs.cpSync(sourcePath, destinationPath, { recursive: true, force: true, verbatimSymlinks: true });
     } else if (stats.isFile() || stats.isSymbolicLink()) {
@@ -79,6 +84,15 @@ export function copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths
       throw new Error(`Unsupported carry path type: ${sourcePath}`);
     }
     assertPathCopiesMatch(sourcePath, destinationPath);
+  }
+}
+
+function lstatIfPresent(filePath) {
+  try {
+    return fs.lstatSync(filePath);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
   }
 }
 

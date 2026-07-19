@@ -152,6 +152,15 @@ test('collectCarriedStatusEntries requires both sides of a rename to be covered'
     carriedEntries: [rename],
     unexpectedEntries: [],
   });
+
+  const copy = { ...rename, status: 'C ' };
+  assert.deepEqual(collectCarriedStatusEntries({
+    statusEntries: [copy],
+    carryPaths: ['outside'],
+  }), {
+    carriedEntries: [copy],
+    unexpectedEntries: [],
+  });
 });
 test('assertCheckoutIsSafe throws when dirty', () => {
   assert.throws(() => assertCheckoutIsSafe({ statusEntries: [{ status: ' M', path: 'a' }], currentBranch: 'main', defaultBranch: 'main' }), /dirty/i);

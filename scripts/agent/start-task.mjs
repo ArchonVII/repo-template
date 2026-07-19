@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { cleanupVerifiedCarry, copyCarryPathsAndVerify } from './carry.mjs';
-import { PRECISE_STATUS_ARGS, sanitizeSlug, buildBranchName, parseGitStatusPorcelain, parseStartTaskArgs, toCheckoutRelativePath, minimizeCarryPaths, assertCheckoutIsSafe, filterIssueBranches } from './lib.mjs';
+import { PRECISE_STATUS_ARGS, sanitizeSlug, buildBranchName, parseGitStatusPorcelain, parseStartTaskArgs, toCheckoutRelativePath, minimizeCarryPaths, collectCarriedStatusEntries, isPathInsideCarryPath, assertCheckoutIsSafe, filterIssueBranches } from './lib.mjs';
 
 const DEFAULT_AGENT = 'codex';
 const [, , issueArg, ...rest] = process.argv;
@@ -19,23 +19,24 @@ if (!issueArg || !/^\d+$/.test(issueArg)) {
 const checkoutRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: process.cwd(), encoding: 'utf8' }).trim();
 const repoName = path.basename(checkoutRoot);
 const agent = args.agent || DEFAULT_AGENT;
-const carryPaths = resolveCarryPaths(args.carry);
 
 const issue = JSON.parse(gh(['issue', 'view', issueArg, '--json', 'number,title,url,state']));
 if (issue.state !== 'OPEN') fail(`Issue #${issueArg} is not open (state: ${issue.state}).`);
 
 const defaultBranch = gh(['repo', 'view', '--json', 'defaultBranchRef', '--jq', '.defaultBranchRef.name']);
+git(['fetch', 'origin', defaultBranch]);
+
+const statusEntries = parseGitStatusPorcelain(git([...PRECISE_STATUS_ARGS], { trim: false }));
+const carryPaths = resolveCarryPaths(args.carry, statusEntries);
 
 try {
   assertCheckoutIsSafe({
-    statusEntries: parseGitStatusPorcelain(git([...PRECISE_STATUS_ARGS], { trim: false })),
+    statusEntries,
     currentBranch: git(['branch', '--show-current']),
     defaultBranch,
     carryPaths,
   });
 } catch (error) { fail(error.message); }
-
-git(['fetch', 'origin', defaultBranch]);
 
 const slug = sanitizeSlug(args.slug || issue.title) || fail('Could not derive a slug; pass --slug <value>.');
 const branchName = buildBranchName(agent, issueArg, slug);
@@ -106,19 +107,29 @@ function installWorktreeDeps(wt) {
   }
 }
 
-function resolveCarryPaths(rawCarryPaths) {
-  const resolved = [];
-  for (const rawPath of rawCarryPaths) {
-    let relativePath;
+function resolveCarryPaths(rawCarryPaths, statusEntries) {
+  const resolved = minimizeCarryPaths(rawCarryPaths.map((rawPath) => {
     try {
-      relativePath = toCheckoutRelativePath(rawPath, { checkoutRoot, baseDir: process.cwd() });
+      return toCheckoutRelativePath(rawPath, { checkoutRoot, baseDir: process.cwd() });
     } catch (error) { fail(error.message); }
+  }));
+  const carriedEntries = collectCarriedStatusEntries({ statusEntries, carryPaths: resolved }).carriedEntries;
+  for (const relativePath of resolved) {
     const absolutePath = path.join(checkoutRoot, relativePath);
-    try { fs.lstatSync(absolutePath); }
-    catch { fail(`Carry path not found: ${rawPath}. Paths with spaces must be quoted.`); }
-    resolved.push(relativePath);
+    try {
+      fs.lstatSync(absolutePath);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      const representsCarriedAbsence = carriedEntries.some((entry) => (
+        isPathInsideCarryPath(entry.path, relativePath)
+        || (entry.originalPath && isPathInsideCarryPath(entry.originalPath, relativePath))
+      ));
+      if (!representsCarriedAbsence) {
+        fail(`Carry path not found: ${relativePath}. Paths with spaces must be quoted.`);
+      }
+    }
   }
-  return minimizeCarryPaths(resolved);
+  return resolved;
 }
 
 function transplantCarryPaths({ carryPaths, worktreePath }) {
