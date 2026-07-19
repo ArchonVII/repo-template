@@ -29,6 +29,7 @@ function makeTempRepo({ initialCommit = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'doc-sweep-test-'));
   const g = (...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' });
   g('init', '-q');
+  g('config', 'core.autocrlf', 'false');
   // Windows: git needs user identity before committing — spec note
   g('config', 'user.email', 'test@example.com');
   g('config', 'user.name', 'Test Agent');

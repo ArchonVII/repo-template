@@ -36,16 +36,17 @@ test('gitattributes keep working-tree line endings deterministic with core.autoc
     git(seed, ['config', 'user.name', 'EOL Test']);
     git(seed, ['config', 'core.autocrlf', 'false']);
 
-    fs.copyFileSync(path.join(ROOT, '.gitattributes'), path.join(seed, '.gitattributes'));
+    const attributes = fs.readFileSync(path.join(ROOT, '.gitattributes'), 'utf8').replaceAll('\r\n', '\n');
+    fs.writeFileSync(path.join(seed, '.gitattributes'), attributes);
     fs.mkdirSync(path.join(seed, '.githooks'));
     for (const [relativePath, body] of [
       ['README.md', 'first\nsecond\n'],
       ['script.mjs', 'export const value = 1;\nexport default value;\n'],
       ['script.sh', '#!/usr/bin/env bash\necho ok\n'],
       ['.githooks/pre-commit', '#!/usr/bin/env bash\nexit 0\n'],
-      ['script.ps1', "Write-Output 'first'\nWrite-Output 'second'\n"],
-      ['script.bat', '@echo off\necho ok\n'],
-      ['script.cmd', '@echo off\necho ok\n'],
+      ['script.ps1', "Write-Output 'first'\r\nWrite-Output 'second'\r\n"],
+      ['script.bat', '@echo off\r\necho ok\r\n'],
+      ['script.cmd', '@echo off\r\necho ok\r\n'],
     ]) {
       fs.writeFileSync(path.join(seed, relativePath), body);
     }
