@@ -3,6 +3,10 @@
 // unit-tested in test/agent/lib.test.mjs. Command shims (start-task/status/prune)
 // inject git/gh output and consume these.
 
+import path from 'node:path';
+
+export const PRECISE_STATUS_ARGS = Object.freeze(['status', '--porcelain=1', '-z', '--untracked-files=all']);
+
 // Branch convention: agent/<tool>/<issue>-<slug> (see AGENTS.md "Workflow").
 export function sanitizeSlug(value) {
   const slug = String(value)
@@ -87,19 +91,101 @@ export function populatePrBodyTemplate(template, { issue }) {
 
 export function parseGitStatusPorcelain(raw) {
   if (!raw) return [];
-  return raw
-    .split('\0')
-    .filter(Boolean)
-    .map((record) => ({ status: record.slice(0, 2), path: record.slice(3) }));
+  const records = raw.split('\0').filter(Boolean);
+  const entries = [];
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    const status = record.slice(0, 2);
+    const entry = { status, path: normalizeRepoRelativePath(record.slice(3)) };
+    if (status.includes('R') || status.includes('C')) {
+      entry.originalPath = normalizeRepoRelativePath(records[index + 1] ?? '');
+      index += 1;
+    }
+    entries.push(entry);
+  }
+  return entries;
 }
-export function assertCheckoutIsSafe({ statusEntries, currentBranch, defaultBranch }) {
-  if (statusEntries.length > 0) {
-    const sample = statusEntries.slice(0, 3).map((e) => e.path).join(', ');
-    throw new Error(`Working tree is dirty. Commit or stash before starting a task. Dirty: ${sample}`);
+
+export function parseStartTaskArgs(argv) {
+  const parsed = { carry: [] };
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (!token.startsWith('--')) throw new Error(`Unexpected argument: ${token}`);
+    const key = token.slice(2);
+    if (key === 'carry') {
+      const start = parsed.carry.length;
+      while (argv[index + 1] && !argv[index + 1].startsWith('--')) {
+        parsed.carry.push(argv[index + 1]);
+        index += 1;
+      }
+      if (parsed.carry.length === start) throw new Error('--carry requires at least one path.');
+      continue;
+    }
+    if (key !== 'agent' && key !== 'slug') throw new Error(`Unknown option: --${key}`);
+    const value = argv[index + 1];
+    if (!value || value.startsWith('--')) throw new Error(`--${key} requires a value.`);
+    parsed[key] = value;
+    index += 1;
+  }
+  return parsed;
+}
+
+export function normalizeRepoRelativePath(value) {
+  return String(value).replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/g, '');
+}
+
+export function toCheckoutRelativePath(filePath, { checkoutRoot, baseDir }) {
+  const resolvedRoot = path.resolve(checkoutRoot);
+  const absolutePath = path.isAbsolute(filePath)
+    ? path.resolve(filePath)
+    : path.resolve(baseDir, filePath);
+  const nativeRelativePath = path.relative(resolvedRoot, absolutePath);
+  if (!nativeRelativePath) {
+    throw new Error('Carry path resolves to the checkout root; pass a file or directory inside the repo.');
+  }
+  if (path.isAbsolute(nativeRelativePath) || nativeRelativePath === '..' || nativeRelativePath.startsWith(`..${path.sep}`)) {
+    throw new Error(`Carry path is outside the checkout: ${filePath}`);
+  }
+  const repoRelativePath = normalizeRepoRelativePath(nativeRelativePath);
+  if (repoRelativePath === '.git' || repoRelativePath.startsWith('.git/')) {
+    throw new Error('Carry paths may not include .git metadata.');
+  }
+  return repoRelativePath;
+}
+
+export function minimizeCarryPaths(carryPaths = []) {
+  const candidates = [...new Set(carryPaths.map(normalizeRepoRelativePath))]
+    .sort((left, right) => left.split('/').length - right.split('/').length || left.localeCompare(right));
+  return candidates.filter((candidate, index) => !candidates.slice(0, index).some(
+    (parent) => candidate === parent || candidate.startsWith(`${parent}/`),
+  ));
+}
+
+export function collectCarriedStatusEntries({ statusEntries, carryPaths = [] }) {
+  const normalizedCarryPaths = minimizeCarryPaths(carryPaths);
+  const carriedEntries = [];
+  const unexpectedEntries = [];
+  for (const entry of statusEntries) {
+    const covered = normalizedCarryPaths.some((carryPath) => (
+      isPathInsideCarryPath(entry.path, carryPath)
+      || (entry.originalPath && isPathInsideCarryPath(entry.originalPath, carryPath))
+    ));
+    (covered ? carriedEntries : unexpectedEntries).push(entry);
+  }
+  return { carriedEntries, unexpectedEntries };
+}
+
+export function assertCheckoutIsSafe({ statusEntries, currentBranch, defaultBranch, carryPaths = [] }) {
+  const { carriedEntries, unexpectedEntries } = collectCarriedStatusEntries({ statusEntries, carryPaths });
+  if (unexpectedEntries.length > 0) {
+    const sample = unexpectedEntries.slice(0, 3).map((entry) => entry.path).join(', ');
+    const hint = carryPaths.length === 0 ? ' If these are intentional task inputs, rerun with --carry <path...>.' : '';
+    throw new Error(`Working tree is dirty. Commit or stash before starting a task.${hint} Dirty: ${sample}`);
   }
   if (!currentBranch || currentBranch !== defaultBranch) {
     throw new Error(`start-task must run from the default branch (${defaultBranch}); current: ${currentBranch || '(detached HEAD)'}`);
   }
+  return carriedEntries;
 }
 
 export function parseWorktreeList(porcelain) {
@@ -263,4 +349,10 @@ export function formatStatusReport(s) {
 
 function ensureFinalNewline(value) {
   return value.endsWith('\n') ? value : `${value}\n`;
+}
+
+function isPathInsideCarryPath(filePath, carryPath) {
+  const normalizedFilePath = normalizeRepoRelativePath(filePath);
+  const normalizedCarryPath = normalizeRepoRelativePath(carryPath);
+  return normalizedFilePath === normalizedCarryPath || normalizedFilePath.startsWith(`${normalizedCarryPath}/`);
 }

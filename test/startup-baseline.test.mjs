@@ -10,7 +10,7 @@ const ROOT = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
 
 test('startup baseline contract names canonical startup files and legacy plan path', async () => {
   const baseline = JSON.parse(await readFile(join(ROOT, '.agent', 'startup-baseline.json'), 'utf8'));
-  assert.equal(baseline.version, '2026-07-18-message-protocol');
+  assert.equal(baseline.version, '2026-07-19-agent-start-task-carry');
   for (const path of [
     'AGENTS.md',
     'docs/plans/README.md',
@@ -23,6 +23,7 @@ test('startup baseline contract names canonical startup files and legacy plan pa
     '.github/workflows/anomaly-triage.yml',
     'package.json',
     'scripts/agent/lib.mjs',
+    'scripts/agent/carry.mjs',
     'scripts/agent/start-task.mjs',
     'scripts/agent/status.mjs',
     'scripts/agent/prune.mjs',
