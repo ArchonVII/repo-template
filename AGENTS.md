@@ -129,8 +129,9 @@ Use `--carry` only for explicit in-repo task inputs: every dirty path must be co
   their absence is advisory. If you do tick a checkbox, tick it only after the backing
   command or manual check actually passed.
 - Validate a drafted body BEFORE creating the PR — same validator CI runs, zero paid
-  re-runs on formatting: `npm run pr:contract -- --body-file - --title "<title>" --branch
-  <branch>` (body on stdin).
+  re-runs on formatting. Save the filled body to a temporary file outside the worktree,
+  set `$bodyFile`, `$title`, and `$branch`, then run:
+  `npm run pr:contract -- --body-file "$bodyFile" --title "$title" --branch "$branch"`.
 - If user-visible behavior changed, smoke-test it and record what was exercised.
 - Do not run `gh pr ready` directly. Use:
 
