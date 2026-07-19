@@ -128,6 +128,31 @@ test('collectCarriedStatusEntries covers only explicitly carried files and direc
     unexpectedEntries: statusEntries.slice(2),
   });
 });
+test('collectCarriedStatusEntries requires both sides of a rename to be covered', () => {
+  const rename = {
+    status: 'R ',
+    path: 'outside/new-name.md',
+    originalPath: 'inside/old-name.md',
+  };
+
+  for (const carryPaths of [['inside'], ['outside']]) {
+    assert.deepEqual(collectCarriedStatusEntries({
+      statusEntries: [rename],
+      carryPaths,
+    }), {
+      carriedEntries: [],
+      unexpectedEntries: [rename],
+    });
+  }
+
+  assert.deepEqual(collectCarriedStatusEntries({
+    statusEntries: [rename],
+    carryPaths: ['inside', 'outside'],
+  }), {
+    carriedEntries: [rename],
+    unexpectedEntries: [],
+  });
+});
 test('assertCheckoutIsSafe throws when dirty', () => {
   assert.throws(() => assertCheckoutIsSafe({ statusEntries: [{ status: ' M', path: 'a' }], currentBranch: 'main', defaultBranch: 'main' }), /dirty/i);
 });
