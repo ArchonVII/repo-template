@@ -126,3 +126,12 @@ test('npm PR-contract guidance uses a real body file on PowerShell (#194)', asyn
     );
   }
 });
+
+test('document policy attributes documentation commands to their providing capabilities (#198)', async () => {
+  const policy = await readFile(join(ROOT, 'docs', 'agent-process', 'document-policy.md'), 'utf8');
+
+  assert.match(policy, /`docs:render` and `docs:status`.*documentation-system capability/is);
+  assert.match(policy, /`docs:changelog`.*changelog capability/is);
+  assert.match(policy, /`pr:contract`.*agent-lifecycle capability/is);
+  assert.doesNotMatch(policy, /`docs:changelog` and `docs:status`[\s\S]{0,300}agent-lifecycle feature/i);
+});

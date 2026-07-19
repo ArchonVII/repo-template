@@ -65,11 +65,11 @@ consumer update path.
 When a repo has not adopted a future document yet, the charter still defines where that
 document belongs once introduced.
 
-The `docs:changelog` and `docs:status` commands named in the table above run through
-`package.json` scripts, and (like the sibling `docs:render` and `pr:contract` commands) a
-repo has them only when it installs the agent-lifecycle feature. A repo onboarded without
-that feature has no `npm run`, so it folds the changelog and renders status another way or
-not at all.
+The `docs:render` and `docs:status` commands named above run through `package.json`
+scripts installed by the documentation-system capability. The same runtime provides
+`docs:changelog`, which is usable when the changelog capability installs `CHANGELOG.md`.
+`pr:contract` and the agent close/worktree commands require the agent-lifecycle capability.
+A repo without the corresponding capability uses its own repo-local process or skips that operation.
 
 ## Owner Intent Layer
 
