@@ -105,3 +105,24 @@ test('document policy activation and plan authority remain capability-aware (#18
   assert.match(plans, /Only plans explicitly marked active or selected by the repo-local status\/index are authoritative/i);
   assert.match(plans, /Capsule guidance applies only when the repo adopts project capsules/i);
 });
+
+test('npm PR-contract guidance uses a real body file on PowerShell (#194)', async () => {
+  const instructionPaths = [
+    join(ROOT, 'AGENTS.md'),
+    join(ROOT, '.github', 'PULL_REQUEST_TEMPLATE.md'),
+  ];
+
+  for (const instructionPath of instructionPaths) {
+    const body = await readFile(instructionPath, 'utf8');
+    assert.doesNotMatch(
+      body,
+      /npm run pr:contract -- --body-file -/,
+      `${instructionPath} must not document stdin through the npm wrapper`,
+    );
+    assert.match(
+      body,
+      /npm run pr:contract -- --body-file "\$bodyFile" --title "\$title" --branch "\$branch"/,
+      `${instructionPath} must use the supported PowerShell body-file invocation`,
+    );
+  }
+});
