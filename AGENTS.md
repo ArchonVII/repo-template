@@ -112,7 +112,7 @@ Prefer repo helpers:
 These `agent:*` helpers exist only when the agent-lifecycle feature (its `package.json` scripts) is installed; a repo onboarded without it has no `npm run` targets, so use the raw `git worktree add` command shown above.
 
 Do not run `git switch -c` in the primary checkout; if unsure, run `bash .githooks/scripts/checkout-doctor.sh`.
-Use `--carry` only for explicit in-repo task inputs: every dirty path must be covered, each destination is verified before only the named sources are cleaned, and unrelated dirt still blocks startup. A tracked deletion is carried as an absent destination; a rename requires both its original and destination paths to be covered before task branch/worktree creation.
+Use `--carry` only for explicit in-repo task inputs: every dirty path must be covered, each destination is verified before only the named sources are cleaned, and unrelated dirt still blocks startup. Cleanup is bound to that verified filesystem and Git-index state; divergent index/worktree versions are rejected because one copy cannot represent both. Detected changes or recreations make startup fail without overwriting them and report every location that may hold recovery data. A tracked deletion is carried as an absent destination; a rename requires both its original and destination paths to be covered before task branch/worktree creation. No portable lock spans these filesystem and Git operations, so do not edit either checkout until `agent:start-task` returns.
 
 ## Verification And Delivery
 

@@ -6,6 +6,7 @@ import { cleanupVerifiedCarry, copyCarryPathsAndVerify } from './carry.mjs';
 import { PRECISE_STATUS_ARGS, sanitizeSlug, buildBranchName, parseGitStatusPorcelain, parseStartTaskArgs, toCheckoutRelativePath, minimizeCarryPaths, collectCarriedStatusEntries, isPathInsideCarryPath, assertCheckoutIsSafe, filterIssueBranches } from './lib.mjs';
 
 const DEFAULT_AGENT = 'codex';
+const SETUP_OWNED_PATHS = Object.freeze(['.agent/current-task.json', 'node_modules']);
 const [, , issueArg, ...rest] = process.argv;
 let args;
 try { args = parseStartTaskArgs(rest); }
@@ -48,7 +49,9 @@ if (fs.existsSync(worktreePath)) fail(`Worktree path already exists: ${worktreeP
 
 git(['worktree', 'add', '-b', branchName, worktreePath, `origin/${defaultBranch}`]);
 
-if (carryPaths.length > 0) transplantCarryPaths({ carryPaths, worktreePath });
+const carryReceipt = carryPaths.length > 0
+  ? copyCarryPaths({ carryPaths, worktreePath })
+  : null;
 
 // Install dependencies in the fresh worktree so a node-stack agent can run tests
 // immediately (archon-setup#292). node_modules is gitignored, so a new worktree has
@@ -56,6 +59,8 @@ if (carryPaths.length > 0) transplantCarryPaths({ carryPaths, worktreePath });
 // environments are untouched) and keep it NON-FATAL — a failed/slow install must
 // not abort task setup; the agent can still run `npm ci` by hand.
 installWorktreeDeps(worktreePath);
+
+if (carryReceipt) cleanupCarryPaths({ carryPaths, worktreePath, receipt: carryReceipt });
 
 // Initial task metadata (#27 AC). Runtime file, gitignored. Written into the NEW worktree.
 const metadata = {
@@ -113,6 +118,12 @@ function resolveCarryPaths(rawCarryPaths, statusEntries) {
       return toCheckoutRelativePath(rawPath, { checkoutRoot, baseDir: process.cwd() });
     } catch (error) { fail(error.message); }
   }));
+  const setupConflict = resolved.find((carryPath) => SETUP_OWNED_PATHS.some(
+    (setupPath) => setupPathsOverlap(carryPath, setupPath),
+  ));
+  if (setupConflict) {
+    fail(`Carry path conflicts with setup-owned output: ${setupConflict}. Preserve it separately before starting the task.`);
+  }
   const carriedEntries = collectCarriedStatusEntries({ statusEntries, carryPaths: resolved }).carriedEntries;
   for (const relativePath of resolved) {
     const absolutePath = path.join(checkoutRoot, relativePath);
@@ -132,17 +143,29 @@ function resolveCarryPaths(rawCarryPaths, statusEntries) {
   return resolved;
 }
 
-function transplantCarryPaths({ carryPaths, worktreePath }) {
+function setupPathsOverlap(carryPath, setupPath) {
+  // Reserved setup outputs are portable policy. Compare case-insensitively on
+  // every host so a branch prepared on a case-sensitive disk cannot become
+  // destructive when used on Windows or a default macOS volume.
+  const normalizedCarryPath = carryPath.toLowerCase();
+  const normalizedSetupPath = setupPath.toLowerCase();
+  return isPathInsideCarryPath(normalizedSetupPath, normalizedCarryPath)
+    || isPathInsideCarryPath(normalizedCarryPath, normalizedSetupPath);
+}
+
+function copyCarryPaths({ carryPaths, worktreePath }) {
   try {
-    copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+    return copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
   } catch (error) {
     fail(`Carry copy failed; the source checkout was not cleaned. ${error.message}`);
   }
+}
 
+function cleanupCarryPaths({ carryPaths, worktreePath, receipt }) {
   try {
-    cleanupVerifiedCarry({ checkoutRoot, carryPaths });
+    cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, receipt });
   } catch (error) {
-    fail(`Carry cleanup failed after destination verification. The verified copy is in ${worktreePath}; recover the source from there if needed. ${error.message}`);
+    fail(`Carry cleanup failed after destination verification. Do not overwrite either location; inspect the source checkout (${checkoutRoot}), destination worktree (${worktreePath}), and any recovery path reported below. ${error.message}`);
   }
 }
 

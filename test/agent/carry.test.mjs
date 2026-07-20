@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import childProcess, { execFileSync } from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
 
 import {
   assertPathCopiesMatch,
   buildPathManifest,
   cleanupVerifiedCarry,
   copyCarryPathsAndVerify,
-  removeCarrySources,
 } from '../../scripts/agent/carry.mjs';
 
 function withTempRoots(run) {
@@ -62,14 +62,14 @@ test('copyCarryPathsAndVerify carries a tracked deletion into the worktree', () 
     fs.writeFileSync(path.join(worktreePath, 'deleted.txt'), 'baseline\n');
     fs.rmSync(path.join(checkoutRoot, 'deleted.txt'));
 
-    copyCarryPathsAndVerify({
+    const receipt = copyCarryPathsAndVerify({
       checkoutRoot,
       worktreePath,
       carryPaths: ['deleted.txt'],
     });
 
     assert.equal(fs.existsSync(path.join(worktreePath, 'deleted.txt')), false);
-    cleanupVerifiedCarry({ checkoutRoot, carryPaths: ['deleted.txt'] });
+    cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths: ['deleted.txt'], receipt });
     assert.equal(git(checkoutRoot, ['status', '--porcelain=1']), '');
     assert.equal(fs.readFileSync(path.join(checkoutRoot, 'deleted.txt'), 'utf8'), 'baseline\n');
   });
@@ -93,28 +93,15 @@ test('copyCarryPathsAndVerify carries both sides of a staged rename and restores
     git(checkoutRoot, ['add', '--all']);
 
     const carryPaths = ['old-name.txt', 'new-name.txt'];
-    copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
 
     assert.equal(fs.existsSync(path.join(worktreePath, 'old-name.txt')), false);
     assert.equal(fs.readFileSync(path.join(worktreePath, 'new-name.txt'), 'utf8'), 'renamed\n');
 
-    cleanupVerifiedCarry({ checkoutRoot, carryPaths });
+    cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, receipt });
     assert.equal(git(checkoutRoot, ['status', '--porcelain=1']), '');
     assert.equal(fs.readFileSync(path.join(checkoutRoot, 'old-name.txt'), 'utf8'), 'renamed\n');
     assert.equal(fs.existsSync(path.join(checkoutRoot, 'new-name.txt')), false);
-  });
-});
-
-test('removeCarrySources removes only the explicit verified roots', () => {
-  withTempRoots(({ checkoutRoot }) => {
-    fs.mkdirSync(path.join(checkoutRoot, 'inputs'), { recursive: true });
-    fs.writeFileSync(path.join(checkoutRoot, 'inputs', 'carried.txt'), 'carry\n');
-    fs.writeFileSync(path.join(checkoutRoot, 'keep.txt'), 'keep\n');
-
-    removeCarrySources({ checkoutRoot, carryPaths: ['inputs'] });
-
-    assert.equal(fs.existsSync(path.join(checkoutRoot, 'inputs')), false);
-    assert.equal(fs.readFileSync(path.join(checkoutRoot, 'keep.txt'), 'utf8'), 'keep\n');
   });
 });
 
@@ -153,8 +140,8 @@ test('cleanupVerifiedCarry restores tracked content and removes carried untracke
     git(checkoutRoot, ['add', 'staged-new.txt']);
     const carryPaths = ['tracked.txt', 'untracked.txt', 'ignored.txt', 'staged-new.txt'];
 
-    copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
-    cleanupVerifiedCarry({ checkoutRoot, carryPaths });
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+    cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, receipt });
 
     assert.equal(git(checkoutRoot, ['status', '--porcelain=1']), '');
     assert.equal(fs.readFileSync(path.join(checkoutRoot, 'tracked.txt'), 'utf8'), 'baseline\n');
@@ -168,6 +155,635 @@ test('cleanupVerifiedCarry restores tracked content and removes carried untracke
   });
 });
 
+test('cleanupVerifiedCarry preserves a file changed after copy verification', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    fs.writeFileSync(path.join(checkoutRoot, 'owner.txt'), 'baseline\n');
+    git(checkoutRoot, ['add', 'owner.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+
+    fs.writeFileSync(path.join(checkoutRoot, 'owner.txt'), 'carried\n');
+    const receipt = copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['owner.txt'],
+    });
+    fs.writeFileSync(path.join(checkoutRoot, 'owner.txt'), 'late owner edit\n');
+
+    assert.throws(() => cleanupVerifiedCarry({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['owner.txt'],
+      receipt,
+    }), /changed after carry verification/i);
+    assert.equal(fs.readFileSync(path.join(checkoutRoot, 'owner.txt'), 'utf8'), 'late owner edit\n');
+    assert.equal(fs.readFileSync(path.join(worktreePath, 'owner.txt'), 'utf8'), 'carried\n');
+  });
+});
+
+test('cleanupVerifiedCarry preserves a deletion path recreated after absence verification', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    fs.writeFileSync(path.join(checkoutRoot, 'deleted.txt'), 'baseline\n');
+    git(checkoutRoot, ['add', 'deleted.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+
+    fs.rmSync(path.join(checkoutRoot, 'deleted.txt'));
+    const receipt = copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['deleted.txt'],
+    });
+    fs.writeFileSync(path.join(checkoutRoot, 'deleted.txt'), 'late recreation\n');
+
+    assert.throws(() => cleanupVerifiedCarry({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['deleted.txt'],
+      receipt,
+    }), /changed after carry verification/i);
+    assert.equal(fs.readFileSync(path.join(checkoutRoot, 'deleted.txt'), 'utf8'), 'late recreation\n');
+    assert.equal(fs.existsSync(path.join(worktreePath, 'deleted.txt')), false);
+  });
+});
+
+test('cleanupVerifiedCarry validates every path before cleaning any source', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    fs.writeFileSync(path.join(checkoutRoot, 'first.txt'), 'first baseline\n');
+    fs.writeFileSync(path.join(checkoutRoot, 'second.txt'), 'second baseline\n');
+    git(checkoutRoot, ['add', 'first.txt', 'second.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+
+    fs.writeFileSync(path.join(checkoutRoot, 'first.txt'), 'first carried\n');
+    fs.writeFileSync(path.join(checkoutRoot, 'second.txt'), 'second carried\n');
+    const carryPaths = ['first.txt', 'second.txt'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+    fs.writeFileSync(path.join(checkoutRoot, 'second.txt'), 'second late edit\n');
+
+    assert.throws(() => cleanupVerifiedCarry({
+      checkoutRoot,
+      worktreePath,
+      carryPaths,
+      receipt,
+    }), /changed after carry verification/i);
+    assert.equal(fs.readFileSync(path.join(checkoutRoot, 'first.txt'), 'utf8'), 'first carried\n');
+    assert.equal(fs.readFileSync(path.join(checkoutRoot, 'second.txt'), 'utf8'), 'second late edit\n');
+  });
+});
+
+test('copyCarryPathsAndVerify rejects staged bytes not represented by the worktree', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const sourcePath = path.join(checkoutRoot, 'owner.txt');
+    fs.writeFileSync(sourcePath, 'baseline\n');
+    git(checkoutRoot, ['add', 'owner.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.writeFileSync(sourcePath, 'staged-only task input\n');
+    git(checkoutRoot, ['add', 'owner.txt']);
+    fs.writeFileSync(sourcePath, 'baseline\n');
+
+    assert.throws(() => copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['owner.txt'],
+    }), /Git index and worktree states differ/i);
+    assert.equal(fs.readFileSync(sourcePath, 'utf8'), 'baseline\n');
+    assert.equal(git(checkoutRoot, ['show', ':owner.txt']), 'staged-only task input');
+    assert.equal(fs.existsSync(path.join(worktreePath, 'owner.txt')), false);
+  });
+});
+
+test('cleanupVerifiedCarry rejects a Git index changed after receipt creation', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const sourcePath = path.join(checkoutRoot, 'owner.txt');
+    fs.writeFileSync(sourcePath, 'baseline\n');
+    git(checkoutRoot, ['add', 'owner.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.writeFileSync(sourcePath, 'carried\n');
+    const carryPaths = ['owner.txt'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+    git(checkoutRoot, ['add', 'owner.txt']);
+
+    assert.throws(() => cleanupVerifiedCarry({
+      checkoutRoot,
+      worktreePath,
+      carryPaths,
+      receipt,
+    }), /Git index changed after carry verification/i);
+    assert.equal(fs.readFileSync(sourcePath, 'utf8'), 'carried\n');
+    assert.equal(git(checkoutRoot, ['show', ':owner.txt']), 'carried');
+    assert.equal(fs.readFileSync(path.join(worktreePath, 'owner.txt'), 'utf8'), 'carried\n');
+  });
+});
+
+test('copyCarryPathsAndVerify rejects a staged deletion recreated in the worktree', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const sourcePath = path.join(checkoutRoot, 'owner.txt');
+    fs.writeFileSync(sourcePath, 'baseline\n');
+    git(checkoutRoot, ['add', 'owner.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.rmSync(sourcePath);
+    git(checkoutRoot, ['add', 'owner.txt']);
+    fs.writeFileSync(sourcePath, 'recreated worktree version\n');
+
+    assert.throws(() => copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['owner.txt'],
+    }), /Git index and worktree states differ/i);
+    assert.equal(fs.readFileSync(sourcePath, 'utf8'), 'recreated worktree version\n');
+    assert.equal(git(checkoutRoot, ['ls-files', '--stage', '--', 'owner.txt']), '');
+    assert.equal(fs.existsSync(path.join(worktreePath, 'owner.txt')), false);
+  });
+});
+
+test('carry receipts normalize path spelling and ordering while rejecting overlapping roots', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    fs.writeFileSync(path.join(checkoutRoot, 'a.txt'), 'a\n');
+    fs.writeFileSync(path.join(checkoutRoot, 'b.txt'), 'b\n');
+    fs.mkdirSync(path.join(checkoutRoot, 'nested'));
+    fs.writeFileSync(path.join(checkoutRoot, 'nested', 'child.txt'), 'child\n');
+
+    const receipt = copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['b.txt', '.\\a.txt'],
+    });
+    assert.deepEqual(receipt.entries.map((entry) => entry.path), ['a.txt', 'b.txt']);
+
+    assert.throws(() => copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['nested', 'nested/child.txt'],
+    }), /may not overlap/i);
+  });
+});
+
+test('copyCarryPathsAndVerify rejects identical and nested roots before touching source bytes', () => {
+  withTempRoots(({ checkoutRoot }) => {
+    const sourcePath = path.join(checkoutRoot, 'owner.txt');
+    fs.writeFileSync(sourcePath, 'owner bytes\n');
+
+    assert.throws(() => copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath: checkoutRoot,
+      carryPaths: ['owner.txt'],
+    }), /distinct, non-nested directories/i);
+    assert.equal(fs.readFileSync(sourcePath, 'utf8'), 'owner bytes\n');
+
+    const nestedWorktree = path.join(checkoutRoot, 'nested-worktree');
+    fs.mkdirSync(nestedWorktree);
+    assert.throws(() => copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath: nestedWorktree,
+      carryPaths: ['owner.txt'],
+    }), /distinct, non-nested directories/i);
+    assert.equal(fs.readFileSync(sourcePath, 'utf8'), 'owner bytes\n');
+  });
+});
+
+test('carry rejects Windows case aliases before copying', { skip: process.platform !== 'win32' }, () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    fs.writeFileSync(path.join(checkoutRoot, 'owner.txt'), 'owner\n');
+    assert.throws(() => copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['owner.txt', 'OWNER.txt'],
+    }), /duplicate or case-aliased/i);
+    assert.equal(fs.existsSync(path.join(worktreePath, 'owner.txt')), false);
+  });
+});
+
+test('carry rejects a symlink or reparse-point ancestor', (context) => {
+  withTempRoots(({ root, checkoutRoot, worktreePath }) => {
+    const outsidePath = path.join(root, 'outside');
+    fs.mkdirSync(outsidePath);
+    fs.writeFileSync(path.join(outsidePath, 'owner.txt'), 'outside\n');
+    try {
+      fs.symlinkSync(outsidePath, path.join(checkoutRoot, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
+    } catch (error) {
+      if (error.code === 'EPERM' || error.code === 'EACCES') {
+        context.skip(`symlink creation is unavailable: ${error.code}`);
+        return;
+      }
+      throw error;
+    }
+
+    assert.throws(() => copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['linked/owner.txt'],
+    }), /traverses a symlink or reparse point/i);
+    assert.equal(fs.existsSync(path.join(worktreePath, 'linked', 'owner.txt')), false);
+    assert.equal(fs.readFileSync(path.join(outsidePath, 'owner.txt'), 'utf8'), 'outside\n');
+  });
+});
+
+test('cleanupVerifiedCarry rejects a changed directory child without cleaning the source tree', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    fs.mkdirSync(path.join(checkoutRoot, 'owner'));
+    fs.writeFileSync(path.join(checkoutRoot, 'owner', 'note.txt'), 'baseline\n');
+    git(checkoutRoot, ['add', 'owner/note.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+
+    fs.writeFileSync(path.join(checkoutRoot, 'owner', 'note.txt'), 'carried\n');
+    const carryPaths = ['owner'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+    fs.writeFileSync(path.join(checkoutRoot, 'owner', 'note.txt'), 'late child edit\n');
+
+    assert.throws(() => cleanupVerifiedCarry({
+      checkoutRoot,
+      worktreePath,
+      carryPaths,
+      receipt,
+    }), /changed after carry verification/i);
+    assert.equal(fs.readFileSync(path.join(checkoutRoot, 'owner', 'note.txt'), 'utf8'), 'late child edit\n');
+    assert.equal(fs.readFileSync(path.join(worktreePath, 'owner', 'note.txt'), 'utf8'), 'carried\n');
+  });
+});
+
+test('cleanupVerifiedCarry rolls an in-flight promoted-source edit back without losing bytes', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const sourcePath = path.join(checkoutRoot, 'owner.txt');
+    const destinationPath = path.join(worktreePath, 'owner.txt');
+    fs.writeFileSync(sourcePath, 'baseline\n');
+    git(checkoutRoot, ['add', 'owner.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.writeFileSync(sourcePath, 'carried\n');
+    const carryPaths = ['owner.txt'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+
+    const realRenameSync = fs.renameSync;
+    let injected = false;
+    fs.renameSync = (fromPath, toPath) => {
+      realRenameSync(fromPath, toPath);
+      if (!injected && path.resolve(fromPath) === sourcePath && path.resolve(toPath) === destinationPath) {
+        injected = true;
+        fs.writeFileSync(destinationPath, 'in-flight owner edit\n');
+      }
+    };
+    try {
+      assert.throws(() => cleanupVerifiedCarry({
+        checkoutRoot,
+        worktreePath,
+        carryPaths,
+        receipt,
+      }), /transferred source/i);
+    } finally {
+      fs.renameSync = realRenameSync;
+    }
+
+    assert.equal(injected, true);
+    assert.equal(fs.readFileSync(sourcePath, 'utf8'), 'in-flight owner edit\n');
+    assert.equal(fs.readFileSync(destinationPath, 'utf8'), 'carried\n');
+  });
+});
+
+test('cleanupVerifiedCarry preserves every recovery location when rollback collides', () => {
+  withTempRoots(({ root, checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const sourcePath = path.join(checkoutRoot, 'owner.txt');
+    const destinationPath = path.join(worktreePath, 'owner.txt');
+    fs.writeFileSync(sourcePath, 'baseline\n');
+    git(checkoutRoot, ['add', 'owner.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.writeFileSync(sourcePath, 'carried\n');
+    const carryPaths = ['owner.txt'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+
+    const realRenameSync = fs.renameSync;
+    let injected = false;
+    fs.renameSync = (fromPath, toPath) => {
+      realRenameSync(fromPath, toPath);
+      if (!injected && path.resolve(fromPath) === sourcePath && path.resolve(toPath) === destinationPath) {
+        injected = true;
+        fs.writeFileSync(destinationPath, 'in-flight owner edit\n');
+        fs.writeFileSync(sourcePath, 'late source recreation\n');
+      }
+    };
+    let failure;
+    try {
+      failure = captureThrown(() => cleanupVerifiedCarry({
+        checkoutRoot,
+        worktreePath,
+        carryPaths,
+        receipt,
+      }));
+    } finally {
+      fs.renameSync = realRenameSync;
+    }
+    assert.match(failure.message, /manual recovery is required/i);
+
+    const transactionRoots = fs.readdirSync(root)
+      .filter((name) => name.startsWith('.checkout-carry-cleanup-'));
+    assert.equal(transactionRoots.length, 1, failure?.message);
+    assert.equal(fs.readFileSync(sourcePath, 'utf8'), 'late source recreation\n');
+    assert.equal(fs.readFileSync(destinationPath, 'utf8'), 'in-flight owner edit\n');
+    assert.equal(
+      fs.readFileSync(path.join(root, transactionRoots[0], 'owner.txt'), 'utf8'),
+      'carried\n',
+    );
+  });
+});
+
+test('cleanupVerifiedCarry never overwrites a source path recreated immediately before baseline restore', () => {
+  withTempRoots(({ root, checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const sourcePath = path.join(checkoutRoot, 'owner.txt');
+    const destinationPath = path.join(worktreePath, 'owner.txt');
+    fs.writeFileSync(sourcePath, 'baseline\n');
+    git(checkoutRoot, ['add', 'owner.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.writeFileSync(sourcePath, 'carried\n');
+    const carryPaths = ['owner.txt'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+
+    const realExecFileSync = childProcess.execFileSync;
+    let injected = false;
+    childProcess.execFileSync = (command, args = [], options = {}) => {
+      if (!injected && command === 'git' && args.includes('restore') && args.includes('--staged')) {
+        injected = true;
+        fs.writeFileSync(sourcePath, 'late source recreation\n');
+      }
+      return realExecFileSync(command, args, options);
+    };
+    syncBuiltinESMExports();
+    let failure;
+    try {
+      failure = captureThrown(() => cleanupVerifiedCarry({
+        checkoutRoot,
+        worktreePath,
+        carryPaths,
+        receipt,
+      }));
+    } finally {
+      childProcess.execFileSync = realExecFileSync;
+      syncBuiltinESMExports();
+    }
+
+    assert.equal(injected, true);
+    assert.match(failure.message, /already exists|checkout-index/i);
+    assert.equal(fs.readFileSync(sourcePath, 'utf8'), 'late source recreation\n');
+    assert.equal(fs.readFileSync(destinationPath, 'utf8'), 'carried\n');
+    const transactionRoots = fs.readdirSync(root)
+      .filter((name) => name.startsWith('.checkout-carry-cleanup-'));
+    assert.equal(transactionRoots.length, 1);
+    assert.equal(
+      fs.readFileSync(path.join(root, transactionRoots[0], 'owner.txt'), 'utf8'),
+      'carried\n',
+    );
+  });
+});
+
+test('cleanupVerifiedCarry never restores tracked leaves through a recreated directory junction', (context) => {
+  withTempRoots(({ root, checkoutRoot, worktreePath }) => {
+    const outsidePath = path.join(root, 'outside');
+    const probePath = path.join(root, 'symlink-probe');
+    fs.mkdirSync(outsidePath);
+    try {
+      fs.symlinkSync(outsidePath, probePath, process.platform === 'win32' ? 'junction' : 'dir');
+      fs.unlinkSync(probePath);
+    } catch (error) {
+      if (error.code === 'EPERM' || error.code === 'EACCES') {
+        context.skip(`symlink creation is unavailable: ${error.code}`);
+        return;
+      }
+      throw error;
+    }
+
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const sourceRoot = path.join(checkoutRoot, 'owner');
+    fs.mkdirSync(sourceRoot);
+    fs.writeFileSync(path.join(sourceRoot, 'tracked.txt'), 'baseline\n');
+    git(checkoutRoot, ['add', 'owner/tracked.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.writeFileSync(path.join(sourceRoot, 'tracked.txt'), 'carried\n');
+    const carryPaths = ['owner'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+
+    const realExecFileSync = childProcess.execFileSync;
+    let injected = false;
+    childProcess.execFileSync = (command, args = [], options = {}) => {
+      if (!injected && command === 'git' && args.includes('restore') && args.includes('--staged')) {
+        injected = true;
+        fs.symlinkSync(outsidePath, sourceRoot, process.platform === 'win32' ? 'junction' : 'dir');
+      }
+      return realExecFileSync(command, args, options);
+    };
+    syncBuiltinESMExports();
+    let failure;
+    try {
+      failure = captureThrown(() => cleanupVerifiedCarry({
+        checkoutRoot,
+        worktreePath,
+        carryPaths,
+        receipt,
+      }));
+    } finally {
+      childProcess.execFileSync = realExecFileSync;
+      syncBuiltinESMExports();
+    }
+
+    assert.equal(injected, true);
+    assert.match(failure.message, /traverses a symlink or reparse point/i);
+    assert.equal(fs.existsSync(path.join(outsidePath, 'tracked.txt')), false);
+    assert.equal(fs.lstatSync(sourceRoot).isSymbolicLink(), true);
+    assert.equal(fs.readFileSync(path.join(worktreePath, 'owner', 'tracked.txt'), 'utf8'), 'carried\n');
+  });
+});
+
+test('cleanupVerifiedCarry never rolls a nested path back through a recreated junction', (context) => {
+  withTempRoots(({ root, checkoutRoot, worktreePath }) => {
+    const outsidePath = path.join(root, 'outside');
+    const probePath = path.join(root, 'symlink-probe');
+    fs.mkdirSync(outsidePath);
+    try {
+      fs.symlinkSync(outsidePath, probePath, process.platform === 'win32' ? 'junction' : 'dir');
+      fs.unlinkSync(probePath);
+    } catch (error) {
+      if (error.code === 'EPERM' || error.code === 'EACCES') {
+        context.skip(`symlink creation is unavailable: ${error.code}`);
+        return;
+      }
+      throw error;
+    }
+
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const sourceParent = path.join(checkoutRoot, 'owner');
+    const sourcePath = path.join(sourceParent, 'tracked.txt');
+    const destinationPath = path.join(worktreePath, 'owner', 'tracked.txt');
+    fs.mkdirSync(sourceParent);
+    fs.writeFileSync(sourcePath, 'baseline\n');
+    git(checkoutRoot, ['add', 'owner/tracked.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.writeFileSync(sourcePath, 'carried\n');
+    const carryPaths = ['owner/tracked.txt'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+
+    const realRenameSync = fs.renameSync;
+    let injected = false;
+    fs.renameSync = (fromPath, toPath) => {
+      realRenameSync(fromPath, toPath);
+      if (!injected && path.resolve(fromPath) === sourcePath && path.resolve(toPath) === destinationPath) {
+        injected = true;
+        fs.writeFileSync(destinationPath, 'in-flight owner edit\n');
+        fs.rmSync(sourceParent, { recursive: true });
+        fs.symlinkSync(outsidePath, sourceParent, process.platform === 'win32' ? 'junction' : 'dir');
+      }
+    };
+    let failure;
+    try {
+      failure = captureThrown(() => cleanupVerifiedCarry({
+        checkoutRoot,
+        worktreePath,
+        carryPaths,
+        receipt,
+      }));
+    } finally {
+      fs.renameSync = realRenameSync;
+    }
+
+    assert.equal(injected, true);
+    assert.match(failure.message, /manual recovery is required/i);
+    assert.equal(fs.existsSync(path.join(outsidePath, 'tracked.txt')), false);
+    assert.equal(fs.lstatSync(sourceParent).isSymbolicLink(), true);
+    assert.equal(fs.readFileSync(destinationPath, 'utf8'), 'in-flight owner edit\n');
+    const transactionRoots = fs.readdirSync(root)
+      .filter((name) => name.startsWith('.checkout-carry-cleanup-'));
+    assert.equal(transactionRoots.length, 1);
+    assert.equal(
+      fs.readFileSync(path.join(root, transactionRoots[0], 'owner', 'tracked.txt'), 'utf8'),
+      'carried\n',
+    );
+  });
+});
+
+test('cleanupVerifiedCarry treats carry-derived names as literal Git paths', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const carriedPath = path.join(checkoutRoot, 'owner[1].txt');
+    const unrelatedPath = path.join(checkoutRoot, 'owner1.txt');
+    fs.writeFileSync(carriedPath, 'baseline carried\n');
+    fs.writeFileSync(unrelatedPath, 'baseline unrelated\n');
+    git(checkoutRoot, ['--literal-pathspecs', 'add', 'owner[1].txt', 'owner1.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.writeFileSync(carriedPath, 'carried\n');
+    const carryPaths = ['owner[1].txt'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+    fs.writeFileSync(unrelatedPath, 'late unrelated edit\n');
+    git(checkoutRoot, ['--literal-pathspecs', 'add', 'owner1.txt']);
+
+    assert.throws(() => cleanupVerifiedCarry({
+      checkoutRoot,
+      worktreePath,
+      carryPaths,
+      receipt,
+    }), /checkout remains dirty/i);
+    assert.equal(fs.readFileSync(unrelatedPath, 'utf8'), 'late unrelated edit\n');
+    assert.equal(git(checkoutRoot, ['diff', '--cached', '--name-only']), 'owner1.txt');
+    assert.equal(fs.readFileSync(path.join(worktreePath, 'owner[1].txt'), 'utf8'), 'carried\n');
+  });
+});
+
+test('cleanupVerifiedCarry detects an ignored path recreated during cleanup', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    fs.writeFileSync(path.join(checkoutRoot, '.gitignore'), 'ignored.txt\n');
+    git(checkoutRoot, ['add', '.gitignore']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    const sourcePath = path.join(checkoutRoot, 'ignored.txt');
+    fs.writeFileSync(sourcePath, 'carried ignored bytes\n');
+    const carryPaths = ['ignored.txt'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+
+    const realExecFileSync = childProcess.execFileSync;
+    let injected = false;
+    childProcess.execFileSync = (command, args = [], options = {}) => {
+      if (!injected && command === 'git' && args[0] === 'status' && args.includes('--untracked-files=all')) {
+        injected = true;
+        fs.writeFileSync(sourcePath, 'late ignored recreation\n');
+      }
+      return realExecFileSync(command, args, options);
+    };
+    syncBuiltinESMExports();
+    let failure;
+    try {
+      failure = captureThrown(() => cleanupVerifiedCarry({
+        checkoutRoot,
+        worktreePath,
+        carryPaths,
+        receipt,
+      }));
+    } finally {
+      childProcess.execFileSync = realExecFileSync;
+      syncBuiltinESMExports();
+    }
+
+    assert.equal(injected, true);
+    assert.match(failure.message, /ignored carry paths reappeared/i);
+    assert.equal(fs.readFileSync(sourcePath, 'utf8'), 'late ignored recreation\n');
+    assert.equal(fs.readFileSync(path.join(worktreePath, 'ignored.txt'), 'utf8'), 'carried ignored bytes\n');
+  });
+});
+
 function git(cwd, args) {
   return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+}
+
+function captureThrown(run) {
+  let failure;
+  try {
+    run();
+  } catch (error) {
+    failure = error;
+  }
+  assert.ok(failure, 'Expected function to throw.');
+  return failure;
 }
