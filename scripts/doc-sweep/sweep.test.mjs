@@ -20,6 +20,7 @@ function makeTempRepo({ branch = 'main' } = {}) {
   const g = (...args) =>
     execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
   g('init', '-q', '-b', branch);
+  g('config', 'core.autocrlf', 'false');
   g('config', 'user.email', 'test@example.com');
   g('config', 'user.name', 'Test Agent');
   writeFileSync(join(dir, '.gitkeep'), '');
