@@ -46,6 +46,7 @@ _Generated from docs/**/*.md frontmatter by `npm run docs:render` — do not edi
 - [doc-sweep.md](agent-process/doc-sweep.md) `Design approved with amendments (2026-06-02); h…`
 - [doc-system.md](agent-process/doc-system.md) — Contract for the self-maintaining docs system — doc classes by input volatility, the doc-map spine, generators, and what blocks at PR time. `CURRENT`
 - [document-policy.md](agent-process/document-policy.md) `active`
+- [exact-final-head-codex-merge-gate.md](agent-process/exact-final-head-codex-merge-gate.md) `accepted`
 - [message-protocol.md](agent-process/message-protocol.md) `active`
 - [project-capsules.md](agent-process/project-capsules.md) `intake`
 
