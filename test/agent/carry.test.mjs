@@ -79,6 +79,9 @@ test('copyCarryPathsAndVerify restores every captured directory mode before rece
     const realCpSync = fs.cpSync;
     const realLstatSync = fs.lstatSync;
     const realChmodSync = fs.chmodSync;
+    const realOpenSync = fs.openSync;
+    const realFchmodSync = fs.fchmodSync;
+    const descriptorPaths = new Map();
 
     fs.cpSync = (fromPath, toPath, options) => {
       realCpSync(fromPath, toPath, options);
@@ -110,6 +113,20 @@ test('copyCarryPathsAndVerify restores every captured directory mode before rece
       }
       realChmodSync(targetPath, mode);
     };
+    fs.openSync = (targetPath, flags, mode) => {
+      const descriptor = realOpenSync(targetPath, flags, mode);
+      const key = typeof targetPath === 'string' ? path.resolve(targetPath) : null;
+      if (key && forcedModes.has(key)) descriptorPaths.set(descriptor, key);
+      return descriptor;
+    };
+    fs.fchmodSync = (descriptor, mode) => {
+      const key = descriptorPaths.get(descriptor);
+      if (key) {
+        forcedModes.set(key, mode & 0o7777);
+        chmodCalls.push(key);
+      }
+      realFchmodSync(descriptor, mode);
+    };
 
     try {
       copyCarryPathsAndVerify({
@@ -121,6 +138,8 @@ test('copyCarryPathsAndVerify restores every captured directory mode before rece
       fs.cpSync = realCpSync;
       fs.lstatSync = realLstatSync;
       fs.chmodSync = realChmodSync;
+      fs.openSync = realOpenSync;
+      fs.fchmodSync = realFchmodSync;
     }
 
     assert.deepEqual(
