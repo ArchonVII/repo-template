@@ -985,6 +985,61 @@ test('cleanupVerifiedCarry retains originals and verified copies when a later pr
   });
 });
 
+test('cleanupVerifiedCarry reports only surviving residue when final disposal is partial', () => {
+  withTempRoots(({ root, checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    for (const name of ['a.txt', 'b.txt']) fs.writeFileSync(path.join(checkoutRoot, name), `baseline ${name}\n`);
+    git(checkoutRoot, ['add', 'a.txt', 'b.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    for (const name of ['a.txt', 'b.txt']) fs.writeFileSync(path.join(checkoutRoot, name), `carried ${name}\n`);
+    const carryPaths = ['a.txt', 'b.txt'];
+    const plan = preflightCarryPlan({ checkoutRoot, worktreePath, carryPaths });
+    const receipt = copyCarryPathsAndVerifyImpl({ checkoutRoot, worktreePath, carryPaths, plan });
+
+    const realUnlinkSync = fs.unlinkSync;
+    const realWarn = console.warn;
+    const warnings = [];
+    let removedBackup = null;
+    let retainedBackup = null;
+    fs.unlinkSync = (targetPath) => {
+      if (String(targetPath).includes(`${path.sep}destination-copy${path.sep}`)) {
+        if (!removedBackup) {
+          removedBackup = path.resolve(targetPath);
+          return realUnlinkSync(targetPath);
+        }
+        retainedBackup = path.resolve(targetPath);
+        const error = new Error('injected final disposal failure');
+        error.code = 'EIO';
+        throw error;
+      }
+      return realUnlinkSync(targetPath);
+    };
+    console.warn = (...args) => warnings.push(args.join(' '));
+    try {
+      cleanupVerifiedCarryImpl({ checkoutRoot, worktreePath, carryPaths, receipt, plan });
+    } finally {
+      fs.unlinkSync = realUnlinkSync;
+      console.warn = realWarn;
+    }
+
+    assert.ok(removedBackup);
+    assert.ok(retainedBackup);
+    assert.equal(fs.existsSync(removedBackup), false);
+    assert.equal(fs.existsSync(retainedBackup), true);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /carry completed.+cleanup residue remains/i);
+    assert.equal(warnings[0].includes(removedBackup), false);
+    assert.equal(warnings[0].includes(retainedBackup), true);
+    assert.equal(git(checkoutRoot, ['status', '--porcelain=1']), '');
+    assert.equal(fs.readFileSync(path.join(worktreePath, 'a.txt'), 'utf8'), 'carried a.txt\n');
+    assert.equal(fs.readFileSync(path.join(worktreePath, 'b.txt'), 'utf8'), 'carried b.txt\n');
+    assert.equal(fs.readdirSync(root).some((name) => name.startsWith('.checkout-carry-cleanup-')), true);
+  });
+});
+
 test('cleanupVerifiedCarry restores ordinary tracked-file permissions in the protected checkout', () => {
   withTempRoots(({ checkoutRoot, worktreePath }) => {
     git(checkoutRoot, ['init', '-b', 'main']);

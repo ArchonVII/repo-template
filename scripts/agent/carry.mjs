@@ -266,7 +266,7 @@ export function cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, r
     verifyTransactionBackups(entries, transfer.moved);
     promoteTransferredSources({ worktreePath, entries, transfer });
     verifyPromotedSources({ worktreePath, entries, transfer });
-    removePrivateTreeNoFollow(transfer.transactionRoot);
+    disposeVerifiedTransaction(transfer);
   } catch (error) {
     // Git can restore a batch only partially. Once that starts, automatic
     // rollback could overwrite a path recreated during the restore; retain all
@@ -275,6 +275,25 @@ export function cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, r
       ? describeRetainedRecovery(transfer)
       : rollbackTransfer(transfer);
     throw new Error(`${error.message}${recovery}`);
+  }
+}
+
+function disposeVerifiedTransaction(transfer) {
+  try {
+    removePrivateTreeNoFollow(transfer.transactionRoot);
+  } catch (error) {
+    const survivors = [];
+    for (const item of transfer.moved) {
+      if (lstatIfPresent(item.sourceBackupPath)) survivors.push(item.sourceBackupPath);
+      if (lstatIfPresent(item.destinationCopyBackupPath)) survivors.push(item.destinationCopyBackupPath);
+    }
+    if (lstatIfPresent(transfer.transactionRoot) && survivors.length === 0) {
+      survivors.push(transfer.transactionRoot);
+    }
+    console.warn(
+      `[verified-carry] Carry completed, but redundant transaction cleanup was incomplete (${error.code || error.message}). `
+      + `The promoted task data and restored source checkout are complete. Cleanup residue remains at: ${survivors.join(', ')}.`,
+    );
   }
 }
 
