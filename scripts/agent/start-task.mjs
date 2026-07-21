@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { cleanupVerifiedCarry, copyCarryPathsAndVerify } from './carry.mjs';
+import { cleanupVerifiedCarry, copyCarryPathsAndVerify, preflightCarryPlan } from './carry.mjs';
 import { PRECISE_STATUS_ARGS, sanitizeSlug, buildBranchName, parseGitStatusPorcelain, parseStartTaskArgs, toCheckoutRelativePath, minimizeCarryPaths, collectCarriedStatusEntries, isPathInsideCarryPath, assertCheckoutIsSafe, filterIssueBranches } from './lib.mjs';
 
 const DEFAULT_AGENT = 'codex';
@@ -47,10 +47,19 @@ if (existingIssueBranches(issueArg).length) fail(`Issue #${issueArg} already has
 if (branchExists(branchName)) fail(`Branch already exists: ${branchName}`);
 if (fs.existsSync(worktreePath)) fail(`Worktree path already exists: ${worktreePath}`);
 
+let carryPlan = null;
+if (carryPaths.length > 0) {
+  try {
+    carryPlan = preflightCarryPlan({ checkoutRoot, worktreePath, carryPaths, statusEntries });
+  } catch (error) {
+    fail(`Carry preflight failed before task-lane creation. ${error.message}`);
+  }
+}
+
 git(['worktree', 'add', '-b', branchName, worktreePath, `origin/${defaultBranch}`]);
 
 const carryReceipt = carryPaths.length > 0
-  ? copyCarryPaths({ carryPaths, worktreePath })
+  ? copyCarryPaths({ carryPaths, worktreePath, plan: carryPlan })
   : null;
 
 // Install dependencies in the fresh worktree so a node-stack agent can run tests
@@ -60,7 +69,7 @@ const carryReceipt = carryPaths.length > 0
 // not abort task setup; the agent can still run `npm ci` by hand.
 installWorktreeDeps(worktreePath);
 
-if (carryReceipt) cleanupCarryPaths({ carryPaths, worktreePath, receipt: carryReceipt });
+if (carryReceipt) cleanupCarryPaths({ carryPaths, worktreePath, receipt: carryReceipt, plan: carryPlan });
 
 // Initial task metadata (#27 AC). Runtime file, gitignored. Written into the NEW worktree.
 const metadata = {
@@ -153,17 +162,17 @@ function setupPathsOverlap(carryPath, setupPath) {
     || isPathInsideCarryPath(normalizedCarryPath, normalizedSetupPath);
 }
 
-function copyCarryPaths({ carryPaths, worktreePath }) {
+function copyCarryPaths({ carryPaths, worktreePath, plan }) {
   try {
-    return copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+    return copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths, plan });
   } catch (error) {
     fail(`Carry copy failed; the source checkout was not cleaned. ${error.message}`);
   }
 }
 
-function cleanupCarryPaths({ carryPaths, worktreePath, receipt }) {
+function cleanupCarryPaths({ carryPaths, worktreePath, receipt, plan }) {
   try {
-    cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, receipt });
+    cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, receipt, plan });
   } catch (error) {
     fail(`Carry cleanup failed after destination verification. Do not overwrite either location; inspect the source checkout (${checkoutRoot}), destination worktree (${worktreePath}), and any recovery path reported below. ${error.message}`);
   }
