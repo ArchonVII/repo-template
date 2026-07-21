@@ -547,25 +547,60 @@ test('cleanupVerifiedCarry isolates carried files from uncarried hard links', ()
     git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
     const outsidePath = path.join(checkoutRoot, 'outside.txt');
     const carriedPath = path.join(checkoutRoot, 'owner', 'carried.txt');
+    const siblingPath = path.join(checkoutRoot, 'owner', 'sibling.txt');
     const destinationPath = path.join(worktreePath, 'owner', 'carried.txt');
+    const destinationSibling = path.join(worktreePath, 'owner', 'sibling.txt');
     fs.writeFileSync(outsidePath, 'protected source\n');
     git(checkoutRoot, ['add', 'outside.txt']);
     git(checkoutRoot, ['commit', '-m', 'test: baseline']);
     fs.mkdirSync(path.dirname(carriedPath));
     fs.linkSync(outsidePath, carriedPath);
+    fs.linkSync(carriedPath, siblingPath);
 
     const carryPaths = ['owner'];
     const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
     cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, receipt });
 
     assert.equal(git(checkoutRoot, ['status', '--porcelain=1']), '');
+    assert.equal(fs.lstatSync(destinationPath).nlink, 1);
+    assert.equal(fs.lstatSync(destinationSibling).nlink, 1);
     fs.writeFileSync(destinationPath, 'task edit\n');
     assert.equal(
       fs.readFileSync(outsidePath, 'utf8'),
       'protected source\n',
       'the task copy must not remain linked to an uncarried protected-checkout file',
     );
+    assert.equal(fs.readFileSync(destinationSibling, 'utf8'), 'protected source\n');
     assert.equal(git(checkoutRoot, ['status', '--porcelain=1']), '');
+  });
+});
+
+test('cleanupVerifiedCarry rejects a destination hard-linked after receipt creation', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const sourcePath = path.join(checkoutRoot, 'owner.txt');
+    const destinationPath = path.join(worktreePath, 'owner.txt');
+    const lateLinkPath = path.join(worktreePath, 'late-link.txt');
+    fs.writeFileSync(sourcePath, 'baseline\n');
+    git(checkoutRoot, ['add', 'owner.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.writeFileSync(sourcePath, 'carried\n');
+    const carryPaths = ['owner.txt'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+    fs.linkSync(destinationPath, lateLinkPath);
+
+    assert.throws(() => cleanupVerifiedCarry({
+      checkoutRoot,
+      worktreePath,
+      carryPaths,
+      receipt,
+    }), /hard link|isolated/i);
+    assert.equal(fs.readFileSync(sourcePath, 'utf8'), 'carried\n');
+    assert.equal(fs.readFileSync(destinationPath, 'utf8'), 'carried\n');
+    assert.equal(fs.readFileSync(lateLinkPath, 'utf8'), 'carried\n');
   });
 });
 
@@ -600,6 +635,137 @@ test('cleanupVerifiedCarry restores source directory modes before reporting succ
     assert.equal(fs.lstatSync(sourcePrivate).mode & 0o7777, 0o710);
     assert.equal(fs.lstatSync(path.join(worktreePath, 'owner')).mode & 0o7777, 0o700);
     assert.equal(fs.lstatSync(path.join(worktreePath, 'owner', 'private')).mode & 0o7777, 0o710);
+  });
+});
+
+test('cleanupVerifiedCarry restores a HEAD file without chmodding the carried directory that replaced it', (context) => {
+  if (process.platform === 'win32') {
+    context.skip('source directory mode restoration is POSIX-only');
+    return;
+  }
+
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const sourceRoot = path.join(checkoutRoot, 'owner');
+    const changedPath = path.join(sourceRoot, 'node');
+    fs.mkdirSync(sourceRoot);
+    fs.writeFileSync(changedPath, 'baseline file\n');
+    git(checkoutRoot, ['add', 'owner/node']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.chmodSync(sourceRoot, 0o700);
+    fs.rmSync(changedPath);
+    fs.mkdirSync(changedPath);
+    fs.writeFileSync(path.join(changedPath, 'scratch.txt'), 'carried directory\n');
+
+    const carryPaths = ['owner'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+    cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, receipt });
+
+    assert.equal(git(checkoutRoot, ['status', '--porcelain=1']), '');
+    assert.equal(fs.readFileSync(changedPath, 'utf8'), 'baseline file\n');
+    assert.equal(fs.lstatSync(sourceRoot).mode & 0o7777, 0o700);
+    assert.equal(
+      fs.readFileSync(path.join(worktreePath, 'owner', 'node', 'scratch.txt'), 'utf8'),
+      'carried directory\n',
+    );
+  });
+});
+
+test('cleanupVerifiedCarry detects a source-directory mode that fchmod did not restore', (context) => {
+  if (process.platform === 'win32') {
+    context.skip('source directory mode restoration is POSIX-only');
+    return;
+  }
+
+  withTempRoots(({ root, checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const sourceRoot = path.join(checkoutRoot, 'owner');
+    fs.mkdirSync(sourceRoot);
+    fs.writeFileSync(path.join(sourceRoot, 'note.txt'), 'baseline\n');
+    git(checkoutRoot, ['add', 'owner/note.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.chmodSync(sourceRoot, 0o700);
+    fs.writeFileSync(path.join(sourceRoot, 'note.txt'), 'carried\n');
+    const carryPaths = ['owner'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+
+    const realFchmodSync = fs.fchmodSync;
+    let injected = false;
+    fs.fchmodSync = () => { injected = true; };
+    let failure;
+    try {
+      failure = captureThrown(() => cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, receipt }));
+    } finally {
+      fs.fchmodSync = realFchmodSync;
+    }
+
+    assert.equal(injected, true);
+    assert.match(failure.message, /directory mode was not restored/i);
+    assert.equal(fs.readFileSync(path.join(worktreePath, 'owner', 'note.txt'), 'utf8'), 'carried\n');
+    assert.equal(
+      fs.readdirSync(root).some((name) => name.startsWith('.checkout-carry-cleanup-')),
+      true,
+    );
+  });
+});
+
+test('cleanupVerifiedCarry never restores a source mode through a swapped symlink', (context) => {
+  if (process.platform === 'win32') {
+    context.skip('source directory mode restoration is POSIX-only');
+    return;
+  }
+
+  withTempRoots(({ root, checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const sourceRoot = path.join(checkoutRoot, 'owner');
+    const sourcePrivate = path.join(sourceRoot, 'private');
+    const outsidePath = path.join(root, 'outside');
+    fs.mkdirSync(sourcePrivate, { recursive: true });
+    fs.writeFileSync(path.join(sourcePrivate, 'note.txt'), 'baseline\n');
+    fs.mkdirSync(outsidePath);
+    fs.writeFileSync(path.join(outsidePath, 'marker.txt'), 'outside\n');
+    fs.chmodSync(outsidePath, 0o777);
+    git(checkoutRoot, ['add', 'owner/private/note.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.chmodSync(sourceRoot, 0o700);
+    fs.chmodSync(sourcePrivate, 0o710);
+    fs.writeFileSync(path.join(sourcePrivate, 'note.txt'), 'carried\n');
+    const carryPaths = ['owner'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+    const outsideMode = fs.lstatSync(outsidePath).mode & 0o7777;
+
+    const realOpenSync = fs.openSync;
+    let injected = false;
+    fs.openSync = (targetPath, flags, mode) => {
+      if (!injected && path.resolve(targetPath) === path.resolve(sourcePrivate)) {
+        injected = true;
+        fs.rmSync(sourcePrivate, { recursive: true });
+        fs.symlinkSync(outsidePath, sourcePrivate, 'dir');
+      }
+      return realOpenSync(targetPath, flags, mode);
+    };
+    let failure;
+    try {
+      failure = captureThrown(() => cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, receipt }));
+    } finally {
+      fs.openSync = realOpenSync;
+    }
+
+    assert.equal(injected, true);
+    assert.ok(failure);
+    assert.equal(fs.lstatSync(sourcePrivate).isSymbolicLink(), true);
+    assert.equal(fs.lstatSync(outsidePath).mode & 0o7777, outsideMode);
+    assert.equal(fs.readFileSync(path.join(outsidePath, 'marker.txt'), 'utf8'), 'outside\n');
+    assert.equal(fs.readFileSync(path.join(worktreePath, 'owner', 'private', 'note.txt'), 'utf8'), 'carried\n');
   });
 });
 
@@ -956,9 +1122,11 @@ test('cleanupVerifiedCarry rolls an in-flight promoted-source edit back without 
     let injected = false;
     fs.renameSync = (fromPath, toPath) => {
       realRenameSync(fromPath, toPath);
-      if (!injected && path.resolve(fromPath) === sourcePath && path.resolve(toPath) === destinationPath) {
+      if (!injected
+        && path.resolve(fromPath) === sourcePath
+        && toPath.includes(`${path.sep}source${path.sep}`)) {
         injected = true;
-        fs.writeFileSync(destinationPath, 'in-flight owner edit\n');
+        fs.writeFileSync(toPath, 'in-flight owner edit\n');
       }
     };
     try {
@@ -997,9 +1165,11 @@ test('cleanupVerifiedCarry preserves every recovery location when rollback colli
     let injected = false;
     fs.renameSync = (fromPath, toPath) => {
       realRenameSync(fromPath, toPath);
-      if (!injected && path.resolve(fromPath) === sourcePath && path.resolve(toPath) === destinationPath) {
+      if (!injected
+        && path.resolve(fromPath) === sourcePath
+        && toPath.includes(`${path.sep}source${path.sep}`)) {
         injected = true;
-        fs.writeFileSync(destinationPath, 'in-flight owner edit\n');
+        fs.writeFileSync(toPath, 'in-flight owner edit\n');
         fs.writeFileSync(sourcePath, 'late source recreation\n');
       }
     };
@@ -1020,10 +1190,10 @@ test('cleanupVerifiedCarry preserves every recovery location when rollback colli
       .filter((name) => name.startsWith('.checkout-carry-cleanup-'));
     assert.equal(transactionRoots.length, 1, failure?.message);
     assert.equal(fs.readFileSync(sourcePath, 'utf8'), 'late source recreation\n');
-    assert.equal(fs.readFileSync(destinationPath, 'utf8'), 'in-flight owner edit\n');
+    assert.equal(fs.readFileSync(destinationPath, 'utf8'), 'carried\n');
     assert.equal(
-      fs.readFileSync(path.join(root, transactionRoots[0], 'owner.txt'), 'utf8'),
-      'carried\n',
+      fs.readFileSync(path.join(root, transactionRoots[0], 'source', 'owner.txt'), 'utf8'),
+      'in-flight owner edit\n',
     );
   });
 });
@@ -1074,7 +1244,7 @@ test('cleanupVerifiedCarry never overwrites a source path recreated immediately 
       .filter((name) => name.startsWith('.checkout-carry-cleanup-'));
     assert.equal(transactionRoots.length, 1);
     assert.equal(
-      fs.readFileSync(path.join(root, transactionRoots[0], 'owner.txt'), 'utf8'),
+      fs.readFileSync(path.join(root, transactionRoots[0], 'source', 'owner.txt'), 'utf8'),
       'carried\n',
     );
   });
@@ -1175,9 +1345,11 @@ test('cleanupVerifiedCarry never rolls a nested path back through a recreated ju
     let injected = false;
     fs.renameSync = (fromPath, toPath) => {
       realRenameSync(fromPath, toPath);
-      if (!injected && path.resolve(fromPath) === sourcePath && path.resolve(toPath) === destinationPath) {
+      if (!injected
+        && path.resolve(fromPath) === sourcePath
+        && toPath.includes(`${path.sep}source${path.sep}`)) {
         injected = true;
-        fs.writeFileSync(destinationPath, 'in-flight owner edit\n');
+        fs.writeFileSync(toPath, 'in-flight owner edit\n');
         fs.rmSync(sourceParent, { recursive: true });
         fs.symlinkSync(outsidePath, sourceParent, process.platform === 'win32' ? 'junction' : 'dir');
       }
@@ -1198,13 +1370,13 @@ test('cleanupVerifiedCarry never rolls a nested path back through a recreated ju
     assert.match(failure.message, /manual recovery is required/i);
     assert.equal(fs.existsSync(path.join(outsidePath, 'tracked.txt')), false);
     assert.equal(fs.lstatSync(sourceParent).isSymbolicLink(), true);
-    assert.equal(fs.readFileSync(destinationPath, 'utf8'), 'in-flight owner edit\n');
+    assert.equal(fs.readFileSync(destinationPath, 'utf8'), 'carried\n');
     const transactionRoots = fs.readdirSync(root)
       .filter((name) => name.startsWith('.checkout-carry-cleanup-'));
     assert.equal(transactionRoots.length, 1);
     assert.equal(
-      fs.readFileSync(path.join(root, transactionRoots[0], 'owner', 'tracked.txt'), 'utf8'),
-      'carried\n',
+      fs.readFileSync(path.join(root, transactionRoots[0], 'source', 'owner', 'tracked.txt'), 'utf8'),
+      'in-flight owner edit\n',
     );
   });
 });
