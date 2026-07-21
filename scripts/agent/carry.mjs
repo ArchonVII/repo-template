@@ -133,6 +133,7 @@ export function cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, r
   assertIndexFingerprintMatches(checkoutRoot, normalizedPaths, indexFingerprint);
   verifyReceiptState({ checkoutRoot, worktreePath, entries });
   const trackedPaths = trackedPathSetsForCarry(checkoutRoot, normalizedPaths);
+  assertTrackedRestoreGitVersion(checkoutRoot, trackedPaths.restorePaths);
   const transfer = transferCarrySources({ checkoutRoot, worktreePath, entries });
   let restoreStarted = false;
   try {
@@ -195,6 +196,7 @@ function copyDirectoryWithModesAndVerify({ sourcePath, destinationPath, worktree
     fs.renameSync(stagedPath, destinationPath);
     promoted = true;
     assertPathStateMatches(destinationPath, state, carryPath, 'destination worktree');
+    assertRegularFilesAreIsolated(destinationPath, state, carryPath, 'destination worktree');
 
     if (destinationBackedUp) removePrivateTreeNoFollow(backupPath);
     removePrivateTreeNoFollow(transactionRoot);
@@ -716,6 +718,19 @@ function trackedPathSetsForCarry(checkoutRoot, carryPaths) {
   return { restorePaths, headPaths };
 }
 
+function assertTrackedRestoreGitVersion(checkoutRoot, restorePaths) {
+  if (restorePaths.length === 0) return;
+  const versionOutput = git(checkoutRoot, ['--version']);
+  const match = /^git version (\d+)\.(\d+)(?:\.\d+)?/i.exec(versionOutput);
+  const major = Number(match?.[1]);
+  const minor = Number(match?.[2]);
+  if (!match || major < 2 || (major === 2 && minor < 25)) {
+    throw new Error(
+      `Verified carry cleanup for tracked paths requires Git 2.25 or newer; found ${versionOutput || 'an unknown version'}. Source and destination were left unchanged.`,
+    );
+  }
+}
+
 function restoreTrackedCheckout(checkoutRoot, { restorePaths, headPaths }) {
   if (restorePaths.length > 0) {
     git(checkoutRoot, [
@@ -734,6 +749,7 @@ function restoreTrackedCheckout(checkoutRoot, { restorePaths, headPaths }) {
     git(checkoutRoot, [
       '--literal-pathspecs',
       'checkout-index',
+      '-u',
       '--stdin',
       '-z',
     ], { input: nulTerminatedPaths(headPaths) });
