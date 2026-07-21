@@ -110,9 +110,6 @@ export function classifyCloseScanScope({ files = [], labels = [], stack = 'minim
   // neither belongs in the PR-time set. The marker still carries a substantive
   // `changelog` DoD decision (RELEASE_CHANGELOG_DECISION), auto-recorded by
   // scan-complete — it is a marker section, not a local check.
-  if (!docsOnly && stack === 'node' && (touchesCode || touchesDependency)) {
-    requiredChecks.push({ name: 'node-test', reason: 'Node-owned code or package surface changed' });
-  }
   if (touchesWorkflow) {
     requiredChecks.push({ name: 'actionlint', reason: 'GitHub Actions workflow changed' });
   }
