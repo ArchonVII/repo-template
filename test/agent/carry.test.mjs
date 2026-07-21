@@ -186,8 +186,11 @@ test('buildPathManifest records portable permission modes', () => {
   });
 });
 
-test('deriveRestoredFileMode clears every execute bit for a non-executable HEAD file', () => {
+test('deriveRestoredFileMode follows the HEAD executable bit without discarding local permissions', () => {
   assert.equal(deriveRestoredFileMode(0o755, '100644', 'linux'), 0o644);
+  assert.equal(deriveRestoredFileMode(0o755, '100755', 'linux'), 0o755);
+  assert.equal(deriveRestoredFileMode(0o644, '100755', 'linux'), 0o744);
+  assert.equal(deriveRestoredFileMode(0o755, '100644', 'win32'), 0o755);
 });
 
 test('copyCarryPathsAndVerify restores every captured directory mode before receipt verification', () => {
