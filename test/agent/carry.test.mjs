@@ -539,6 +539,103 @@ test('cleanupVerifiedCarry restores tracked content and removes carried untracke
   });
 });
 
+test('cleanupVerifiedCarry isolates carried files from uncarried hard links', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const outsidePath = path.join(checkoutRoot, 'outside.txt');
+    const carriedPath = path.join(checkoutRoot, 'owner', 'carried.txt');
+    const destinationPath = path.join(worktreePath, 'owner', 'carried.txt');
+    fs.writeFileSync(outsidePath, 'protected source\n');
+    git(checkoutRoot, ['add', 'outside.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.mkdirSync(path.dirname(carriedPath));
+    fs.linkSync(outsidePath, carriedPath);
+
+    const carryPaths = ['owner'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+    cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, receipt });
+
+    assert.equal(git(checkoutRoot, ['status', '--porcelain=1']), '');
+    fs.writeFileSync(destinationPath, 'task edit\n');
+    assert.equal(
+      fs.readFileSync(outsidePath, 'utf8'),
+      'protected source\n',
+      'the task copy must not remain linked to an uncarried protected-checkout file',
+    );
+    assert.equal(git(checkoutRoot, ['status', '--porcelain=1']), '');
+  });
+});
+
+test('cleanupVerifiedCarry restores source directory modes before reporting success', (context) => {
+  if (process.platform === 'win32') {
+    context.skip('portable directory permission modes are not observable on Windows');
+    return;
+  }
+
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const sourceRoot = path.join(checkoutRoot, 'owner');
+    const sourcePrivate = path.join(sourceRoot, 'private');
+    const trackedPath = path.join(sourcePrivate, 'note.txt');
+    fs.mkdirSync(sourcePrivate, { recursive: true });
+    fs.writeFileSync(trackedPath, 'baseline\n');
+    git(checkoutRoot, ['add', 'owner/private/note.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.chmodSync(sourceRoot, 0o700);
+    fs.chmodSync(sourcePrivate, 0o710);
+    fs.writeFileSync(trackedPath, 'carried\n');
+
+    const carryPaths = ['owner'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+    cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, receipt });
+
+    assert.equal(git(checkoutRoot, ['status', '--porcelain=1']), '');
+    assert.equal(fs.lstatSync(sourceRoot).mode & 0o7777, 0o700);
+    assert.equal(fs.lstatSync(sourcePrivate).mode & 0o7777, 0o710);
+    assert.equal(fs.lstatSync(path.join(worktreePath, 'owner')).mode & 0o7777, 0o700);
+    assert.equal(fs.lstatSync(path.join(worktreePath, 'owner', 'private')).mode & 0o7777, 0o710);
+  });
+});
+
+test('cleanupVerifiedCarry streams large tracked path sets without exceeding Windows argv', (context) => {
+  if (process.platform !== 'win32') {
+    context.skip('Windows command-line limits are the regression boundary');
+    return;
+  }
+
+  withTempRoots(({ root, checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    const sourceRoot = path.join(checkoutRoot, 'payload');
+    fs.mkdirSync(sourceRoot);
+    const names = Array.from({ length: 700 }, (_, index) => `${String(index).padStart(4, '0')}-${'x'.repeat(64)}.txt`);
+    for (const name of names) fs.writeFileSync(path.join(sourceRoot, name), 'baseline\n');
+    git(checkoutRoot, ['add', '--all']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+    fs.writeFileSync(path.join(sourceRoot, names[0]), 'carried\n');
+
+    const carryPaths = ['payload'];
+    const receipt = copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths });
+    cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, receipt });
+
+    assert.equal(git(checkoutRoot, ['status', '--porcelain=1']), '');
+    assert.equal(fs.readFileSync(path.join(sourceRoot, names[0]), 'utf8'), 'baseline\n');
+    assert.equal(fs.readFileSync(path.join(worktreePath, 'payload', names[0]), 'utf8'), 'carried\n');
+    assert.equal(
+      fs.readdirSync(root).some((name) => name.startsWith('.checkout-carry-cleanup-')),
+      false,
+    );
+  });
+});
+
 test('cleanupVerifiedCarry preserves a file changed after copy verification', () => {
   withTempRoots(({ checkoutRoot, worktreePath }) => {
     git(checkoutRoot, ['init', '-b', 'main']);
