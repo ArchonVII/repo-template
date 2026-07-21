@@ -13,11 +13,16 @@ export function buildPathManifest(rootPath) {
   function walk(absolutePath, relativePath) {
     const stats = fs.lstatSync(absolutePath);
     if (stats.isSymbolicLink()) {
-      entries.push({ path: relativePath, type: 'symlink', target: fs.readlinkSync(absolutePath) });
+      entries.push({
+        path: relativePath,
+        type: 'symlink',
+        mode: stats.mode & 0o7777,
+        target: fs.readlinkSync(absolutePath),
+      });
       return;
     }
     if (stats.isDirectory()) {
-      entries.push({ path: relativePath, type: 'directory' });
+      entries.push({ path: relativePath, type: 'directory', mode: stats.mode & 0o7777 });
       for (const name of fs.readdirSync(absolutePath).sort()) {
         walk(path.join(absolutePath, name), relativePath === '.' ? name : `${relativePath}/${name}`);
       }
@@ -27,6 +32,7 @@ export function buildPathManifest(rootPath) {
       entries.push({
         path: relativePath,
         type: 'file',
+        mode: stats.mode & 0o7777,
         size: stats.size,
         sha256: hashFileSync(absolutePath),
       });
@@ -422,7 +428,13 @@ function normalizeCarryPaths({ checkoutRoot, worktreePath, carryPaths }) {
     const relativePath = path.relative(path.resolve(checkoutRoot), absolutePath)
       .split(path.sep)
       .join('/');
-    const comparisonPath = process.platform === 'win32' ? relativePath.toLowerCase() : relativePath;
+    // Reject aliases portably rather than binding safety to the current host.
+    // A branch prepared on a case-sensitive disk may later be consumed on a
+    // default Windows or macOS volume where those spellings identify one path.
+    const comparisonPath = relativePath
+      .split('/')
+      .map((component) => component.normalize('NFC').toLowerCase().normalize('NFC'))
+      .join('/');
     if (comparisonPath === '.git' || comparisonPath.startsWith('.git/')) {
       throw new Error('Carry paths may not include .git metadata.');
     }

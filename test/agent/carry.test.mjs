@@ -49,6 +49,43 @@ test('copyCarryPathsAndVerify copies multiple files and a directory with spaces 
   });
 });
 
+test('buildPathManifest records portable permission modes', () => {
+  withTempRoots(({ checkoutRoot }) => {
+    const directoryPath = path.join(checkoutRoot, 'owner');
+    const filePath = path.join(directoryPath, 'script.sh');
+    fs.mkdirSync(directoryPath);
+    fs.writeFileSync(filePath, '#!/bin/sh\n');
+
+    const manifest = buildPathManifest(directoryPath);
+    const directoryEntry = manifest.find((entry) => entry.path === '.');
+    const fileEntry = manifest.find((entry) => entry.path === 'script.sh');
+
+    assert.equal(directoryEntry.mode, fs.lstatSync(directoryPath).mode & 0o7777);
+    assert.equal(fileEntry.mode, fs.lstatSync(filePath).mode & 0o7777);
+  });
+});
+
+test('buildPathManifest records a symlink permission mode when symlinks are available', (context) => {
+  withTempRoots(({ checkoutRoot }) => {
+    const targetPath = path.join(checkoutRoot, 'target.txt');
+    const linkPath = path.join(checkoutRoot, 'target-link');
+    fs.writeFileSync(targetPath, 'target\n');
+    try {
+      fs.symlinkSync(targetPath, linkPath, 'file');
+    } catch (error) {
+      if (error.code === 'EPERM' || error.code === 'EACCES') {
+        context.skip(`symlink creation is unavailable: ${error.code}`);
+        return;
+      }
+      throw error;
+    }
+
+    const [entry] = buildPathManifest(linkPath);
+    assert.equal(entry.type, 'symlink');
+    assert.equal(entry.mode, fs.lstatSync(linkPath).mode & 0o7777);
+  });
+});
+
 test('copyCarryPathsAndVerify carries a tracked deletion into the worktree', () => {
   withTempRoots(({ checkoutRoot, worktreePath }) => {
     git(checkoutRoot, ['init', '-b', 'main']);
@@ -119,6 +156,52 @@ test('copy verification detects an altered destination while leaving the source 
       path.join(worktreePath, 'input.txt'),
     ), /verification failed/i);
     assert.equal(fs.readFileSync(path.join(checkoutRoot, 'input.txt'), 'utf8'), 'source\n');
+  });
+});
+
+test('cleanupVerifiedCarry preserves a destination chmod made after copy verification', () => {
+  withTempRoots(({ root, checkoutRoot, worktreePath }) => {
+    git(checkoutRoot, ['init', '-b', 'main']);
+    git(checkoutRoot, ['config', 'user.email', 'carry-test@example.test']);
+    git(checkoutRoot, ['config', 'user.name', 'Carry Test']);
+    git(checkoutRoot, ['config', 'core.autocrlf', 'false']);
+    fs.writeFileSync(path.join(checkoutRoot, 'owner.sh'), '#!/bin/sh\necho baseline\n');
+    git(checkoutRoot, ['add', 'owner.sh']);
+    git(checkoutRoot, ['commit', '-m', 'test: baseline']);
+
+    const sourcePath = path.join(checkoutRoot, 'owner.sh');
+    const destinationPath = path.join(worktreePath, 'owner.sh');
+    fs.writeFileSync(sourcePath, '#!/bin/sh\necho carried\n');
+    fs.chmodSync(sourcePath, 0o666);
+    const receipt = copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['owner.sh'],
+    });
+    const sourceMode = fs.lstatSync(sourcePath).mode & 0o7777;
+    const originalMode = fs.lstatSync(destinationPath).mode & 0o7777;
+    const changedMode = process.platform === 'win32'
+      ? originalMode & ~0o222
+      : originalMode ^ 0o100;
+    assert.notEqual(changedMode, originalMode);
+    fs.chmodSync(destinationPath, changedMode);
+    assert.equal(fs.lstatSync(destinationPath).mode & 0o7777, changedMode);
+
+    assert.throws(() => cleanupVerifiedCarry({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['owner.sh'],
+      receipt,
+    }), /changed after carry verification: owner\.sh \(destination worktree\)/i);
+    assert.equal(fs.readFileSync(sourcePath, 'utf8'), '#!/bin/sh\necho carried\n');
+    assert.equal(fs.lstatSync(sourcePath).mode & 0o7777, sourceMode);
+    assert.equal(fs.readFileSync(destinationPath, 'utf8'), '#!/bin/sh\necho carried\n');
+    assert.equal(fs.lstatSync(destinationPath).mode & 0o7777, changedMode);
+    assert.equal(
+      fs.readdirSync(root).some((name) => name.startsWith('.checkout-carry-cleanup-')),
+      false,
+    );
+    fs.chmodSync(destinationPath, originalMode);
   });
 });
 
@@ -363,7 +446,7 @@ test('copyCarryPathsAndVerify rejects identical and nested roots before touching
   });
 });
 
-test('carry rejects Windows case aliases before copying', { skip: process.platform !== 'win32' }, () => {
+test('carry rejects portable case aliases and .git metadata aliases before copying', () => {
   withTempRoots(({ checkoutRoot, worktreePath }) => {
     fs.writeFileSync(path.join(checkoutRoot, 'owner.txt'), 'owner\n');
     assert.throws(() => copyCarryPathsAndVerify({
@@ -371,7 +454,36 @@ test('carry rejects Windows case aliases before copying', { skip: process.platfo
       worktreePath,
       carryPaths: ['owner.txt', 'OWNER.txt'],
     }), /duplicate or case-aliased/i);
+    assert.throws(() => copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['.Git/config'],
+    }), /may not include \.git metadata/i);
+    assert.throws(() => copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['Owner', 'owner/child.txt'],
+    }), /may not overlap/i);
     assert.equal(fs.existsSync(path.join(worktreePath, 'owner.txt')), false);
+  });
+});
+
+test('carry rejects portable Unicode-normalization aliases before copying', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    fs.writeFileSync(path.join(checkoutRoot, 'Caf\u00e9.txt'), 'owner\n');
+    fs.mkdirSync(path.join(checkoutRoot, 'Caf\u00e9'));
+
+    assert.throws(() => copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['Caf\u00e9.txt', 'Cafe\u0301.txt'],
+    }), /duplicate or case-aliased/i);
+    assert.throws(() => copyCarryPathsAndVerify({
+      checkoutRoot,
+      worktreePath,
+      carryPaths: ['Caf\u00e9', 'Cafe\u0301/child.txt'],
+    }), /may not overlap/i);
+    assert.equal(fs.existsSync(path.join(worktreePath, 'Caf\u00e9.txt')), false);
   });
 });
 
