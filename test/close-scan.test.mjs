@@ -21,13 +21,12 @@ import {
 } from '../scripts/close/lib.mjs';
 import {
   checkHookSyntax,
-  decideNodeTest,
   parseNameStatus,
   toBashPath,
   validatePolicyFiles,
 } from '../scripts/close/scan-complete.mjs';
 
-test('classifyCloseScanScope requires local parity checks for code and workflow changes', () => {
+test('classifyCloseScanScope leaves the full suite to CI while retaining focused local checks', () => {
   const result = classifyCloseScanScope({
     files: [
       'scripts/close/ci-guard.mjs',
@@ -45,7 +44,6 @@ test('classifyCloseScanScope requires local parity checks for code and workflow 
   assert.deepEqual(result.requiredChecks.map((check) => check.name), [
     'pr-contract',
     'docs',
-    'node-test',
     'actionlint',
     'hook-syntax',
     'policy-validation',
@@ -539,20 +537,24 @@ test('parseNameStatus collects both sides of renames and includes deletions', ()
   ]);
 });
 
-test('deletion-only diff of a code file classifies into the wider (non-docs) scope', () => {
+test('deletion-only code diffs remain non-docs without requesting a local full suite', () => {
   // Regression for repo-template#84 finding 1: a diff that only deletes a code
   // file must not classify as docs-only. The old `--diff-filter=ACMRT` dropped
-  // D entries, so a deletion-only diff under-ran the guard (no node-test).
+  // D entries, so a deletion-only diff skipped every non-doc scoped check.
   const raw = 'D\tscripts/close/foo.mjs';
   const files = parseNameStatus(raw);
   assert.deepEqual(files, ['scripts/close/foo.mjs']);
 
   const scope = classifyCloseScanScope({ files, labels: [], stack: 'node' });
   assert.equal(scope.docsOnly, false);
-  assert.ok(
-    scope.requiredChecks.some((check) => check.name === 'node-test'),
-    'a deleted code file must still require node-test',
-  );
+  assert.ok(!scope.requiredChecks.some((check) => check.name === 'node-test'));
+});
+
+test('dependency diffs retain remote dependency review without requesting a local full suite', () => {
+  const scope = classifyCloseScanScope({ files: ['package-lock.json'], labels: [], stack: 'node' });
+  const names = scope.requiredChecks.map((check) => check.name);
+  assert.ok(!names.includes('node-test'));
+  assert.ok(names.includes('dependency-review'));
 });
 
 test('checkHookSyntax catches a syntax error in the SECOND hook file, not just the first', () => {
@@ -594,44 +596,6 @@ test('checkHookSyntax passes when every hook file is syntactically valid', () =>
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-});
-
-test('decideNodeTest distinguishes absent / unparseable / present package.json (archon-setup#286)', () => {
-  const throwing = () => { throw new SyntaxError('Unexpected token } in JSON'); };
-
-  // Absent package.json → skip green (matches the gate's `npm run --if-present`).
-  assert.deepEqual(decideNodeTest({ exists: false, readPackageJson: throwing }), {
-    run: false,
-    reason: 'no-package-json',
-  });
-
-  // Present but MALFORMED → must RUN npm test so the EJSONPARSE surfaces exactly
-  // as the required gate sees it, instead of being masked green-by-skip.
-  assert.deepEqual(decideNodeTest({ exists: true, readPackageJson: throwing }), {
-    run: true,
-    reason: 'unparseable-package-json',
-  });
-
-  // Present, no `test` script → skip green (baseline'd repo).
-  assert.deepEqual(decideNodeTest({ exists: true, readPackageJson: () => ({ scripts: { build: 'x' } }) }), {
-    run: false,
-    reason: 'no-test-script',
-  });
-  assert.deepEqual(decideNodeTest({ exists: true, readPackageJson: () => ({}) }), {
-    run: false,
-    reason: 'no-test-script',
-  });
-  // Whitespace-only test script is treated as absent.
-  assert.deepEqual(decideNodeTest({ exists: true, readPackageJson: () => ({ scripts: { test: '   ' } }) }), {
-    run: false,
-    reason: 'no-test-script',
-  });
-
-  // Present WITH a real `test` script → run.
-  assert.deepEqual(decideNodeTest({ exists: true, readPackageJson: () => ({ scripts: { test: 'node --test' } }) }), {
-    run: true,
-    reason: 'has-test-script',
-  });
 });
 
 test('toBashPath passes non-absolute args (e.g. the -n flag) through unchanged', () => {
