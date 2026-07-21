@@ -46,6 +46,78 @@ test('start-task rechecks status after GitHub lookup and rejects a cross-boundar
   });
 });
 
+test('start-task rejects a case-only rename before creating a branch or worktree', () => {
+  withFixture(({ checkoutRoot, ghPreloadPath, worktreePath }) => {
+    fs.writeFileSync(path.join(checkoutRoot, 'Owner.txt'), 'rename casing\n');
+    git(checkoutRoot, ['add', 'Owner.txt']);
+    git(checkoutRoot, ['commit', '-m', 'test: add case rename fixture']);
+    git(checkoutRoot, ['push', 'origin', 'main']);
+    git(checkoutRoot, ['mv', 'Owner.txt', 'owner-temp.txt']);
+    git(checkoutRoot, ['mv', 'owner-temp.txt', 'owner.txt']);
+
+    const result = runStartTask({
+      checkoutRoot,
+      ghPreloadPath,
+      args: ['202', '--agent', 'test', '--slug', 'case-only-rename', '--carry', 'Owner.txt', '--carry', 'owner.txt'],
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /case|Unicode|alias/i);
+    assert.equal(git(checkoutRoot, ['branch', '--list', 'agent/test/202-case-only-rename']), '');
+    assert.equal(fs.existsSync(worktreePath('case-only-rename')), false);
+    assert.match(git(checkoutRoot, ['status', '--porcelain=1']), /^R\s+Owner\.txt -> owner\.txt$/);
+  });
+});
+
+test('start-task rejects a carried symlink before creating a branch or worktree', (context) => {
+  withFixture(({ checkoutRoot, ghPreloadPath, worktreePath }) => {
+    const targetPath = path.join(checkoutRoot, 'outside', 'keep.txt');
+    const linkPath = path.join(checkoutRoot, 'owner-link.txt');
+    try {
+      fs.symlinkSync(targetPath, linkPath, 'file');
+    } catch (error) {
+      if (error.code === 'EPERM' || error.code === 'EACCES') {
+        context.skip(`symlink creation is unavailable: ${error.code}`);
+        return;
+      }
+      throw error;
+    }
+
+    const result = runStartTask({
+      checkoutRoot,
+      ghPreloadPath,
+      args: ['202', '--agent', 'test', '--slug', 'unsafe-link', '--carry', 'owner-link.txt'],
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /symbolic link|symlink|junction|reparse/i);
+    assert.equal(git(checkoutRoot, ['branch', '--list', 'agent/test/202-unsafe-link']), '');
+    assert.equal(fs.existsSync(worktreePath('unsafe-link')), false);
+    assert.equal(fs.readFileSync(targetPath, 'utf8'), 'keep\n');
+  });
+});
+
+test('start-task rejects a hard-linked carry input before creating a branch or worktree', () => {
+  withFixture(({ checkoutRoot, ghPreloadPath, worktreePath }) => {
+    const targetPath = path.join(checkoutRoot, 'outside', 'keep.txt');
+    const linkPath = path.join(checkoutRoot, 'owner-hard.txt');
+    fs.linkSync(targetPath, linkPath);
+
+    const result = runStartTask({
+      checkoutRoot,
+      ghPreloadPath,
+      args: ['202', '--agent', 'test', '--slug', 'unsafe-hardlink', '--carry', 'owner-hard.txt'],
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /multiple hard links|isolated copy/i);
+    assert.equal(git(checkoutRoot, ['branch', '--list', 'agent/test/202-unsafe-hardlink']), '');
+    assert.equal(fs.existsSync(worktreePath('unsafe-hardlink')), false);
+    assert.equal(fs.lstatSync(targetPath).nlink, 2);
+    assert.equal(fs.readFileSync(linkPath, 'utf8'), 'keep\n');
+  });
+});
+
 test('start-task carry failure guidance preserves both source and destination evidence', () => {
   const source = fs.readFileSync(START_TASK, 'utf8');
   assert.match(source, /Do not overwrite either location/i);
