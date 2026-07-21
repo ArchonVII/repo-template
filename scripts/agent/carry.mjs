@@ -77,18 +77,27 @@ export function copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths
     assertNoSymlinkAncestors(worktreePath, carryPath, 'destination worktree');
     const sourcePath = resolveInside(checkoutRoot, carryPath);
     const destinationPath = resolveInside(worktreePath, carryPath);
-    fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
-    fs.rmSync(destinationPath, { recursive: true, force: true });
     const stats = lstatIfPresent(sourcePath);
     if (!stats) {
+      fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+      fs.rmSync(destinationPath, { recursive: true, force: true });
       const state = capturePathState(sourcePath);
       assertPathStateMatches(destinationPath, state, carryPath, 'destination worktree');
       entries.push({ path: carryPath, state });
       continue;
     }
     if (stats.isDirectory()) {
-      fs.cpSync(sourcePath, destinationPath, { recursive: true, force: true, verbatimSymlinks: true });
+      const state = copyDirectoryWithModesAndVerify({
+        sourcePath,
+        destinationPath,
+        worktreePath,
+        carryPath,
+      });
+      entries.push({ path: carryPath, state });
+      continue;
     } else if (stats.isFile() || stats.isSymbolicLink()) {
+      fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+      fs.rmSync(destinationPath, { recursive: true, force: true });
       fs.cpSync(sourcePath, destinationPath, { force: true, verbatimSymlinks: true });
     } else {
       throw new Error(`Unsupported carry path type: ${sourcePath}`);
@@ -154,8 +163,190 @@ function capturePathState(filePath) {
   return { exists: true, manifest: buildPathManifest(filePath) };
 }
 
+function copyDirectoryWithModesAndVerify({ sourcePath, destinationPath, worktreePath, carryPath }) {
+  const transactionRoot = fs.mkdtempSync(path.join(
+    path.dirname(worktreePath),
+    `.${path.basename(worktreePath)}-carry-copy-`,
+  ));
+  const stagedPath = path.join(transactionRoot, 'payload');
+  const backupPath = path.join(transactionRoot, 'destination-backup');
+  let destinationBackedUp = false;
+  let promoted = false;
+
+  try {
+    fs.cpSync(sourcePath, stagedPath, { recursive: true, force: true, verbatimSymlinks: true });
+    const state = capturePathState(sourcePath);
+    assertPathStateMatchesIgnoringDirectoryModes(stagedPath, state, carryPath);
+    restoreDirectoryModes(stagedPath, state.manifest);
+    assertPathStateMatches(stagedPath, state, carryPath, 'staged carry copy');
+
+    assertNoSymlinkAncestors(worktreePath, carryPath, 'destination worktree');
+    fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+    assertNoSymlinkAncestors(worktreePath, carryPath, 'destination worktree');
+    if (lstatIfPresent(destinationPath)) {
+      fs.renameSync(destinationPath, backupPath);
+      destinationBackedUp = true;
+    }
+    fs.renameSync(stagedPath, destinationPath);
+    promoted = true;
+    assertPathStateMatches(destinationPath, state, carryPath, 'destination worktree');
+
+    if (destinationBackedUp) removePrivateTreeNoFollow(backupPath);
+    removePrivateTreeNoFollow(transactionRoot);
+    return state;
+  } catch (error) {
+    let recovery;
+    try {
+      recovery = recoverDirectoryCopy({
+        transactionRoot,
+        backupPath,
+        destinationPath,
+        worktreePath,
+        carryPath,
+        destinationBackedUp,
+        promoted,
+      });
+    } catch (recoveryError) {
+      recovery = ` Recovery inspection failed (${recoveryError.code || recoveryError.message}); state remains at ${destinationPath} and ${transactionRoot}.`;
+    }
+    throw new Error(`${error.message}${recovery}`);
+  }
+}
+
+function recoverDirectoryCopy({
+  transactionRoot,
+  backupPath,
+  destinationPath,
+  worktreePath,
+  carryPath,
+  destinationBackedUp,
+  promoted,
+}) {
+  if (promoted) {
+    return ` The promoted destination was preserved at ${destinationPath}; recovery state remains at ${transactionRoot}.`;
+  }
+
+  const problems = [];
+  if (destinationBackedUp) {
+    try {
+      assertNoSymlinkAncestors(worktreePath, carryPath, 'destination worktree');
+      if (lstatIfPresent(destinationPath)) {
+        problems.push('destination path became occupied');
+      } else if (!lstatIfPresent(backupPath)) {
+        problems.push('destination backup is missing');
+      } else {
+        fs.renameSync(backupPath, destinationPath);
+        destinationBackedUp = false;
+      }
+    } catch (error) {
+      problems.push(`destination restore failed: ${error.code || error.message}`);
+    }
+  }
+
+  if (problems.length === 0) {
+    try {
+      removePrivateTreeNoFollow(transactionRoot);
+      return ' The prior destination was left unchanged.';
+    } catch (error) {
+      problems.push(`transaction cleanup failed: ${error.code || error.message}`);
+    }
+  }
+
+  return ` Recovery state remains at ${destinationPath} and ${transactionRoot}; manual recovery is required for: ${problems.join(', ')}.`;
+}
+
+function removePrivateTreeNoFollow(entryPath) {
+  const stats = lstatIfPresent(entryPath);
+  if (!stats) return;
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    fs.unlinkSync(entryPath);
+    return;
+  }
+
+  const mode = stats.mode & 0o7777;
+  if ((mode & 0o700) !== 0o700) chmodDirectoryNoFollow(entryPath, mode | 0o700);
+  for (const name of fs.readdirSync(entryPath)) {
+    removePrivateTreeNoFollow(path.join(entryPath, name));
+  }
+  fs.rmdirSync(entryPath);
+}
+
+function restoreDirectoryModes(destinationRoot, manifest) {
+  if (!Array.isArray(manifest)) return;
+  const directories = manifest
+    .filter((entry) => entry.type === 'directory')
+    .sort((left, right) => directoryDepth(right.path) - directoryDepth(left.path)
+      || compareText(left.path, right.path));
+  for (const entry of directories) {
+    const directoryPath = entry.path === '.'
+      ? destinationRoot
+      : path.join(destinationRoot, ...entry.path.split('/'));
+    assertNoSymlinkAncestors(destinationRoot, entry.path, 'staged carry copy');
+    const stats = fs.lstatSync(directoryPath);
+    if (!stats.isDirectory() || stats.isSymbolicLink()) {
+      throw new Error(`Carry destination changed while restoring directory modes: ${entry.path}.`);
+    }
+    if ((stats.mode & 0o7777) === entry.mode) continue;
+    chmodDirectoryNoFollow(directoryPath, entry.mode);
+  }
+}
+
+function directoryDepth(relativePath) {
+  return relativePath === '.' ? 0 : relativePath.split('/').length;
+}
+
+function chmodDirectoryNoFollow(directoryPath, mode) {
+  const { O_RDONLY, O_DIRECTORY, O_NOFOLLOW } = fs.constants;
+  if (Number.isInteger(O_DIRECTORY) && Number.isInteger(O_NOFOLLOW)) {
+    const descriptor = fs.openSync(directoryPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+    try {
+      if (!fs.fstatSync(descriptor).isDirectory()) {
+        throw new Error(`Carry destination changed while restoring a directory mode: ${directoryPath}.`);
+      }
+      fs.fchmodSync(descriptor, mode);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    return;
+  }
+
+  // Windows does not expose O_DIRECTORY/O_NOFOLLOW and does not represent
+  // portable Unix directory modes. Avoid chmod unless lstat observed a real
+  // mode difference, and reject a reparse-point swap immediately beforehand.
+  const stats = fs.lstatSync(directoryPath);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new Error(`Carry destination changed while restoring a directory mode: ${directoryPath}.`);
+  }
+  fs.chmodSync(directoryPath, mode);
+}
+
 function pathStatesMatch(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function pathStatesMatchIgnoringDirectoryModes(left, right) {
+  if (left.exists !== right.exists) return false;
+  if (!left.exists) return left.manifest === null && right.manifest === null;
+  if (!Array.isArray(left.manifest)
+    || !Array.isArray(right.manifest)
+    || left.manifest.length !== right.manifest.length) return false;
+
+  return left.manifest.every((leftEntry, index) => {
+    const rightEntry = right.manifest[index];
+    if (leftEntry.path !== rightEntry.path || leftEntry.type !== rightEntry.type) return false;
+    if (leftEntry.type !== 'directory') return JSON.stringify(leftEntry) === JSON.stringify(rightEntry);
+    const { mode: leftMode, ...leftRest } = leftEntry;
+    const { mode: rightMode, ...rightRest } = rightEntry;
+    return Number.isInteger(leftMode)
+      && Number.isInteger(rightMode)
+      && JSON.stringify(leftRest) === JSON.stringify(rightRest);
+  });
+}
+
+function assertPathStateMatchesIgnoringDirectoryModes(filePath, expectedState, carryPath) {
+  if (!pathStatesMatchIgnoringDirectoryModes(capturePathState(filePath), expectedState)) {
+    throw new Error(`Carry path changed while staging the directory copy: ${carryPath}.`);
+  }
 }
 
 function assertPathStateMatches(filePath, expectedState, carryPath, location) {
