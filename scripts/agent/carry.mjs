@@ -94,6 +94,7 @@ export function copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths
       throw new Error(`Unsupported carry path type: ${sourcePath}`);
     }
     const state = capturePathState(sourcePath);
+    if (stats.isDirectory()) restoreDirectoryModes(destinationPath, state.manifest);
     assertPathStateMatches(destinationPath, state, carryPath, 'destination worktree');
     entries.push({ path: carryPath, state });
   }
@@ -152,6 +153,49 @@ export function cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, r
 function capturePathState(filePath) {
   if (!lstatIfPresent(filePath)) return { exists: false, manifest: null };
   return { exists: true, manifest: buildPathManifest(filePath) };
+}
+
+function restoreDirectoryModes(destinationRoot, manifest) {
+  if (!Array.isArray(manifest)) return;
+  const directories = manifest
+    .filter((entry) => entry.type === 'directory')
+    .sort((left, right) => right.path.split('/').length - left.path.split('/').length);
+  for (const entry of directories) {
+    const directoryPath = entry.path === '.'
+      ? destinationRoot
+      : path.join(destinationRoot, ...entry.path.split('/'));
+    const stats = fs.lstatSync(directoryPath);
+    if (!stats.isDirectory() || stats.isSymbolicLink()) {
+      throw new Error(`Carry destination changed while restoring directory modes: ${entry.path}.`);
+    }
+    if ((stats.mode & 0o7777) === entry.mode) continue;
+    chmodDirectoryNoFollow(directoryPath, entry.mode);
+  }
+}
+
+function chmodDirectoryNoFollow(directoryPath, mode) {
+  const { O_RDONLY, O_DIRECTORY, O_NOFOLLOW } = fs.constants;
+  if (Number.isInteger(O_DIRECTORY) && Number.isInteger(O_NOFOLLOW)) {
+    const descriptor = fs.openSync(directoryPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+    try {
+      if (!fs.fstatSync(descriptor).isDirectory()) {
+        throw new Error(`Carry destination changed while restoring a directory mode: ${directoryPath}.`);
+      }
+      fs.fchmodSync(descriptor, mode);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    return;
+  }
+
+  // Windows does not expose O_DIRECTORY/O_NOFOLLOW and does not represent
+  // portable Unix directory modes. Avoid chmod unless lstat observed a real
+  // mode difference, and reject a reparse-point swap immediately beforehand.
+  const stats = fs.lstatSync(directoryPath);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new Error(`Carry destination changed while restoring a directory mode: ${directoryPath}.`);
+  }
+  fs.chmodSync(directoryPath, mode);
 }
 
 function pathStatesMatch(left, right) {

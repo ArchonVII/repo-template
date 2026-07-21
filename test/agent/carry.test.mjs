@@ -65,6 +65,77 @@ test('buildPathManifest records portable permission modes', () => {
   });
 });
 
+test('copyCarryPathsAndVerify restores every captured directory mode before receipt verification', () => {
+  withTempRoots(({ checkoutRoot, worktreePath }) => {
+    const sourcePath = path.join(checkoutRoot, 'owner');
+    const destinationPath = path.join(worktreePath, 'owner');
+    fs.mkdirSync(path.join(sourcePath, 'private'), { recursive: true });
+    fs.writeFileSync(path.join(sourcePath, 'private', 'note.txt'), 'owner\n');
+
+    const directoryEntries = buildPathManifest(sourcePath)
+      .filter((entry) => entry.type === 'directory');
+    const forcedModes = new Map();
+    const chmodCalls = [];
+    const realCpSync = fs.cpSync;
+    const realLstatSync = fs.lstatSync;
+    const realChmodSync = fs.chmodSync;
+
+    fs.cpSync = (fromPath, toPath, options) => {
+      realCpSync(fromPath, toPath, options);
+      for (const entry of directoryEntries) {
+        const copiedPath = entry.path === '.'
+          ? toPath
+          : path.join(toPath, ...entry.path.split('/'));
+        forcedModes.set(path.resolve(copiedPath), entry.mode ^ 0o100);
+      }
+    };
+    fs.lstatSync = (targetPath, options) => {
+      const stats = realLstatSync(targetPath, options);
+      const key = typeof targetPath === 'string' ? path.resolve(targetPath) : null;
+      if (!key || !forcedModes.has(key)) return stats;
+      return new Proxy(stats, {
+        get(target, property) {
+          if (property === 'mode') return (target.mode & ~0o7777) | forcedModes.get(key);
+          const value = Reflect.get(target, property, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+    };
+    fs.chmodSync = (targetPath, mode) => {
+      const key = typeof targetPath === 'string' ? path.resolve(targetPath) : null;
+      if (key && forcedModes.has(key)) {
+        forcedModes.set(key, mode & 0o7777);
+        chmodCalls.push(key);
+        return;
+      }
+      realChmodSync(targetPath, mode);
+    };
+
+    try {
+      copyCarryPathsAndVerify({
+        checkoutRoot,
+        worktreePath,
+        carryPaths: ['owner'],
+      });
+    } finally {
+      fs.cpSync = realCpSync;
+      fs.lstatSync = realLstatSync;
+      fs.chmodSync = realChmodSync;
+    }
+
+    assert.deepEqual(
+      buildPathManifest(destinationPath),
+      buildPathManifest(sourcePath),
+    );
+    assert.deepEqual(
+      new Set(chmodCalls),
+      new Set(directoryEntries.map((entry) => path.resolve(
+        entry.path === '.' ? destinationPath : path.join(destinationPath, ...entry.path.split('/')),
+      ))),
+    );
+  });
+});
+
 test('buildPathManifest records a symlink permission mode when symlinks are available', (context) => {
   withTempRoots(({ checkoutRoot }) => {
     const targetPath = path.join(checkoutRoot, 'target.txt');
