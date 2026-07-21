@@ -46,6 +46,99 @@ test('start-task rechecks status after GitHub lookup and rejects a cross-boundar
   });
 });
 
+test('start-task carry failure guidance preserves both source and destination evidence', () => {
+  const source = fs.readFileSync(START_TASK, 'utf8');
+  assert.match(source, /Do not overwrite either location/i);
+  assert.match(source, /inspect the source checkout/i);
+  assert.match(source, /destination worktree/i);
+  assert.doesNotMatch(source, /recover the source from there/i);
+});
+
+test('start-task rejects carry paths that its own setup steps would overwrite', () => {
+  withFixture(({ checkoutRoot, ghPreloadPath, worktreePath }) => {
+    const metadataPath = path.join(checkoutRoot, '.agent', 'current-task.json');
+    fs.mkdirSync(path.dirname(metadataPath), { recursive: true });
+    fs.writeFileSync(metadataPath, '{"owner":"preserve me"}\n');
+    fs.appendFileSync(path.join(checkoutRoot, '.git', 'info', 'exclude'), '.agent/current-task.json\n');
+
+    const result = runStartTask({
+      checkoutRoot,
+      ghPreloadPath,
+      args: ['202', '--agent', 'test', '--slug', 'reserved-output', '--carry', '.agent/current-task.json'],
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /conflicts with setup-owned output/i);
+    assert.equal(fs.readFileSync(metadataPath, 'utf8'), '{"owner":"preserve me"}\n');
+    assert.equal(git(checkoutRoot, ['branch', '--list', 'agent/test/202-reserved-output']), '');
+    assert.equal(fs.existsSync(worktreePath('reserved-output')), false);
+  });
+});
+
+test('start-task rejects portable case aliases of setup-owned paths', () => {
+  withFixture(({ checkoutRoot, ghPreloadPath, worktreePath }) => {
+    const metadataPath = path.join(checkoutRoot, '.agent', 'current-task.json');
+    fs.mkdirSync(path.dirname(metadataPath), { recursive: true });
+    fs.writeFileSync(metadataPath, '{"owner":"preserve case alias"}\n');
+    fs.appendFileSync(path.join(checkoutRoot, '.git', 'info', 'exclude'), '.agent/current-task.json\n');
+
+    const result = runStartTask({
+      checkoutRoot,
+      ghPreloadPath,
+      args: ['202', '--agent', 'test', '--slug', 'reserved-case', '--carry', '.Agent/current-task.json'],
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /conflicts with setup-owned output/i);
+    assert.equal(fs.readFileSync(metadataPath, 'utf8'), '{"owner":"preserve case alias"}\n');
+    assert.equal(fs.existsSync(worktreePath('reserved-case')), false);
+  });
+});
+
+test('start-task revalidates carry after npm lifecycle scripts before cleaning source', () => {
+  withFixture(({ checkoutRoot, ghPreloadPath, worktreePath }) => {
+    fs.writeFileSync(path.join(checkoutRoot, 'owner.txt'), 'baseline\n');
+    fs.writeFileSync(path.join(checkoutRoot, 'package.json'), JSON.stringify({
+      name: 'carry-install-probe',
+      version: '1.0.0',
+      scripts: {
+        install: "node -e \"require('fs').writeFileSync('owner.txt','install overwrite\\n')\"",
+      },
+    }, null, 2) + '\n');
+    fs.writeFileSync(path.join(checkoutRoot, 'package-lock.json'), JSON.stringify({
+      name: 'carry-install-probe',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': {
+          name: 'carry-install-probe',
+          version: '1.0.0',
+          hasInstallScript: true,
+        },
+      },
+    }, null, 2) + '\n');
+    git(checkoutRoot, ['add', 'owner.txt', 'package.json', 'package-lock.json']);
+    git(checkoutRoot, ['commit', '-m', 'test: add install probe']);
+    git(checkoutRoot, ['push', 'origin', 'main']);
+    fs.writeFileSync(path.join(checkoutRoot, 'owner.txt'), 'carried owner bytes\n');
+
+    const result = runStartTask({
+      checkoutRoot,
+      ghPreloadPath,
+      args: ['202', '--agent', 'test', '--slug', 'install-mutation', '--carry', 'owner.txt'],
+    });
+
+    assert.notEqual(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stderr, /destination worktree.*changed after carry verification/is);
+    assert.equal(fs.readFileSync(path.join(checkoutRoot, 'owner.txt'), 'utf8'), 'carried owner bytes\n');
+    assert.equal(
+      fs.readFileSync(path.join(worktreePath('install-mutation'), 'owner.txt'), 'utf8'),
+      'install overwrite\n',
+    );
+  });
+});
+
 function withFixture(run) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'start-task-carry-'));
   const checkoutRoot = path.join(root, 'project');
