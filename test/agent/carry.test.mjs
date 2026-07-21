@@ -71,9 +71,19 @@ test('copyCarryPathsAndVerify restores every captured directory mode before rece
     const destinationPath = path.join(worktreePath, 'owner');
     fs.mkdirSync(path.join(sourcePath, 'private'), { recursive: true });
     fs.writeFileSync(path.join(sourcePath, 'private', 'note.txt'), 'owner\n');
+    fs.mkdirSync(destinationPath);
+    fs.writeFileSync(path.join(destinationPath, 'stale.txt'), 'stale\n');
+    if (process.platform !== 'win32') {
+      fs.chmodSync(sourcePath, 0o700);
+      fs.chmodSync(path.join(sourcePath, 'private'), 0o750);
+    }
 
     const directoryEntries = buildPathManifest(sourcePath)
       .filter((entry) => entry.type === 'directory');
+    if (process.platform !== 'win32') {
+      assert.equal(directoryEntries.find((entry) => entry.path === '.').mode, 0o700);
+      assert.equal(directoryEntries.find((entry) => entry.path === 'private').mode, 0o750);
+    }
     const forcedModes = new Map();
     const chmodCalls = [];
     const realCpSync = fs.cpSync;
@@ -146,11 +156,212 @@ test('copyCarryPathsAndVerify restores every captured directory mode before rece
       buildPathManifest(destinationPath),
       buildPathManifest(sourcePath),
     );
-    assert.deepEqual(
-      new Set(chmodCalls),
-      new Set(directoryEntries.map((entry) => path.resolve(
-        entry.path === '.' ? destinationPath : path.join(destinationPath, ...entry.path.split('/')),
-      ))),
+    assert.equal(chmodCalls.length, 2);
+    assert.equal(path.basename(chmodCalls[0]), 'private');
+    assert.equal(path.basename(chmodCalls[1]), 'payload');
+    assert.equal(path.dirname(chmodCalls[0]), chmodCalls[1]);
+    assert.equal(
+      fs.readdirSync(path.dirname(worktreePath)).some((name) => name.startsWith(`.${path.basename(worktreePath)}-carry-copy-`)),
+      false,
+    );
+  });
+});
+
+test('copyCarryPathsAndVerify never chmods through a copied symlink ancestor', (context) => {
+  if (process.platform === 'win32') {
+    context.skip('portable directory permission modes are not observable on Windows');
+    return;
+  }
+
+  withTempRoots(({ root, checkoutRoot, worktreePath }) => {
+    const sourcePath = path.join(checkoutRoot, 'owner');
+    const sourceAncestor = path.join(sourcePath, 'ancestor');
+    const destinationPath = path.join(worktreePath, 'owner');
+    const outsidePath = path.join(root, 'outside');
+    const outsideChild = path.join(outsidePath, 'child');
+    fs.mkdirSync(sourcePath);
+    fs.mkdirSync(destinationPath);
+    fs.writeFileSync(path.join(destinationPath, 'existing.txt'), 'existing destination\n');
+    fs.mkdirSync(outsideChild, { recursive: true });
+    fs.chmodSync(outsideChild, 0o777);
+    fs.symlinkSync(outsidePath, sourceAncestor, 'dir');
+    const outsideMode = fs.lstatSync(outsideChild).mode & 0o7777;
+
+    const realCpSync = fs.cpSync;
+    let injected = false;
+    fs.cpSync = (fromPath, toPath, options) => {
+      realCpSync(fromPath, toPath, options);
+      if (!injected && path.resolve(fromPath) === path.resolve(sourcePath)) {
+        injected = true;
+        fs.unlinkSync(sourceAncestor);
+        fs.mkdirSync(path.join(sourceAncestor, 'child'), { recursive: true });
+        fs.chmodSync(path.join(sourceAncestor, 'child'), 0o700);
+      }
+    };
+
+    try {
+      assert.throws(() => copyCarryPathsAndVerify({
+        checkoutRoot,
+        worktreePath,
+        carryPaths: ['owner'],
+      }), /changed|differs/i);
+    } finally {
+      fs.cpSync = realCpSync;
+    }
+
+    assert.equal(injected, true);
+    assert.equal(
+      fs.lstatSync(outsideChild).mode & 0o7777,
+      outsideMode,
+      'an unverified copied symlink ancestor must never redirect chmod outside the worktree',
+    );
+    assert.equal(
+      fs.readFileSync(path.join(destinationPath, 'existing.txt'), 'utf8'),
+      'existing destination\n',
+    );
+    assert.equal(
+      fs.readdirSync(root).some((name) => name.startsWith('.worktree-carry-copy-')),
+      false,
+    );
+  });
+});
+
+test('copyCarryPathsAndVerify restores an existing directory when staged promotion fails', () => {
+  withTempRoots(({ root, checkoutRoot, worktreePath }) => {
+    const sourcePath = path.join(checkoutRoot, 'owner');
+    const destinationPath = path.join(worktreePath, 'owner');
+    fs.mkdirSync(sourcePath);
+    fs.writeFileSync(path.join(sourcePath, 'new.txt'), 'new destination\n');
+    fs.mkdirSync(destinationPath);
+    fs.writeFileSync(path.join(destinationPath, 'existing.txt'), 'existing destination\n');
+
+    const realRenameSync = fs.renameSync;
+    let injected = false;
+    fs.renameSync = (fromPath, toPath) => {
+      if (!injected
+        && path.basename(fromPath) === 'payload'
+        && path.resolve(toPath) === path.resolve(destinationPath)) {
+        injected = true;
+        const error = new Error('injected promotion failure');
+        error.code = 'EACCES';
+        throw error;
+      }
+      realRenameSync(fromPath, toPath);
+    };
+
+    let failure;
+    try {
+      failure = captureThrown(() => copyCarryPathsAndVerify({
+        checkoutRoot,
+        worktreePath,
+        carryPaths: ['owner'],
+      }));
+    } finally {
+      fs.renameSync = realRenameSync;
+    }
+
+    assert.equal(injected, true);
+    assert.match(failure.message, /injected promotion failure/i);
+    assert.match(failure.message, /prior destination was left unchanged/i);
+    assert.equal(
+      fs.readFileSync(path.join(destinationPath, 'existing.txt'), 'utf8'),
+      'existing destination\n',
+    );
+    assert.equal(fs.existsSync(path.join(destinationPath, 'new.txt')), false);
+    assert.equal(
+      fs.readdirSync(root).some((name) => name.startsWith('.worktree-carry-copy-')),
+      false,
+    );
+  });
+});
+
+test('copyCarryPathsAndVerify cleans private staging after an immediate copy failure', () => {
+  withTempRoots(({ root, checkoutRoot, worktreePath }) => {
+    const sourcePath = path.join(checkoutRoot, 'owner');
+    const destinationPath = path.join(worktreePath, 'owner');
+    fs.mkdirSync(sourcePath);
+    fs.writeFileSync(path.join(sourcePath, 'new.txt'), 'source remains\n');
+
+    const realCpSync = fs.cpSync;
+    let injected = false;
+    fs.cpSync = (fromPath, toPath, options) => {
+      if (!injected && path.resolve(fromPath) === path.resolve(sourcePath)) {
+        injected = true;
+        const error = new Error('injected copy failure');
+        error.code = 'EIO';
+        throw error;
+      }
+      realCpSync(fromPath, toPath, options);
+    };
+
+    let failure;
+    try {
+      failure = captureThrown(() => copyCarryPathsAndVerify({
+        checkoutRoot,
+        worktreePath,
+        carryPaths: ['owner'],
+      }));
+    } finally {
+      fs.cpSync = realCpSync;
+    }
+
+    assert.equal(injected, true);
+    assert.match(failure.message, /injected copy failure/i);
+    assert.match(failure.message, /prior destination was left unchanged/i);
+    assert.equal(fs.readFileSync(path.join(sourcePath, 'new.txt'), 'utf8'), 'source remains\n');
+    assert.equal(fs.existsSync(destinationPath), false);
+    assert.equal(
+      fs.readdirSync(root).some((name) => name.startsWith('.worktree-carry-copy-')),
+      false,
+    );
+  });
+});
+
+test('copyCarryPathsAndVerify retains both copies when the promoted directory changes', () => {
+  withTempRoots(({ root, checkoutRoot, worktreePath }) => {
+    const sourcePath = path.join(checkoutRoot, 'owner');
+    const destinationPath = path.join(worktreePath, 'owner');
+    fs.mkdirSync(sourcePath);
+    fs.writeFileSync(path.join(sourcePath, 'new.txt'), 'new destination\n');
+    fs.mkdirSync(destinationPath);
+    fs.writeFileSync(path.join(destinationPath, 'existing.txt'), 'existing destination\n');
+
+    const realRenameSync = fs.renameSync;
+    let injected = false;
+    fs.renameSync = (fromPath, toPath) => {
+      realRenameSync(fromPath, toPath);
+      if (!injected
+        && path.basename(fromPath) === 'payload'
+        && path.resolve(toPath) === path.resolve(destinationPath)) {
+        injected = true;
+        fs.writeFileSync(path.join(destinationPath, 'new.txt'), 'changed after promotion\n');
+      }
+    };
+
+    let failure;
+    try {
+      failure = captureThrown(() => copyCarryPathsAndVerify({
+        checkoutRoot,
+        worktreePath,
+        carryPaths: ['owner'],
+      }));
+    } finally {
+      fs.renameSync = realRenameSync;
+    }
+
+    assert.equal(injected, true);
+    assert.match(failure.message, /changed after carry verification/i);
+    assert.match(failure.message, /recovery state remains/i);
+    assert.equal(
+      fs.readFileSync(path.join(destinationPath, 'new.txt'), 'utf8'),
+      'changed after promotion\n',
+    );
+    const [transactionName] = fs.readdirSync(root)
+      .filter((name) => name.startsWith('.worktree-carry-copy-'));
+    assert.ok(transactionName, failure.message);
+    assert.equal(
+      fs.readFileSync(path.join(root, transactionName, 'destination-backup', 'existing.txt'), 'utf8'),
+      'existing destination\n',
     );
   });
 });
