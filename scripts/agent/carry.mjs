@@ -470,9 +470,9 @@ function restoreSourceDirectoryModes(checkoutRoot, entries, headPaths) {
   }
 }
 
-function deriveRestoredFileMode(carriedMode, headMode) {
-  if (process.platform === 'win32') return carriedMode;
-  return (carriedMode & ~0o100) | (headMode === '100755' ? 0o100 : 0);
+export function deriveRestoredFileMode(carriedMode, headMode, platform = process.platform) {
+  if (platform === 'win32') return carriedMode;
+  return headMode === '100755' ? carriedMode | 0o100 : carriedMode & ~0o111;
 }
 
 function chmodFileNoFollow(filePath, mode) {
