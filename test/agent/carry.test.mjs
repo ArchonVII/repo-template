@@ -7,6 +7,7 @@ import childProcess, { execFileSync } from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 
 import {
+  assertNoPortablePathAliases,
   assertPathCopiesMatch,
   buildPathManifest,
   cleanupVerifiedCarry as cleanupVerifiedCarryImpl,
@@ -107,6 +108,49 @@ test('preflightCarryPlan rejects regular files that are not isolated', () => {
     }), /hard link|not isolated|multiple links/i);
     assert.equal(fs.lstatSync(sourcePath).nlink, 2);
     assert.equal(fs.readFileSync(siblingPath, 'utf8'), 'shared inode\n');
+  });
+});
+
+test('assertNoPortablePathAliases rejects case and Unicode aliases at any tree depth', () => {
+  assert.throws(() => assertNoPortablePathAliases([
+    '.',
+    'nested/Owner.txt',
+    'nested/owner.txt',
+  ], 'owner'), /portable.*alias|case.*Unicode/i);
+  assert.throws(() => assertNoPortablePathAliases([
+    '.',
+    'nested/caf\u00e9.txt',
+    'nested/cafe\u0301.txt',
+  ], 'owner'), /portable.*alias|case.*Unicode/i);
+  assert.doesNotThrow(() => assertNoPortablePathAliases([
+    '.',
+    'left/Owner.txt',
+    'right/owner.txt',
+  ], 'owner'));
+});
+
+test('preflightCarryPlan rejects portable aliases inside a carried directory before lane creation', (context) => {
+  withTempRoots(({ root, checkoutRoot }) => {
+    const sourceRoot = path.join(checkoutRoot, 'owner');
+    fs.mkdirSync(sourceRoot);
+    fs.writeFileSync(path.join(sourceRoot, 'Owner.txt'), 'upper\n');
+    fs.writeFileSync(path.join(sourceRoot, 'owner.txt'), 'lower\n');
+    const distinctNames = fs.readdirSync(sourceRoot)
+      .filter((name) => name.toLowerCase() === 'owner.txt');
+    if (distinctNames.length !== 2) {
+      context.skip('filesystem cannot represent case-aliased sibling names');
+      return;
+    }
+    const prospectiveWorktree = path.join(root, 'future-worktree');
+
+    assert.throws(() => preflightCarryPlan({
+      checkoutRoot,
+      worktreePath: prospectiveWorktree,
+      carryPaths: ['owner'],
+    }), /portable.*alias|case.*Unicode/i);
+    assert.equal(fs.existsSync(prospectiveWorktree), false);
+    assert.equal(fs.readFileSync(path.join(sourceRoot, 'Owner.txt'), 'utf8'), 'upper\n');
+    assert.equal(fs.readFileSync(path.join(sourceRoot, 'owner.txt'), 'utf8'), 'lower\n');
   });
 });
 

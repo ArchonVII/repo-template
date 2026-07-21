@@ -8,6 +8,7 @@ import { PRECISE_STATUS_ARGS, parseGitStatusPorcelain } from './lib.mjs';
 export function buildPathManifest(rootPath) {
   const entries = [];
   walk(rootPath, '.');
+  assertNoPortablePathAliases(entries.map((entry) => entry.path), rootPath);
   return entries;
 
   function walk(absolutePath, relativePath) {
@@ -33,6 +34,21 @@ export function buildPathManifest(rootPath) {
       return;
     }
     throw new Error(`Unsupported carry path type: ${absolutePath}`);
+  }
+}
+
+export function assertNoPortablePathAliases(relativePaths, carryPath) {
+  const seen = new Map();
+  for (const relativePath of relativePaths) {
+    const comparisonPath = portableComparisonPath(relativePath);
+    const previous = seen.get(comparisonPath);
+    if (previous !== undefined) {
+      throw new Error(
+        `Carry preflight rejects duplicate, case-aliased, or Unicode-normalization-aliased paths inside ${carryPath}: `
+        + `${previous}, ${relativePath}. Rename one path before retrying.`,
+      );
+    }
+    seen.set(comparisonPath, relativePath);
   }
 }
 
@@ -113,6 +129,7 @@ function assertNoPortableRenameAliases(statusEntries) {
 function buildIdentityManifest(rootPath, carryPath) {
   const entries = [];
   walk(rootPath, '.');
+  assertNoPortablePathAliases(entries.map((entry) => entry.path), carryPath);
   return entries;
 
   function walk(absolutePath, relativePath) {
