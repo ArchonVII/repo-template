@@ -93,17 +93,21 @@ export function copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths
         worktreePath,
         carryPath,
       });
+      assertRegularFilesAreIsolated(destinationPath, state, carryPath, 'destination worktree');
       entries.push({ path: carryPath, state });
       continue;
     } else if (stats.isFile() || stats.isSymbolicLink()) {
       fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
       fs.rmSync(destinationPath, { recursive: true, force: true });
+      // A fresh copy deliberately breaks any hard-link relationship with the
+      // protected checkout or with another carried path.
       fs.cpSync(sourcePath, destinationPath, { force: true, verbatimSymlinks: true });
     } else {
       throw new Error(`Unsupported carry path type: ${sourcePath}`);
     }
     const state = capturePathState(sourcePath);
     assertPathStateMatches(destinationPath, state, carryPath, 'destination worktree');
+    assertRegularFilesAreIsolated(destinationPath, state, carryPath, 'destination worktree');
     entries.push({ path: carryPath, state });
   }
   return {
@@ -129,6 +133,7 @@ export function cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, r
   assertIndexFingerprintMatches(checkoutRoot, normalizedPaths, indexFingerprint);
   verifyReceiptState({ checkoutRoot, worktreePath, entries });
   const trackedPaths = trackedPathSetsForCarry(checkoutRoot, normalizedPaths);
+  assertTrackedRestoreGitVersion(checkoutRoot, trackedPaths.restorePaths);
   const transfer = transferCarrySources({ checkoutRoot, worktreePath, entries });
   let restoreStarted = false;
   try {
@@ -136,6 +141,7 @@ export function cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, r
     assertIndexFingerprintMatches(checkoutRoot, normalizedPaths, indexFingerprint);
     restoreStarted = true;
     restoreTrackedCheckout(checkoutRoot, trackedPaths);
+    restoreSourceDirectoryModes(checkoutRoot, entries, trackedPaths.headPaths);
     const remaining = parseGitStatusPorcelain(git(checkoutRoot, [...PRECISE_STATUS_ARGS], { trim: false }));
     if (remaining.length > 0) {
       throw new Error(`Invoking checkout remains dirty after carry cleanup: ${remaining.slice(0, 3).map((entry) => entry.path).join(', ')}`);
@@ -146,13 +152,13 @@ export function cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, r
     }
     verifyTransferredDestinations(worktreePath, entries, transfer.moved);
     verifyTransactionBackups(entries, transfer.moved);
-    fs.rmSync(transfer.transactionRoot, { recursive: true, force: true });
+    removePrivateTreeNoFollow(transfer.transactionRoot);
   } catch (error) {
     // Git can restore a batch only partially. Once that starts, automatic
     // rollback could overwrite a path recreated during the restore; retain all
     // source/destination/transaction locations for explicit recovery instead.
     const recovery = restoreStarted
-      ? ` Carried source objects remain in the destination worktree; prior destination copies remain at ${transfer.transactionRoot}. The source checkout was not overwritten and may require manual cleanup.`
+      ? ` Verified task copies remain in the destination worktree; original carried source objects remain at ${transfer.transactionRoot}. The source checkout may be partially restored and requires inspection before manual cleanup.`
       : rollbackTransfer(transfer);
     throw new Error(`${error.message}${recovery}`);
   }
@@ -190,6 +196,7 @@ function copyDirectoryWithModesAndVerify({ sourcePath, destinationPath, worktree
     fs.renameSync(stagedPath, destinationPath);
     promoted = true;
     assertPathStateMatches(destinationPath, state, carryPath, 'destination worktree');
+    assertRegularFilesAreIsolated(destinationPath, state, carryPath, 'destination worktree');
 
     if (destinationBackedUp) removePrivateTreeNoFollow(backupPath);
     removePrivateTreeNoFollow(transactionRoot);
@@ -282,12 +289,29 @@ function restoreDirectoryModes(destinationRoot, manifest) {
       ? destinationRoot
       : path.join(destinationRoot, ...entry.path.split('/'));
     assertNoSymlinkAncestors(destinationRoot, entry.path, 'staged carry copy');
-    const stats = fs.lstatSync(directoryPath);
-    if (!stats.isDirectory() || stats.isSymbolicLink()) {
-      throw new Error(`Carry destination changed while restoring directory modes: ${entry.path}.`);
-    }
-    if ((stats.mode & 0o7777) === entry.mode) continue;
     chmodDirectoryNoFollow(directoryPath, entry.mode);
+  }
+}
+
+function restoreSourceDirectoryModes(checkoutRoot, entries, headPaths) {
+  if (process.platform === 'win32') return;
+  for (const entry of entries) {
+    if (!entry.state.exists || entry.state.manifest?.[0]?.type !== 'directory') continue;
+    const planned = entry.state.manifest
+      .filter((manifestEntry) => manifestEntry.type === 'directory')
+      .map((manifestEntry) => ({
+        ...manifestEntry,
+        repoPath: manifestEntry.path === '.'
+          ? entry.path
+          : `${entry.path}/${manifestEntry.path}`,
+      }))
+      .filter((manifestEntry) => headPaths.some((headPath) => headPath.startsWith(`${manifestEntry.repoPath}/`)))
+      .sort((left, right) => directoryDepth(right.repoPath) - directoryDepth(left.repoPath)
+        || compareText(left.repoPath, right.repoPath));
+    for (const directory of planned) {
+      assertNoSymlinkAncestors(checkoutRoot, directory.repoPath, 'source checkout');
+      chmodDirectoryNoFollow(resolveInside(checkoutRoot, directory.repoPath), directory.mode);
+    }
   }
 }
 
@@ -300,24 +324,32 @@ function chmodDirectoryNoFollow(directoryPath, mode) {
   if (Number.isInteger(O_DIRECTORY) && Number.isInteger(O_NOFOLLOW)) {
     const descriptor = fs.openSync(directoryPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
     try {
-      if (!fs.fstatSync(descriptor).isDirectory()) {
+      const before = fs.fstatSync(descriptor);
+      if (!before.isDirectory()) {
         throw new Error(`Carry destination changed while restoring a directory mode: ${directoryPath}.`);
       }
-      fs.fchmodSync(descriptor, mode);
+      if ((before.mode & 0o7777) !== mode) fs.fchmodSync(descriptor, mode);
+      const restored = fs.fstatSync(descriptor);
+      if (!restored.isDirectory() || (restored.mode & 0o7777) !== mode) {
+        throw new Error(`Carry destination directory mode was not restored: ${directoryPath}.`);
+      }
     } finally {
       fs.closeSync(descriptor);
     }
     return;
   }
 
-  // Windows does not expose O_DIRECTORY/O_NOFOLLOW and does not represent
-  // portable Unix directory modes. Avoid chmod unless lstat observed a real
-  // mode difference, and reject a reparse-point swap immediately beforehand.
+  if (process.platform !== 'win32') {
+    throw new Error(`Safe no-follow directory mode restoration is unavailable: ${directoryPath}.`);
+  }
+
+  // Windows does not expose portable Unix directory modes. Reject a
+  // reparse-point swap immediately before applying the best available check.
   const stats = fs.lstatSync(directoryPath);
   if (!stats.isDirectory() || stats.isSymbolicLink()) {
     throw new Error(`Carry destination changed while restoring a directory mode: ${directoryPath}.`);
   }
-  fs.chmodSync(directoryPath, mode);
+  if ((stats.mode & 0o7777) !== mode) fs.chmodSync(directoryPath, mode);
 }
 
 function pathStatesMatch(left, right) {
@@ -355,6 +387,21 @@ function assertPathStateMatches(filePath, expectedState, carryPath, location) {
   }
 }
 
+function assertRegularFilesAreIsolated(rootPath, expectedState, carryPath, location) {
+  if (!expectedState.exists) return;
+  for (const entry of expectedState.manifest) {
+    if (entry.type !== 'file') continue;
+    const filePath = entry.path === '.'
+      ? rootPath
+      : path.join(rootPath, ...entry.path.split('/'));
+    assertNoSymlinkAncestors(rootPath, entry.path, location);
+    const stats = fs.lstatSync(filePath, { bigint: true });
+    if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1n) {
+      throw new Error(`Carry destination regular file is not isolated from hard links: ${carryPath} (${location}, ${entry.path}).`);
+    }
+  }
+}
+
 function validateReceipt(receipt, normalizedPaths) {
   if (receipt?.schemaVersion !== 2
     || !Array.isArray(receipt.entries)
@@ -388,7 +435,9 @@ function verifyReceiptState({ checkoutRoot, worktreePath, entries }) {
     assertNoSymlinkAncestors(checkoutRoot, entry.path, 'source checkout');
     assertNoSymlinkAncestors(worktreePath, entry.path, 'destination worktree');
     assertPathStateMatches(resolveInside(checkoutRoot, entry.path), entry.state, entry.path, 'source checkout');
-    assertPathStateMatches(resolveInside(worktreePath, entry.path), entry.state, entry.path, 'destination worktree');
+    const destinationPath = resolveInside(worktreePath, entry.path);
+    assertPathStateMatches(destinationPath, entry.state, entry.path, 'destination worktree');
+    assertRegularFilesAreIsolated(destinationPath, entry.state, entry.path, 'destination worktree');
   }
 }
 
@@ -452,6 +501,7 @@ function transferCarrySources({ checkoutRoot, worktreePath, entries }) {
     path.dirname(checkoutRoot),
     `.${path.basename(checkoutRoot)}-carry-cleanup-`,
   ));
+  const sourceBackupRoot = path.join(transactionRoot, 'source');
   const moved = [];
   try {
     for (const entry of entries) {
@@ -459,30 +509,24 @@ function transferCarrySources({ checkoutRoot, worktreePath, entries }) {
       assertNoSymlinkAncestors(worktreePath, entry.path, 'destination worktree');
       const sourcePath = resolveInside(checkoutRoot, entry.path);
       const destinationPath = resolveInside(worktreePath, entry.path);
-      const backupPath = resolveInside(transactionRoot, entry.path);
+      const sourceBackupPath = resolveInside(sourceBackupRoot, entry.path);
       const item = {
         ...entry,
         sourcePath,
         destinationPath,
-        backupPath,
-        destinationBackedUp: false,
+        sourceBackupPath,
         sourceMoved: false,
       };
       moved.push(item);
-      if (lstatIfPresent(destinationPath)) {
-        fs.mkdirSync(path.dirname(backupPath), { recursive: true });
-        fs.renameSync(destinationPath, backupPath);
-        item.destinationBackedUp = true;
-      }
       if (lstatIfPresent(sourcePath)) {
-        fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
-        fs.renameSync(sourcePath, destinationPath);
+        fs.mkdirSync(path.dirname(sourceBackupPath), { recursive: true });
+        fs.renameSync(sourcePath, sourceBackupPath);
         item.sourceMoved = true;
       }
     }
-    return { transactionRoot, moved, checkoutRoot, worktreePath };
+    return { transactionRoot, moved, checkoutRoot };
   } catch (error) {
-    const recovery = rollbackTransfer({ transactionRoot, moved, checkoutRoot, worktreePath });
+    const recovery = rollbackTransfer({ transactionRoot, moved, checkoutRoot });
     throw new Error(`Carry cleanup could not transfer the verified sources. ${error.message}${recovery}`);
   }
 }
@@ -497,16 +541,14 @@ function verifyTransferredState({ checkoutRoot, worktreePath, entries, moved }) 
       throw new Error(`Carry path changed after carry verification: ${entry.path} (source path reappeared during transfer).`);
     }
     const transferredState = item.sourceMoved
-      ? capturePathState(item.destinationPath)
+      ? capturePathState(item.sourceBackupPath)
       : { exists: false, manifest: null };
     if (!pathStatesMatch(transferredState, entry.state)) {
       throw new Error(`Carry path changed after carry verification: ${entry.path} (transferred source).`);
     }
-    const backupState = item.destinationBackedUp
-      ? capturePathState(item.backupPath)
-      : { exists: false, manifest: null };
-    if (!pathStatesMatch(backupState, entry.state)) {
-      throw new Error(`Carry destination changed after carry verification: ${entry.path} (transaction backup).`);
+    const destinationState = capturePathState(item.destinationPath);
+    if (!pathStatesMatch(destinationState, entry.state)) {
+      throw new Error(`Carry destination changed after carry verification: ${entry.path} (destination worktree).`);
     }
   }
 }
@@ -515,54 +557,39 @@ function verifyTransactionBackups(entries, moved) {
   const movedByPath = new Map(moved.map((item) => [item.path, item]));
   for (const entry of entries) {
     const item = movedByPath.get(entry.path);
-    const backupState = item.destinationBackedUp
-      ? capturePathState(item.backupPath)
+    const backupState = item.sourceMoved
+      ? capturePathState(item.sourceBackupPath)
       : { exists: false, manifest: null };
     if (!pathStatesMatch(backupState, entry.state)) {
-      throw new Error(`Carry destination changed during cleanup: ${entry.path} (transaction backup).`);
+      throw new Error(`Carried source changed during cleanup: ${entry.path} (transaction backup).`);
     }
   }
 }
 
-function rollbackTransfer({ transactionRoot, moved, checkoutRoot, worktreePath }) {
+function rollbackTransfer({ transactionRoot, moved, checkoutRoot }) {
   const problems = [];
   for (const item of [...moved].reverse()) {
     const sourceSafe = rollbackPathIsSafe(checkoutRoot, item.path, 'source checkout', problems);
-    const destinationSafe = rollbackPathIsSafe(worktreePath, item.path, 'destination worktree', problems);
     if (item.sourceMoved) {
-      if (!sourceSafe || !destinationSafe) {
-        // Preserve every object in place when an ancestor could redirect a rename.
-      } else if (!lstatIfPresent(item.destinationPath)) {
+      if (!sourceSafe) {
+        // Preserve the source backup in place when an ancestor could redirect a rename.
+      } else if (!lstatIfPresent(item.sourceBackupPath)) {
         problems.push(`${item.path} (transferred source missing)`);
       } else if (lstatIfPresent(item.sourcePath)) {
         problems.push(`${item.path} (source path reappeared)`);
       } else {
         try {
           fs.mkdirSync(path.dirname(item.sourcePath), { recursive: true });
-          fs.renameSync(item.destinationPath, item.sourcePath);
+          fs.renameSync(item.sourceBackupPath, item.sourcePath);
         } catch (error) {
           problems.push(`${item.path} (source restore failed: ${error.code || error.message})`);
-        }
-      }
-    }
-    if (item.destinationBackedUp && lstatIfPresent(item.backupPath)) {
-      if (!destinationSafe) {
-        // The transaction copy remains available for manual recovery.
-      } else if (lstatIfPresent(item.destinationPath)) {
-        problems.push(`${item.path} (destination path occupied)`);
-      } else {
-        try {
-          fs.mkdirSync(path.dirname(item.destinationPath), { recursive: true });
-          fs.renameSync(item.backupPath, item.destinationPath);
-        } catch (error) {
-          problems.push(`${item.path} (destination restore failed: ${error.code || error.message})`);
         }
       }
     }
   }
   if (problems.length === 0) {
     try {
-      fs.rmSync(transactionRoot, { recursive: true, force: true });
+      removePrivateTreeNoFollow(transactionRoot);
       return ' Source and destination paths were restored.';
     } catch (error) {
       problems.push(`transaction cleanup failed: ${error.code || error.message}`);
@@ -586,12 +613,11 @@ function verifyTransferredDestinations(worktreePath, entries, moved) {
   for (const entry of entries) {
     assertNoSymlinkAncestors(worktreePath, entry.path, 'destination worktree');
     const item = movedByPath.get(entry.path);
-    const state = item.sourceMoved
-      ? capturePathState(item.destinationPath)
-      : { exists: false, manifest: null };
+    const state = capturePathState(item.destinationPath);
     if (!pathStatesMatch(state, entry.state)) {
       throw new Error(`Carry path changed after carry verification: ${entry.path} (destination changed during cleanup).`);
     }
+    assertRegularFilesAreIsolated(item.destinationPath, entry.state, entry.path, 'destination worktree');
   }
 }
 
@@ -692,16 +718,46 @@ function trackedPathSetsForCarry(checkoutRoot, carryPaths) {
   return { restorePaths, headPaths };
 }
 
+function assertTrackedRestoreGitVersion(checkoutRoot, restorePaths) {
+  if (restorePaths.length === 0) return;
+  const versionOutput = git(checkoutRoot, ['--version']);
+  const match = /^git version (\d+)\.(\d+)(?:\.\d+)?/i.exec(versionOutput);
+  const major = Number(match?.[1]);
+  const minor = Number(match?.[2]);
+  if (!match || major < 2 || (major === 2 && minor < 25)) {
+    throw new Error(
+      `Verified carry cleanup for tracked paths requires Git 2.25 or newer; found ${versionOutput || 'an unknown version'}. Source and destination were left unchanged.`,
+    );
+  }
+}
+
 function restoreTrackedCheckout(checkoutRoot, { restorePaths, headPaths }) {
   if (restorePaths.length > 0) {
-    git(checkoutRoot, ['--literal-pathspecs', 'restore', '--source=HEAD', '--staged', '--', ...restorePaths]);
+    git(checkoutRoot, [
+      '--literal-pathspecs',
+      'restore',
+      '--source=HEAD',
+      '--staged',
+      '--pathspec-from-file=-',
+      '--pathspec-file-nul',
+    ], { input: nulTerminatedPaths(restorePaths) });
   }
   if (headPaths.length > 0) {
     prepareHeadPathParents(checkoutRoot, headPaths);
     // Deliberately omit --force: a path recreated after the transaction swap
     // must make cleanup fail instead of being overwritten by HEAD content.
-    git(checkoutRoot, ['--literal-pathspecs', 'checkout-index', '--', ...headPaths]);
+    git(checkoutRoot, [
+      '--literal-pathspecs',
+      'checkout-index',
+      '-u',
+      '--stdin',
+      '-z',
+    ], { input: nulTerminatedPaths(headPaths) });
   }
+}
+
+function nulTerminatedPaths(paths) {
+  return Buffer.from(`${paths.join('\0')}\0`, 'utf8');
 }
 
 function prepareHeadPathParents(checkoutRoot, headPaths) {
@@ -733,7 +789,9 @@ function compareText(left, right) {
 }
 
 function git(cwd, args, options = {}) {
-  const output = execFileSync('git', args, { cwd, encoding: 'utf8' });
+  const execOptions = { cwd, encoding: 'utf8' };
+  if (Object.hasOwn(options, 'input')) execOptions.input = options.input;
+  const output = execFileSync('git', args, execOptions);
   return options.trim === false ? output : output.trim();
 }
 
