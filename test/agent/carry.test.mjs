@@ -11,6 +11,7 @@ import {
   buildPathManifest,
   cleanupVerifiedCarry as cleanupVerifiedCarryImpl,
   copyCarryPathsAndVerify as copyCarryPathsAndVerifyImpl,
+  deriveRestoredFileMode,
   preflightCarryPlan,
 } from '../../scripts/agent/carry.mjs';
 
@@ -183,6 +184,10 @@ test('buildPathManifest records portable permission modes', () => {
     assert.equal(directoryEntry.mode, fs.lstatSync(directoryPath).mode & 0o7777);
     assert.equal(fileEntry.mode, fs.lstatSync(filePath).mode & 0o7777);
   });
+});
+
+test('deriveRestoredFileMode clears every execute bit for a non-executable HEAD file', () => {
+  assert.equal(deriveRestoredFileMode(0o755, '100644', 'linux'), 0o644);
 });
 
 test('copyCarryPathsAndVerify restores every captured directory mode before receipt verification', () => {
