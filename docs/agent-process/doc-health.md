@@ -78,6 +78,10 @@ links are excluded. Global instructions, prose read-first directives, nested
 agent files, other import syntax, and dynamically selected skills are not
 measured. The startup-baseline is an existence contract, not a reading list.
 
+Dated plans are historical unless both active and marked as a source of truth.
+Impact mode rejects non-document paths hidden by Git assume-unchanged or
+skip-worktree flags; snapshot counts remain available without `--base`.
+
 Affected reads reuse `checked.owns` and `human.heal_when` from the doc-map;
 unmapped changes remain visible for investigation. No thresholds, gate changes,
 document rewrites, or generated report files are introduced. Exit `2` means an

@@ -162,8 +162,12 @@ run_in_tmp git add .claude/friction.md
 expect_success "pre-commit-ledger-friction-append" run_in_tmp "${pre_commit_hook}"
 expect_success "commit-msg-ledger-friction-append" run_in_tmp "${commit_msg_hook}" "$(message_file "chore(friction): log hook hiccup")"
 
-# The owner decision log is also a named append-log ledger: direct-main appends
-# pass with no bypass and no issue reference.
+# Decision-log additions and edits require a reviewed branch, including a
+# removed entry that Git represents as an ordinary file modification.
+reset_tmp_repo
+stage_file "docs/decisions/decision-log.md" "new decision log"
+expect_failure "pre-commit-decision-log-add" run_in_tmp "${pre_commit_hook}"
+expect_failure "commit-msg-decision-log-add" run_in_tmp "${commit_msg_hook}" "$(message_file "docs(owner): add decision log")"
 reset_tmp_repo
 mkdir -p "${tmp}/repo/docs/decisions"
 printf '# Decision Log\n\n## 2026-06-12 - Seed\n- **Decision:** Seed\n- **Lane:** <issue>\n- **Why:** Seed\n' > "${tmp}/repo/docs/decisions/decision-log.md"
@@ -171,8 +175,11 @@ run_in_tmp git add docs/decisions/decision-log.md
 run_in_tmp git commit -m "docs: seed decision log (#1)" --no-verify >/dev/null
 printf '\n## 2026-06-15 - Owner scope\n- **Decision:** Keep it narrow\n- **Lane:** https://github.com/ArchonVII/repo-template/issues/73\n- **Why:** Avoid drift\n' >> "${tmp}/repo/docs/decisions/decision-log.md"
 run_in_tmp git add docs/decisions/decision-log.md
-expect_success "pre-commit-ledger-decision-log-append" run_in_tmp "${pre_commit_hook}"
-expect_success "commit-msg-ledger-decision-log-append" run_in_tmp "${commit_msg_hook}" "$(message_file "docs(decisions): record owner scope")"
+expect_failure "pre-commit-ledger-decision-log-append" run_in_tmp "${pre_commit_hook}"
+expect_failure "commit-msg-ledger-decision-log-append" run_in_tmp "${commit_msg_hook}" "$(message_file "docs(decisions): record owner scope")"
+printf '# Decision Log\n' > "${tmp}/repo/docs/decisions/decision-log.md"
+run_in_tmp git add docs/decisions/decision-log.md
+expect_failure "pre-commit-decision-log-remove-entry" run_in_tmp "${pre_commit_hook}"
 
 # Other docs/decisions files are still normal docs: modifying them on main is
 # blocked by the owner-maintenance add-only rule.

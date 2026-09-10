@@ -43,6 +43,10 @@ function baseTexts(root, commit) {
 }
 function state(rel, text) {
   const meta = parseDocMetadata(text);
+  if (/^docs\/plans\/\d{4}-\d{2}-\d{2}-[^/]+\.md$/i.test(rel)) {
+    return meta.statusNorm === 'active' && /^yes\b/i.test(String(meta.sourceOfTruth ?? '').trim())
+      ? 'active' : 'historical';
+  }
   if (isOperationalActiveDoc(meta)) return 'active';
   if (/^(archived|superseded|closed|complete|completed|done|historical)\b/.test(meta.statusNorm)
     || /(^|\/)(archive|archives|history)(\/|$)/i.test(rel)
@@ -159,6 +163,10 @@ export function reportFootprint(repoRoot, { base = null } = {}) {
   if (base !== null) {
     try { comparisonBase = git(root, ['rev-parse', '--verify', '--end-of-options', `${base}^{commit}`]).trim(); }
     catch { throw new Error(`Invalid or unavailable base: ${base}`); }
+    // Docs are compared directly below, but Git can hide other working-tree edits.
+    const hidden = git(root, ['ls-files', '-v', '-z']).split('\0')
+      .filter((record) => /^[a-zS] /.test(record)).map((record) => record.slice(2)).filter((rel) => !isDoc(rel));
+    if (hidden.length) throw new Error(`Cannot evaluate impact with index-hidden non-document paths: ${hidden.join(', ')}. Clear assume-unchanged/skip-worktree flags or omit --base for counts only.`);
     changedPaths = sorted([
       ...git(root, ['diff', '--no-renames', '--name-only', '-z', comparisonBase, '--']).split('\0'),
       ...git(root, ['ls-files', '--others', '--exclude-standard', '-z']).split('\0'),

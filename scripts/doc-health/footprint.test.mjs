@@ -179,3 +179,32 @@ test('indented paragraph continuations still contribute real imports', (t) => {
   const r = report(f.root);
   assert.deepEqual(r.instructions.files.map((f) => f.path), ['CLAUDE.md', 'docs/rules.md']);
 });
+
+test('index-hidden code prevents a falsely complete impact report', (t) => {
+  const f = fixture(t, { 'src/write.mjs': 'old\n', 'README.md': 'repo\n' });
+  for (const flag of ['assume-unchanged', 'skip-worktree']) {
+    f.git('update-index', `--${flag}`, 'src/write.mjs');
+    f.write('src/write.mjs', 'new\n');
+    const result = spawnSync(process.execPath, [cli, '--repo', f.root, '--base', 'HEAD'], { encoding: 'utf8' });
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /index-hidden.*src\/write\.mjs/);
+    assert.equal(report(f.root).comparisonBase, null); // Snapshot remains available.
+    f.git('update-index', `--no-${flag}`, 'src/write.mjs');
+  }
+  assert.deepEqual(report(f.root, '--base', 'HEAD').unmapped, ['src/write.mjs']);
+});
+
+test('dated plans are historical unless both active and canonical', (t) => {
+  const f = fixture(t, {
+    'docs/plans/2026-09-01-plain.md': 'plan\n',
+    'docs/plans/2026-09-02-draft.md': 'Status: draft\n',
+    'docs/plans/2026-09-03-active.md': '> **Status:** active\n',
+    'docs/plans/2026-09-04-canonical.md': '> **Status:** active\n> **Source of truth:** yes\n',
+  });
+  assert.equal(report(f.root).documents.historical.files, 3);
+  assert.equal(report(f.root).documents.active.files, 1);
+  f.write('docs/plans/2026-09-03-active.md', '> **Status:** active\n> **Source of truth:** yes\n');
+  const r = report(f.root, '--base', 'HEAD');
+  assert.equal(r.delta.active.files, 1);
+  assert.equal(r.delta.historical.files, -1);
+});
