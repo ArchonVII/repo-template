@@ -63,14 +63,19 @@ function summarize(texts) {
 function imports(text) {
   // Import syntax only: links and code examples are not unconditional reads.
   let fence = null;
+  let paragraph = false;
   const prose = text.replace(/<!--[^]*?-->/g, '').split(/\r?\n/).filter((line) => {
     const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
     if (fence) {
       if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) fence = null;
       return false;
     }
-    if (marker) { fence = marker[1]; return false; }
-    return !/^( {4}|\t)/.test(line);
+    if (marker) { fence = marker[1]; paragraph = false; return false; }
+    if (!line.trim()) { paragraph = false; return true; }
+    // An indented code block cannot interrupt an existing paragraph.
+    if (/^( {4}|\t)/.test(line) && !paragraph) return false;
+    paragraph = !/^ {0,3}(#{1,6}(\s|$)|([-*_]\s*){3,}$)/.test(line);
+    return true;
   }).join('\n').replace(/(`+)[^]*?\1/g, '');
   return [...prose.matchAll(/(?:^|\s)@([^\s<>"'`]+\.(?:md|mdx|txt))(?=$|[\s.,;:)])/gim)].map((m) => m[1]);
 }

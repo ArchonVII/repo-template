@@ -170,3 +170,12 @@ test('base blob framing preserves Unicode and ignores platform line endings', (t
   assert.deepEqual(r.delta.total, { files: 0, words: 1 });
   assert.deepEqual(r.changes.map((c) => c.path), ['docs/a.md']);
 });
+
+test('indented paragraph continuations still contribute real imports', (t) => {
+  const f = fixture(t, {
+    'CLAUDE.md': 'Read these rules:\n    @docs/rules.md\n',
+    'docs/rules.md': 'required material\n',
+  });
+  const r = report(f.root);
+  assert.deepEqual(r.instructions.files.map((f) => f.path), ['CLAUDE.md', 'docs/rules.md']);
+});
