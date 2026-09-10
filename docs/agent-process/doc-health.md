@@ -57,6 +57,32 @@ The process exits `0` when clean or when only warnings exist, `1` when any block
 finding exists (this is the docs-gate signal), and `2` for invalid invocation or
 runtime errors.
 
+## Footprint and Affected Reads
+
+Run `node scripts/doc-health/footprint.mjs --repo <root> --base <git-ref>`
+for a read-only growth and impact report; add `--json` for structured output.
+Without `--base`, it measures the current footprint only. For PR scope, supply
+the PR's merge-base commit; comparison is against the exact supplied revision.
+
+It counts whitespace-delimited words (including markup/code) across regular
+Git-tracked and nonignored untracked `.md`, `.mdx`, and `.txt` files. It reports
+total, active, historical, and unclassified counts, per-file changes, and deltas.
+Existing lifecycle metadata identifies active/history; archive paths provide a
+historical fallback. These counts do not establish authority or correctness.
+
+The instruction union covers root AGENTS/AGENTS.override/CLAUDE/GEMINI/CODEX
+Markdown files and unquoted, whitespace-delimited `@path.md`, `@path.mdx`, or
+`@path.txt` imports. Imports are relative to their file; cycles are deduplicated
+and unavailable/external targets are disclosed. Code examples and ordinary
+links are excluded. Global instructions, prose read-first directives, nested
+agent files, other import syntax, and dynamically selected skills are not
+measured. The startup-baseline is an existence contract, not a reading list.
+
+Affected reads reuse `checked.owns` and `human.heal_when` from the doc-map;
+unmapped changes remain visible for investigation. No thresholds, gate changes,
+document rewrites, or generated report files are introduced. Exit `2` means an
+invalid input or runtime failure; growth alone exits `0`.
+
 ## Report Shape
 
 Reports use schema `doc-health.v1`:

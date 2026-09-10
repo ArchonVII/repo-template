@@ -92,7 +92,7 @@ test('missing/external imports are disclosed while fenced examples and ordinary 
 
 test('doc-map selects affected docs and discloses unmapped changes', (t) => {
   const f = fixture(t, {
-    '.agent/doc-map.yml': 'version: 1\nchecked:\n  - path: docs/export.md\n    owns: ["src/export/**"]\nhuman:\n  - path: docs/guides/**\n    heal_when: ["src/export/**"]\n',
+    '.agent/doc-map.yml': 'version: 1\nchecked:\n  - path: docs/export.md\n    owns: ["src/export/**"]\n    checks: [links]\nhuman:\n  - path: docs/guides/**\n    heal_when: ["src/export/**"]\n',
     'docs/export.md': 'Export reference\n',
     'docs/guides/csv.md': 'CSV guide\n',
     'docs/other.md': 'Unrelated guide\n',
@@ -116,4 +116,57 @@ test('invalid base and malformed doc-map fail explicitly', (t) => {
   const badMap = spawnSync(process.execPath, [cli, '--repo', f.root], { encoding: 'utf8' });
   assert.equal(badMap.status, 2);
   assert.match(badMap.stderr, /doc-map/i);
+});
+
+test('renaming code out of an owned area still selects its former documentation', (t) => {
+  const f = fixture(t, {
+    '.agent/doc-map.yml': 'version: 1\nchecked:\n  - path: docs/export.md\n    owns: src/export/**\n    checks: [links]\n',
+    'docs/export.md': 'Export guide\n',
+    'src/export/old.mjs': 'same content\n',
+  });
+  f.git('mv', '--', 'src/export/old.mjs', 'src/moved.mjs');
+  const r = report(f.root, '--base', 'HEAD');
+  assert.deepEqual(r.affected.map((d) => d.path), ['docs/export.md']);
+  assert.equal(r.affected[0].reasons[0].changedPath, 'src/export/old.mjs');
+  assert.deepEqual(r.unmapped, ['src/moved.mjs']);
+});
+
+test('instruction growth includes imported text and text output reports the delta', (t) => {
+  const f = fixture(t, { 'CLAUDE.md': '@docs/rules.txt\n', 'docs/rules.txt': 'one\n' });
+  f.write('docs/rules.txt', 'one two three\n');
+  const r = report(f.root, '--base', 'HEAD');
+  assert.deepEqual(r.delta.instructions, { files: 0, words: 2 });
+  const result = spawnSync(process.execPath, [cli, '--repo', f.root, '--base', 'HEAD'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Instruction union:.*\+2 words/);
+});
+
+test('indented examples and longer fences never add unconditional imports', (t) => {
+  const f = fixture(t, {
+    'CLAUDE.md': 'Example:\n\n    @docs/example.md\n\n````markdown\n```text\n@docs/example.md\n```\n````\n',
+    'docs/example.md': 'optional example\n',
+  });
+  const r = report(f.root);
+  assert.deepEqual(r.instructions.files.map((f) => f.path), ['CLAUDE.md']);
+  assert.deepEqual(r.instructions.unresolved, []);
+});
+
+test('exact base comparison detects growth even when the index suppresses diff output', (t) => {
+  const f = fixture(t, { 'docs/rules.md': 'one\n' });
+  f.git('update-index', '--assume-unchanged', 'docs/rules.md');
+  f.write('docs/rules.md', 'one two three\n');
+  assert.equal(f.git('diff', '--name-only', 'HEAD').trim(), '');
+  const r = report(f.root, '--base', 'HEAD');
+  assert.deepEqual(r.delta.total, { files: 0, words: 2 });
+  assert.equal(r.changes[0].wordsDelta, 2);
+  assert.equal(r.affected[0].path, 'docs/rules.md');
+});
+
+test('base blob framing preserves Unicode and ignores platform line endings', (t) => {
+  const f = fixture(t, { 'docs/a.md': 'café 猫\n', 'docs/b.md': 'keep this\n' });
+  f.write('docs/a.md', 'café 猫 added\n');
+  f.write('docs/b.md', 'keep this\r\n');
+  const r = report(f.root, '--base', 'HEAD');
+  assert.deepEqual(r.delta.total, { files: 0, words: 1 });
+  assert.deepEqual(r.changes.map((c) => c.path), ['docs/a.md']);
 });
