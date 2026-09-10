@@ -1,3 +1,13 @@
+# Materialize detected text as LF on every platform. This repo-level rule
+# overrides core.autocrlf so patches and copied fixtures cannot create mixed
+# line endings in ordinary text files.
+* text=auto eol=lf
+
+# Keep Windows-native command files in their conventional working-tree form.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
 # Force LF for shell scripts so the .githooks/ baseline runs correctly
 # regardless of the cloning OS. Bash hooks fail with CRLF on Git Bash
 # ("bad interpreter: /usr/bin/env\r: No such file or directory") and on

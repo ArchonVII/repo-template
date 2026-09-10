@@ -4,15 +4,15 @@
 > **Owner:** ecosystem
 > **Scope:** meta-layer
 > **Source of truth:** yes
-> **Last reviewed:** 2026-07-19
+> **Last reviewed:** 2026-09-10
 > **Supersedes:** none
 > **Superseded by:** none
 
 - **Issue:** https://github.com/ArchonVII/repo-template/issues/206
 - **Implementation state:** Design approved; implementation has not started.
-- **Next action:** Open the provider workflow lane, then implement the repo-template command and policy surfaces test-first.
+- **Execution status:** [issue #206](https://github.com/ArchonVII/repo-template/issues/206) and the project capsule track remaining implementation.
 
-This document owns the cross-repository behavioral contract and the repo-template command/policy design. It does not own or authorize edits to workflow-provider YAML, Archon Setup implementation, or consumer protection state; those remain in separately issued lanes in their canonical repositories and link back here instead of copying this contract.
+This document owns the cross-repository behavioral contract and the repo-template command/policy design. It does not own or authorize edits to workflow-provider YAML, Archon Setup implementation, or consumer protection state; those remain in separate implementation PRs in their canonical repositories, linked to issue #206 instead of copying this contract or its root issue.
 
 ## Understanding Summary
 
@@ -271,15 +271,13 @@ Merge queue is unsupported in v1 because GitHub evaluates required checks agains
 
 ### Ecosystem Sequence
 
-1. Land the reusable evaluator and canonical example/caller in `ArchonVII/github-workflows`.
-2. Land repo-template issue #206 command, policy, tests, and caller distribution changes.
-3. Let the separate line-ending provider lane land; do not conflate it with this issue.
-4. Repair the post-merge Archon defects in their own lane.
-5. Refresh Archon Setup snapshots once with the explicitly named provider inputs; self-apply; add protection tightening/audit support.
-6. Bootstrap Hudson Bend with the evaluator on its default branch before requiring the status. The bootstrap PR cannot be gated by a workflow that is not yet on the default branch.
-7. Repair Hudson Bend's active ruleset and any classic protection, enable the required status after its first run, and verify the computed union.
-8. Refresh and finish Hudson Bend PR #383, obtain a clean exact-final-HEAD Codex result, merge, and verify canonical `main`.
-9. Only then resume the paused Hudson Bend #370 lane.
+1. Land the reusable evaluator and canonical caller in `ArchonVII/github-workflows`.
+2. Land the repo-template command, policy, tests, and caller distribution changes.
+3. Integrate the verified provider versions through `ArchonVII/archon-setup`, then
+   bootstrap and audit the selected consumer repositories.
+
+Issue #206 owns the outcome and remaining dependencies. Implementation PRs link
+to it; completed repair lanes are not continuing rollout prerequisites.
 
 ## Expected Repository Surfaces
 
@@ -309,11 +307,6 @@ The vendored `scripts/pr-contract.mjs` is out of scope and must not be edited.
 - `src/server/tasks/applyBaselineBranchProtection.mjs` baseline hardening.
 - `src/server/branchProtection/tightenRequiredGate.mjs` named-status/admin enforcement and preserving updates.
 - Effective protection/ruleset audit, snapshot refresh, self-apply, manifest/reporting, and tests.
-
-### Hudson Bend
-
-- Thin evaluator caller and distributed command files from the approved snapshots.
-- Live `main` protection repair through a dedicated lane, with both surfaces re-audited before PR #383 proceeds.
 
 ## Testing Strategy
 

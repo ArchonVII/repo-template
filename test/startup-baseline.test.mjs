@@ -108,7 +108,7 @@ test('VISION template satisfies the owner-intent charter', async () => {
   }
 });
 
-test('decision log template satisfies the append-only owner-intent charter', async () => {
+test('decision log template satisfies the owner-intent entry format', async () => {
   const body = await readFile(join(ROOT, 'docs', 'decisions', 'decision-log.md'), 'utf8');
   assert.match(body, /^> \*\*Status:\*\* active$/m);
   assert.match(body, /^> \*\*Owner:\*\* human, agent-appended$/m);

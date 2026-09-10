@@ -112,7 +112,7 @@ Prefer repo helpers:
 These `agent:*` helpers exist only when the agent-lifecycle feature (its `package.json` scripts) is installed; a repo onboarded without it has no `npm run` targets, so use the raw `git worktree add` command shown above.
 
 Do not run `git switch -c` in the primary checkout; if unsure, run `bash .githooks/scripts/checkout-doctor.sh`.
-Use `--carry` only for explicit in-repo task inputs: every dirty path must be covered, each destination is verified before only the named sources are cleaned, and unrelated dirt still blocks startup. A tracked deletion is carried as an absent destination; a rename requires both its original and destination paths to be covered before task branch/worktree creation.
+Use `--carry` only for explicit in-repo task inputs: every dirty path must be covered, each destination is verified before only the named sources are cleaned, and unrelated dirt still blocks startup. Cleanup is bound to that verified filesystem and Git-index state; divergent index/worktree versions are rejected because one copy cannot represent both. Detected changes or recreations make startup fail without overwriting them and report every location that may hold recovery data. A tracked deletion is carried as an absent destination; a rename requires both its original and destination paths to be covered before task branch/worktree creation. No portable lock spans these filesystem and Git operations, so do not edit either checkout until `agent:start-task` returns.
 
 ## Verification And Delivery
 
@@ -120,8 +120,8 @@ Use `--carry` only for explicit in-repo task inputs: every dirty path must be co
   path-filtered leaf workflows required.
 - Use `.agent/check-map.yml` for path-to-check expectations. If the repo stack changes,
   update the check map and `repo-required-gate` caller in the same PR.
-- Run the repo's lint, typecheck, and test commands before review. Record exact commands and
-  results in PR verification notes.
+- Run focused local checks needed to implement or reproduce a finding. GitHub's required gate is
+  the sole required full-suite run; do not repeat it locally as delivery ceremony or during review.
 - `## Verification` needs at least one substantive item — a plain bullet or a checkbox —
   recording what was actually run or checked (substance-only contract, gw#99). Placeholders
   and generic claims ("tests pass", "CI green") fail; a bullet with the real command and
@@ -193,9 +193,10 @@ of these files:
 - `.claude/noticed.md` - per-repo observation log.
 - `.claude/napkin.md` - curated runbook.
 - `.claude/friction.md` - structured friction ledger.
-- `docs/decisions/decision-log.md` - owner intent decision log.
 
 Renames, copies, and deletes of a ledger still require the normal branch/PR lane.
+The owner decision log always uses the normal PR lane, including additions,
+corrections, and removal of individual entries.
 
 ## Coordination
 

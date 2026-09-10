@@ -77,6 +77,7 @@ npm run docs:render -- --check # drift gate: exit 1 if any block is stale, write
 npm run docs:changelog         # fold release-class CHANGELOG.md [Unreleased] from git history
 npm run docs:changelog -- --check  # release-cut drift check (not a PR gate — release-class)
 npm run docs:status            # render docs/STATUS.md (never commit it)
+node scripts/doc-health/footprint.mjs --base <git-ref> # read-only growth and affected reads; see doc-health.md
 npm run close:dod -- --section <docs|changelog|verification|findings> --decision "<text>"
                                # capture one closeout-DoD decision as it is made (S2)
 ```
