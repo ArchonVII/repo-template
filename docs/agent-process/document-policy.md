@@ -4,7 +4,7 @@
 > **Owner:** ecosystem
 > **Scope:** repo-local document control
 > **Source of truth:** yes
-> **Last reviewed:** 2026-06-15
+> **Last reviewed:** 2026-09-10
 > **Supersedes:** none
 > **Superseded by:** none
 
@@ -22,11 +22,11 @@ Run doc-health as part of that gate only when it is installed; otherwise use the
 
 ## Binding Rules
 
-1. Every durable document answers one clear question and has one canonical home.
+1. Every durable document answers a necessary question and has one canonical home; each retained passage must serve that purpose.
 2. The first screen of an agent-read document must contain binding rules or links to them.
 3. Long rules use a short `AGENTS.md` contract plus a detail doc in `docs/agent-process/`.
 4. Distributor-maintained sections use managed blocks.
-5. A charter budget overrun triggers review for detail that can move down the hierarchy; the budget is advisory, not a hard cap.
+5. Review necessity before shortening or splitting content. Charter budgets are advisory, not proof that content below them should stay.
 6. Doc-health tools report drift; they do not rewrite durable docs.
 
 ## Source-Of-Truth Hierarchy
@@ -50,7 +50,7 @@ consumer update path.
 | `AGENTS.md`                                | How do agents work here?                                     | ecosystem             | 300 lines             | Read-first list, Start Map, workflow guardrails            | Tool quirks, full specs, project vision                |
 | `CLAUDE.md` / `GEMINI.md`                  | What diverges for this tool only?                            | ecosystem             | 25 lines              | Pointer back to `AGENTS.md` plus any tool-specific delta   | Universal rules, repo truth, duplicate workflow policy |
 | `VISION.md`                                | What experience are we building, and what is out of scope?   | human                 | 120 lines             | Experience, north star, scope, explicitly-not section      | Implementation detail, task lists, status logs         |
-| `docs/decisions/decision-log.md`           | What did the owner decide, when?                             | human, agent-appended | append-only           | Newest decision first with date, lane, one-line why        | Rationale essays, technical ADR content                |
+| `docs/decisions/decision-log.md`           | Which durable owner scope choices matter, and why?           | human, agent-appended | curated through PR    | Newest decision first with date, lane, one-line why        | Transcripts, inferred policy, rationale essays, technical ADR content |
 | `CHANGELOG.md` (release-class)             | What shipped for users?                                      | `docs:changelog`      | folded at release-cut | Conventional Commit history rendered into `[Unreleased]`   | Operational update notes, internal-only maintenance    |
 | `docs/STATUS.md` (when `docs:status` is installed; otherwise use the repo-selected status surface) | What changed operationally / is in flight? | `docs:status` | rendered on demand | Open PRs/issues, roadmap %, doc-health summary | User-facing release notes |
 | `ARCHITECTURE.md` / `docs/architecture/**` | Where do subsystems live and what boundaries matter?         | agents                | as needed             | System map and boundary rules before rationale             | Per-file documentation, transient plans                |
@@ -89,11 +89,36 @@ Keep the file focused on experience, north star, scope, explicitly-not, current 
 drift tripwires; implementation detail, task lists, and status logs belong elsewhere.
 `Last reviewed` is stale after 90 days unless a repo-local policy sets a different cadence.
 
-`docs/decisions/decision-log.md` is the append-only owner-intent ledger, newest first.
-Entries stay to the title plus `Decision`, `Lane`, and `Why` one-liners. Use it for owner
-scope decisions, not technical ADR rationale. When a lane produces an owner scope decision,
-append it at closeout and record `Owner decisions this lane: appended` in the PR body;
-otherwise record `Owner decisions this lane: none`.
+`docs/decisions/decision-log.md` records explicit, durable owner scope choices that
+affect future work. Brainstorming, rejected proposals, temporary preferences, and
+verbatim owner speech do not automatically qualify. Preserve the actual scope,
+conditions, and source; a rejected feature is not a general prohibition.
+
+Keep newest entries first, with a title and `Decision`, `Lane`, and `Why` one-liners.
+The lane links to evidence when available; never invent attribution. Record a
+qualifying new decision at closeout and use `Owner decisions this lane: appended`
+in the PR body; otherwise use `none`. Correct, supersede, or remove unsupported,
+obsolete, and unnecessary entries through normal PR review. Git preserves history;
+an entry cannot make itself immune to review or removal.
+
+## Necessity Review
+
+Apply this to existing content as well as additions. Identify the reader and the
+action, decision, concrete error, or required historical question the passage serves.
+If removing it loses nothing needed, remove it within the authorized cleanup scope.
+Owner authorship, length, age, a passing budget, and prior agent assurances do not
+establish necessity or current correctness.
+
+Keep the shortest sufficient rule, rationale, or example that prevents a specific
+mistake. Preserve meaningful physical constraints, units, compatibility consequences,
+and necessary history; remove repeated justification and transcript-like narration.
+Neither all prose nor bare rules is the default. Use one canonical location and
+existing Git/issue history instead of creating an archive of every cut.
+
+Trace material claims to available sources. Label unsupported attribution as uncertain;
+do not treat it as settled owner intent. Escalate only unresolved choices that change
+current work, with the evidence and a specific question, after completing independent
+authorized cleanup. Counts and automated checks cannot decide semantic necessity.
 
 ## Lifecycle States
 

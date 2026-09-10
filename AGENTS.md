@@ -193,9 +193,10 @@ of these files:
 - `.claude/noticed.md` - per-repo observation log.
 - `.claude/napkin.md` - curated runbook.
 - `.claude/friction.md` - structured friction ledger.
-- `docs/decisions/decision-log.md` - owner intent decision log.
 
 Renames, copies, and deletes of a ledger still require the normal branch/PR lane.
+The owner decision log always uses the normal PR lane, including additions,
+corrections, and removal of individual entries.
 
 ## Coordination
 
