@@ -120,8 +120,8 @@ Use `--carry` only for explicit in-repo task inputs: every dirty path must be co
   path-filtered leaf workflows required.
 - Use `.agent/check-map.yml` for path-to-check expectations. If the repo stack changes,
   update the check map and `repo-required-gate` caller in the same PR.
-- Run the repo's lint, typecheck, and test commands before review. Record exact commands and
-  results in PR verification notes.
+- Run focused local checks needed to implement or reproduce a finding. GitHub's required gate is
+  the sole required full-suite run; do not repeat it locally as delivery ceremony or during review.
 - `## Verification` needs at least one substantive item — a plain bullet or a checkbox —
   recording what was actually run or checked (substance-only contract, gw#99). Placeholders
   and generic claims ("tests pass", "CI green") fail; a bullet with the real command and
