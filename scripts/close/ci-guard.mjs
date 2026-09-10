@@ -5,12 +5,11 @@ import {
   validatePrContract,
 } from '../pr-contract.mjs';
 import {
-  DEFAULT_REQUIRED_GATE,
   evaluateCloseScanMarker,
   evaluateRequiredChecks,
   markerPath,
   readCloseScanMarker,
-  readRequiredGateCheckName,
+  readRequiredGateCheckNames,
 } from './lib.mjs';
 
 function parseArgs(argv) {
@@ -99,11 +98,11 @@ function printResult(payload, json) {
   }
   if (payload.ok) {
     process.stdout.write('Close CI guard passed.\n');
-    const outcome = payload.requiredCheck.matched.conclusion
-      || payload.requiredCheck.matched.state
-      || payload.requiredCheck.matched.status
-      || 'unknown';
-    process.stdout.write(`Required check: ${payload.requiredCheck.matched.name} (${outcome})\n`);
+    process.stdout.write('Required checks:\n');
+    for (const matched of payload.requiredCheck.matches) {
+      const outcome = matched.conclusion || matched.state || matched.status || 'unknown';
+      process.stdout.write(`- ${matched.name} (${outcome})\n`);
+    }
     return;
   }
   process.stdout.write('Close CI guard failed:\n');
@@ -139,11 +138,14 @@ function main() {
   } catch (err) {
     checksLoadFailure = `Could not load PR checks from GitHub: ${err.message}`;
   }
-  // Gate resolution order (#142): explicit flag > the repo's declared gate in
-  // .agent/check-map.yml > the repo-template default.
+  // Gate resolution order (#142 / #184): an explicit one-run override wins;
+  // otherwise every ordered declaration in .agent/check-map.yml is required.
+  // Missing or malformed declarations stay empty so evaluation fails closed.
   const requiredCheck = evaluateRequiredChecks({
     checkRuns: checks,
-    requiredCheckName: args['required-check'] || readRequiredGateCheckName(root) || DEFAULT_REQUIRED_GATE,
+    requiredCheckNames: args['required-check']
+      ? [args['required-check']]
+      : readRequiredGateCheckNames(root),
   });
   const failures = [
     ...markerResult.failures,
