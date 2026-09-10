@@ -77,6 +77,7 @@ npm run docs:render -- --check # drift gate: exit 1 if any block is stale, write
 npm run docs:changelog         # fold release-class CHANGELOG.md [Unreleased] from git history
 npm run docs:changelog -- --check  # release-cut drift check (not a PR gate — release-class)
 npm run docs:status            # render docs/STATUS.md (never commit it)
+node scripts/doc-health/footprint.mjs --base <git-ref> # read-only growth and affected reads; see doc-health.md
 npm run close:dod -- --section <docs|changelog|verification|findings> --decision "<text>"
                                # capture one closeout-DoD decision as it is made (S2)
 ```
@@ -117,10 +118,10 @@ abandoned lane's docs eligible for recovery.
 
 ## The blocking subset (L2)
 
-`scripts/doc-health/health.mjs` splits findings by severity. Everything that predates
-L2 stays a **warning** (budgets, review cadence, supersession, placeholders, stale
-terms — dashboard food, never gate food). The **blocking** findings all come from the
-doc-map contract and only exist when `.agent/doc-map.yml` does:
+`scripts/doc-health/health.mjs` splits findings by severity. Advisory findings stay
+**warnings** (review cadence, supersession, placeholders, stale terms, and charter budgets —
+dashboard food, never gate food). **Blocking** findings come from the doc-map contract
+and only exist when `.agent/doc-map.yml` does:
 
 | code | fires when | scope |
 | --- | --- | --- |

@@ -2,14 +2,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { sanitizeSlug, buildBranchName, parseGitStatusPorcelain, assertCheckoutIsSafe, filterIssueBranches } from './lib.mjs';
+import { cleanupVerifiedCarry, copyCarryPathsAndVerify, preflightCarryPlan } from './carry.mjs';
+import { PRECISE_STATUS_ARGS, sanitizeSlug, buildBranchName, parseGitStatusPorcelain, parseStartTaskArgs, toCheckoutRelativePath, minimizeCarryPaths, collectCarriedStatusEntries, isPathInsideCarryPath, assertCheckoutIsSafe, filterIssueBranches } from './lib.mjs';
 
 const DEFAULT_AGENT = 'codex';
+const SETUP_OWNED_PATHS = Object.freeze(['.agent/current-task.json', 'node_modules']);
 const [, , issueArg, ...rest] = process.argv;
-const args = parseArgs(rest);
+let args;
+try { args = parseStartTaskArgs(rest); }
+catch (error) { fail(`${error.message}\n${usage()}`); }
 
 if (!issueArg || !/^\d+$/.test(issueArg)) {
-  fail('Usage: npm run agent:start-task -- <issue-number> [--agent <name>] [--slug <slug>]');
+  fail(usage());
 }
 
 // Bootstrap the checkout root directly (do not route through git() — it depends on this value).
@@ -21,16 +25,19 @@ const issue = JSON.parse(gh(['issue', 'view', issueArg, '--json', 'number,title,
 if (issue.state !== 'OPEN') fail(`Issue #${issueArg} is not open (state: ${issue.state}).`);
 
 const defaultBranch = gh(['repo', 'view', '--json', 'defaultBranchRef', '--jq', '.defaultBranchRef.name']);
+git(['fetch', 'origin', defaultBranch]);
+
+const statusEntries = parseGitStatusPorcelain(git([...PRECISE_STATUS_ARGS], { trim: false }));
+const carryPaths = resolveCarryPaths(args.carry, statusEntries);
 
 try {
   assertCheckoutIsSafe({
-    statusEntries: parseGitStatusPorcelain(git(['status', '--porcelain=1', '-z'], { trim: false })),
+    statusEntries,
     currentBranch: git(['branch', '--show-current']),
     defaultBranch,
+    carryPaths,
   });
 } catch (error) { fail(error.message); }
-
-git(['fetch', 'origin', defaultBranch]);
 
 const slug = sanitizeSlug(args.slug || issue.title) || fail('Could not derive a slug; pass --slug <value>.');
 const branchName = buildBranchName(agent, issueArg, slug);
@@ -40,7 +47,20 @@ if (existingIssueBranches(issueArg).length) fail(`Issue #${issueArg} already has
 if (branchExists(branchName)) fail(`Branch already exists: ${branchName}`);
 if (fs.existsSync(worktreePath)) fail(`Worktree path already exists: ${worktreePath}`);
 
+let carryPlan = null;
+if (carryPaths.length > 0) {
+  try {
+    carryPlan = preflightCarryPlan({ checkoutRoot, worktreePath, carryPaths, statusEntries });
+  } catch (error) {
+    fail(`Carry preflight failed before task-lane creation. ${error.message}`);
+  }
+}
+
 git(['worktree', 'add', '-b', branchName, worktreePath, `origin/${defaultBranch}`]);
+
+const carryReceipt = carryPaths.length > 0
+  ? copyCarryPaths({ carryPaths, worktreePath, plan: carryPlan })
+  : null;
 
 // Install dependencies in the fresh worktree so a node-stack agent can run tests
 // immediately (archon-setup#292). node_modules is gitignored, so a new worktree has
@@ -48,6 +68,8 @@ git(['worktree', 'add', '-b', branchName, worktreePath, `origin/${defaultBranch}
 // environments are untouched) and keep it NON-FATAL — a failed/slow install must
 // not abort task setup; the agent can still run `npm ci` by hand.
 installWorktreeDeps(worktreePath);
+
+if (carryReceipt) cleanupCarryPaths({ carryPaths, worktreePath, receipt: carryReceipt, plan: carryPlan });
 
 // Initial task metadata (#27 AC). Runtime file, gitignored. Written into the NEW worktree.
 const metadata = {
@@ -60,6 +82,7 @@ fs.writeFileSync(path.join(worktreePath, '.agent', 'current-task.json'), JSON.st
 console.log(`Ready to implement #${issue.number}: ${issue.title}`);
 console.log(`Branch:   ${branchName}`);
 console.log(`Worktree: ${worktreePath}`);
+if (carryPaths.length > 0) console.log(`Carried:  ${carryPaths.join(', ')}`);
 console.log('\nNext steps:');
 console.log(`  1. cd "${worktreePath}"`);
 console.log('  2. npm run agent:status');
@@ -97,9 +120,65 @@ function installWorktreeDeps(wt) {
     console.warn('[start-task] Run `npm ci` manually in the worktree if you need dependencies.');
   }
 }
-function parseArgs(argv) {
-  const out = {};
-  for (let i = 0; i < argv.length; i += 1) if (argv[i].startsWith('--')) { out[argv[i].slice(2)] = argv[i + 1]; i += 1; }
-  return out;
+
+function resolveCarryPaths(rawCarryPaths, statusEntries) {
+  const resolved = minimizeCarryPaths(rawCarryPaths.map((rawPath) => {
+    try {
+      return toCheckoutRelativePath(rawPath, { checkoutRoot, baseDir: process.cwd() });
+    } catch (error) { fail(error.message); }
+  }));
+  const setupConflict = resolved.find((carryPath) => SETUP_OWNED_PATHS.some(
+    (setupPath) => setupPathsOverlap(carryPath, setupPath),
+  ));
+  if (setupConflict) {
+    fail(`Carry path conflicts with setup-owned output: ${setupConflict}. Preserve it separately before starting the task.`);
+  }
+  const carriedEntries = collectCarriedStatusEntries({ statusEntries, carryPaths: resolved }).carriedEntries;
+  for (const relativePath of resolved) {
+    const absolutePath = path.join(checkoutRoot, relativePath);
+    try {
+      fs.lstatSync(absolutePath);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      const representsCarriedAbsence = carriedEntries.some((entry) => (
+        isPathInsideCarryPath(entry.path, relativePath)
+        || (entry.originalPath && isPathInsideCarryPath(entry.originalPath, relativePath))
+      ));
+      if (!representsCarriedAbsence) {
+        fail(`Carry path not found: ${relativePath}. Paths with spaces must be quoted.`);
+      }
+    }
+  }
+  return resolved;
+}
+
+function setupPathsOverlap(carryPath, setupPath) {
+  // Reserved setup outputs are portable policy. Compare case-insensitively on
+  // every host so a branch prepared on a case-sensitive disk cannot become
+  // destructive when used on Windows or a default macOS volume.
+  const normalizedCarryPath = carryPath.toLowerCase();
+  const normalizedSetupPath = setupPath.toLowerCase();
+  return isPathInsideCarryPath(normalizedSetupPath, normalizedCarryPath)
+    || isPathInsideCarryPath(normalizedCarryPath, normalizedSetupPath);
+}
+
+function copyCarryPaths({ carryPaths, worktreePath, plan }) {
+  try {
+    return copyCarryPathsAndVerify({ checkoutRoot, worktreePath, carryPaths, plan });
+  } catch (error) {
+    fail(`Carry copy failed; the source checkout was not cleaned. ${error.message}`);
+  }
+}
+
+function cleanupCarryPaths({ carryPaths, worktreePath, receipt, plan }) {
+  try {
+    cleanupVerifiedCarry({ checkoutRoot, worktreePath, carryPaths, receipt, plan });
+  } catch (error) {
+    fail(`Carry cleanup failed after destination verification. Do not overwrite either location; inspect the source checkout (${checkoutRoot}), destination worktree (${worktreePath}), and any recovery path reported below. ${error.message}`);
+  }
+}
+
+function usage() {
+  return 'Usage: npm run agent:start-task -- <issue-number> [--agent <name>] [--slug <slug>] [--carry <path...>]';
 }
 function fail(m) { console.error(m); process.exit(1); }

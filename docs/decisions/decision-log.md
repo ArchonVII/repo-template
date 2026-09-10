@@ -4,12 +4,25 @@
 > **Owner:** human, agent-appended
 > **Scope:** repo-local
 > **Source of truth:** yes
-> **Last reviewed:** 2026-06-15
+> **Last reviewed:** 2026-09-10
 > **Supersedes:** none
 > **Superseded by:** none
 
 Append owner intent decisions below, newest first. Keep entries short: one decision line,
-one lane reference, and one why line.
+one lane reference, and one why line. Apply the [document policy](../agent-process/document-policy.md#owner-intent-layer)
+before adding or retaining an entry; use normal PR review to correct or remove entries.
+
+## 2026-09-10 - Review documentation for necessity
+
+- **Decision:** This pilot must assess whether content deserves retention; owner authorship alone does not justify keeping it.
+- **Lane:** https://github.com/ArchonVII/repo-template/issues/223
+- **Why:** Repeated trimming retained unnecessary prose and broadened interpretations of owner statements.
+
+## 2026-07-18 - Keep imported policy capability-aware
+
+- **Decision:** Durable coordination stays repo-local; machine-global queues are transport only, imported document policy activates after installed prerequisites and targeted checks, and only explicitly active or repo-selected plans are authoritative.
+- **Lane:** https://github.com/ArchonVII/repo-template/issues/185
+- **Why:** Pigafetta onboarding exposed absolute provider wording that conflicted with capability-gated consumers and transport-only machine state.
 
 ## 2026-06-15 - Adopt the agent message protocol
 

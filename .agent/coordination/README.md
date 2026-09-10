@@ -1,14 +1,16 @@
 # Coordination
 
-This repo is **coordination-isolated**. It coordinates only itself.
+This repo is **coordination-isolated**. It coordinates only itself, and
+`.agent/coordination/` is canonical for durable repository coordination.
 
-- Do not read from or write to machine-global coordination boards.
+- Machine-global staging and handoffs may be transport queues, but never durable repo authority.
+- Ephemeral runtime claims and locks may remain machine-local operational state.
 - Do not assume sibling repositories exist.
 - Do not reference another repo unless this repo explicitly documents that dependency.
 
 ## Where coordination lives
 
-All coordination state for this repo lives under `.agent/coordination/`:
+All durable coordination state for this repo lives under `.agent/coordination/`:
 
 ```
 .agent/coordination/

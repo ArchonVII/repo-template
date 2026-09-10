@@ -12,8 +12,9 @@
   claims ("tests pass", "CI green") still hard-fail. Replace every placeholder
   before marking the PR ready for review.
 
-  Validate a drafted body before creating the PR:
-  npm run pr:contract -- --body-file - --title "<title>" --branch <branch>
+  Validate a drafted body before creating the PR. Save the filled body to a
+  temporary file outside the worktree, set $bodyFile, $title, and $branch, then run:
+  npm run pr:contract -- --body-file "$bodyFile" --title "$title" --branch "$branch"
 -->
 
 ## Summary
