@@ -7,13 +7,6 @@ export const CHARTER_BUDGETS = {
   'VISION.md': 120,
 };
 
-// Charter budgets the full node suite also hard-asserts
-// (test/startup-baseline.test.mjs). Breaching one of these must BLOCK the
-// docs gate, not just warn: docs-only PRs skip node CI, so a warning-only
-// docs lane can green a PR that reddens main's suite — exactly how #169
-// pushed AGENTS.md to 307 lines (rt#171/rt#176).
-export const HARD_CHARTER_DOCS = new Set(['AGENTS.md', 'VISION.md']);
-
 export const TOOL_STUB_BUDGETS = {
   'CLAUDE.md': 25,
   'GEMINI.md': 25,

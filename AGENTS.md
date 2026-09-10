@@ -18,6 +18,7 @@ Per-tool addenda such as `CLAUDE.md` and `GEMINI.md` are adapters only; rules th
 Agents should not spend time rediscovering process files. Start here:
 
 - Document policy: `docs/agent-process/document-policy.md` - charters, lifecycle, placement rules.
+- Message protocol: `docs/agent-process/message-protocol.md` - terminal status tags and close-safety evidence.
 - Plans: `docs/plans/` - dated plan files for feature and cross-cutting work; one file per plan.
 - Agent process: `docs/agent-process/`.
 - Changelog: `CHANGELOG.md` - follow this repo's changelog policy (modes differ per repo). `docs/repo-update-log.md` is the retired ledger's frozen archive.
@@ -102,7 +103,7 @@ git worktree add -b agent/<tool>/<issue>-<slug> ../<repo>-<issue>-<slug>
 
 Prefer repo helpers:
 
-- `npm run agent:start-task -- <issue> [--agent <name>] [--slug <slug>]` - fetch default,
+- `npm run agent:start-task -- <issue> [--agent <name>] [--slug <slug>] [--carry <path...>]` - fetch default,
   create the worktree, and record current task state.
 - `npm run agent:status` - branch, upstream, PR, issue, dirty state, claims, and next action.
 - `npm run agent:prune` - retire merged and clean agent worktrees using GitHub PR evidence.
@@ -110,8 +111,8 @@ Prefer repo helpers:
 
 These `agent:*` helpers exist only when the agent-lifecycle feature (its `package.json` scripts) is installed; a repo onboarded without it has no `npm run` targets, so use the raw `git worktree add` command shown above.
 
-Do not run `git switch -c` in the primary checkout. If unsure where you are, run
-`bash .githooks/scripts/checkout-doctor.sh`.
+Do not run `git switch -c` in the primary checkout; if unsure, run `bash .githooks/scripts/checkout-doctor.sh`.
+Use `--carry` only for explicit in-repo task inputs: every dirty path must be covered, each destination is verified before only the named sources are cleaned, and unrelated dirt still blocks startup. Cleanup is bound to that verified filesystem and Git-index state; divergent index/worktree versions are rejected because one copy cannot represent both. Detected changes or recreations make startup fail without overwriting them and report every location that may hold recovery data. A tracked deletion is carried as an absent destination; a rename requires both its original and destination paths to be covered before task branch/worktree creation. No portable lock spans these filesystem and Git operations, so do not edit either checkout until `agent:start-task` returns.
 
 ## Verification And Delivery
 
@@ -119,8 +120,8 @@ Do not run `git switch -c` in the primary checkout. If unsure where you are, run
   path-filtered leaf workflows required.
 - Use `.agent/check-map.yml` for path-to-check expectations. If the repo stack changes,
   update the check map and `repo-required-gate` caller in the same PR.
-- Run the repo's lint, typecheck, and test commands before review. Record exact commands and
-  results in PR verification notes.
+- Run focused local checks needed to implement or reproduce a finding. GitHub's required gate is
+  the sole required full-suite run; do not repeat it locally as delivery ceremony or during review.
 - `## Verification` needs at least one substantive item — a plain bullet or a checkbox —
   recording what was actually run or checked (substance-only contract, gw#99). Placeholders
   and generic claims ("tests pass", "CI green") fail; a bullet with the real command and
@@ -128,8 +129,9 @@ Do not run `git switch -c` in the primary checkout. If unsure where you are, run
   their absence is advisory. If you do tick a checkbox, tick it only after the backing
   command or manual check actually passed.
 - Validate a drafted body BEFORE creating the PR — same validator CI runs, zero paid
-  re-runs on formatting: `npm run pr:contract -- --body-file - --title "<title>" --branch
-  <branch>` (body on stdin).
+  re-runs on formatting. Save the filled body to a temporary file outside the worktree,
+  set `$bodyFile`, `$title`, and `$branch`, then run:
+  `npm run pr:contract -- --body-file "$bodyFile" --title "$title" --branch "$branch"`.
 - If user-visible behavior changed, smoke-test it and record what was exercised.
 - Do not run `gh pr ready` directly. Use:
 
@@ -192,15 +194,16 @@ of these files:
 - `.claude/noticed.md` - per-repo observation log.
 - `.claude/napkin.md` - curated runbook.
 - `.claude/friction.md` - structured friction ledger.
-- `docs/decisions/decision-log.md` - owner intent decision log.
 
 Renames, copies, and deletes of a ledger still require the normal branch/PR lane.
+The owner decision log always uses the normal PR lane, including additions,
+corrections, and removal of individual entries.
 
 ## Coordination
 
-This repo is coordination-isolated. Do not read from or write to machine-global boards, and
-do not assume sibling repos exist. Use only `.agent/coordination/` for claims, locks,
-handoffs, or active boards. If claim acquisition fails, stop and report the conflict.
+`.agent/coordination/` is canonical for durable repository coordination; do not assume sibling repos exist.
+Machine-global staging and handoffs may be transport queues, and ephemeral runtime claims and locks may remain machine-local.
+Neither is durable repo authority. If claim acquisition fails, stop and report the conflict.
 
 ## Anomaly And Friction Ledgers
 
@@ -270,9 +273,9 @@ placement priority, budgets, and doc-health duties. If a rule needs more than 10
 
 ## Doc Health
 
-Run `node scripts/doc-health/health.mjs --repo <repo> --report <path>` for report-only document-policy drift checks.
-The checker emits findings and issue payloads and never edits docs; findings are warnings except a small blocking subset that fails the PR docs gate.
-Full contract: `docs/agent-process/doc-health.md`.
+**Applies only when the repo installs the doc-health feature.** Without it, skip the runner and use available repo-local targeted checks.
+When installed, run the report-only `node scripts/doc-health/health.mjs --repo <repo> --report <path>`; full contract: `docs/agent-process/doc-health.md`.
+The checker never edits docs. Targeted policy failures block; unrelated warnings do not prevent document-policy activation.
 
 ## CHANGELOG
 

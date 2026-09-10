@@ -124,8 +124,10 @@ git push
 npm run close:ci:guard -- --repo OWNER/REPO --pr <number>
 ```
 
-`close:scan:complete` runs local parity checks for the required gates and writes
-the ignored `.agent/close-scan/complete.json` marker for the current `HEAD`.
+`close:scan:complete` validates the PR contract and affected documentation/policy,
+records verification evidence, and writes the ignored
+`.agent/close-scan/complete.json` marker for the current `HEAD`. GitHub's required
+gates own the full-suite run; the scan does not repeat it locally.
 `close:ci:guard` runs after push and fails if the marker is stale, PR evidence
 is invalid, the local branch is not identical to upstream, or any check declared
 under `.agent/check-map.yml`'s `required_gates` list is missing, pending, or not green.
