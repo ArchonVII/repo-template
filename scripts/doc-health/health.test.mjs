@@ -869,3 +869,27 @@ test('checkRepo: coverage probe ignores untracked artifacts', () => {
   assert.deepEqual(invalid.map((f) => f.path), ['tools'],
     'owns matching only an ignored artifact must not satisfy coverage');
 });
+
+test('charter budgets are advisory for AGENTS.md, VISION.md, and README.md (#195)', () => {
+  const repo = makeTempRepo();
+  // Pad each charter doc past its budget (CHARTER_BUDGETS: AGENTS 300, VISION 120, README 150).
+  writeInRepo(repo, 'AGENTS.md',
+    '# Agents\n\n## Doc Health\n\nSee `docs/agent-process/doc-health.md`.\n' + 'Padding line.\n'.repeat(300));
+  writeInRepo(repo, 'VISION.md', '# Vision\n' + 'Padding line.\n'.repeat(120));
+  writeInRepo(repo, 'README.md', '# Project\n\nSmall README.\n' + 'Padding line.\n'.repeat(150));
+  commitAll(repo, 'docs: seed overbudget charter docs (#0)');
+
+  const report = checkRepo(repo, { now: NOW });
+  const severityByPath = Object.fromEntries(
+    report.findings
+      .filter((f) => f.code === 'charter-overbudget')
+      .map((f) => [f.path, f.severity]),
+  );
+  assert.equal(severityByPath['AGENTS.md'], 'warning',
+    'AGENTS budget is a maintainability signal, not an absolute merge cap');
+  assert.equal(severityByPath['VISION.md'], 'warning',
+    'VISION budget is a maintainability signal, not an absolute merge cap');
+  assert.equal(severityByPath['README.md'], 'warning',
+    'README budget remains report-only');
+  assert.equal(report.status, 'warnings');
+});

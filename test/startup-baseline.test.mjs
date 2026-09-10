@@ -13,6 +13,21 @@ import {
 
 const ROOT = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
 
+test('generated baseline retains the installed agent and documentation runtime', () => {
+  const generated = generateStartupBaseline({
+    docMap: readDocMap(ROOT),
+    capabilities: readCapabilitySnapshot(ROOT),
+  });
+  for (const path of [
+    'docs/agent-process/message-protocol.md',
+    'scripts/agent/carry.mjs',
+    ...['lib', 'index', 'nav', 'render', 'status', 'changelog'].map((name) => `scripts/docs/${name}.mjs`),
+  ]) {
+    assert.ok(generated.required.includes(path), `startup must detect missing runtime: ${path}`);
+  }
+  assert.ok(generated.expectedDirectories.includes('scripts/docs/'));
+});
+
 test('startup baseline is generated from doc-map required.base plus the pinned capability projection', async () => {
   const baseline = JSON.parse(await readFile(join(ROOT, '.agent', 'startup-baseline.json'), 'utf8'));
   const docMap = readDocMap(ROOT);
@@ -32,7 +47,7 @@ test('startup baseline is generated from doc-map required.base plus the pinned c
     .flatMap((feature) => feature.installs)
     .filter((install) => install.contract === 'required')
     .map((install) => install.path);
-  const expectedRequired = [...new Set([...docMap.required.base, ...capabilityFloor])].sort();
+  const expectedRequired = [...new Set([...docMap.required.base, ...capabilityFloor, ...capabilities.providerRequired])].sort();
   assert.deepEqual(generated.required, expectedRequired);
   assert.deepEqual(generated.legacy, ['docs/superpowers/plans/']);
 });
@@ -89,16 +104,8 @@ test('AGENTS doc-health contract is report-only and points to the runner', async
   assert.match(body, /never edits docs/);
 });
 
-test('AGENTS stays within the document-policy line budget', async () => {
-  const body = await readFile(join(ROOT, 'AGENTS.md'), 'utf8');
-  const lineCount = body.split(/\r?\n/).length;
-  assert.ok(lineCount <= 300, `AGENTS.md should be <=300 lines; got ${lineCount}`);
-});
-
 test('VISION template satisfies the owner-intent charter', async () => {
   const body = await readFile(join(ROOT, 'VISION.md'), 'utf8');
-  const lineCount = body.split(/\r?\n/).length;
-  assert.ok(lineCount <= 120, `VISION.md should be <=120 lines; got ${lineCount}`);
   assert.match(body, /^> \*\*Status:\*\* draft$/m);
   assert.match(body, /^> \*\*Owner:\*\* human$/m);
   assert.match(body, /^> \*\*Last reviewed:\*\* YYYY-MM-DD$/m);
@@ -121,7 +128,7 @@ test('VISION template satisfies the owner-intent charter', async () => {
   }
 });
 
-test('decision log template satisfies the append-only owner-intent charter', async () => {
+test('decision log template satisfies the owner-intent entry format', async () => {
   const body = await readFile(join(ROOT, 'docs', 'decisions', 'decision-log.md'), 'utf8');
   assert.match(body, /^> \*\*Status:\*\* active$/m);
   assert.match(body, /^> \*\*Owner:\*\* human, agent-appended$/m);

@@ -4,20 +4,29 @@
 > **Owner:** ecosystem
 > **Scope:** repo-local document control
 > **Source of truth:** yes
-> **Last reviewed:** 2026-06-15
+> **Last reviewed:** 2026-09-10
 > **Supersedes:** none
 > **Superseded by:** none
+
+> **Consumer note:** this doc describes repo-template's reference implementation. Repos
+> onboarded without the corresponding feature/tooling (doc-health, doc-sweep, `docs:*`
+> scripts) follow their own repo-local conventions where they differ.
 
 This file is the per-repo document-control contract. `AGENTS.md` carries the short
 agent-facing pointer; this file owns the full rules.
 
+## Consumer Activation
+
+For a consumer repo, the imported charter remains transitional until its declared prerequisite capabilities are installed and its targeted policy checks pass.
+Run doc-health as part of that gate only when it is installed; otherwise use the repo's available targeted validation. Unrelated warnings do not prevent activation.
+
 ## Binding Rules
 
-1. Every durable document answers one clear question and has one canonical home.
+1. Every durable document answers a necessary question and has one canonical home; each retained passage must serve that purpose.
 2. The first screen of an agent-read document must contain binding rules or links to them.
 3. Long rules use a short `AGENTS.md` contract plus a detail doc in `docs/agent-process/`.
 4. Distributor-maintained sections use managed blocks.
-5. Docs over their charter budget move detail down the hierarchy instead of growing forever.
+5. Review necessity before shortening or splitting content. Charter budgets are advisory, not proof that content below them should stay.
 6. Doc-health tools report drift; they do not rewrite durable docs.
 
 ## Source-Of-Truth Hierarchy
@@ -28,7 +37,7 @@ agent-facing pointer; this file owns the full rules.
 | Workflow provider | Reusable workflow bodies and example callers                              | `ArchonVII/github-workflows` | Consumers pin thin callers to a released ref.                              |
 | Repo scaffold     | `AGENTS.md`, `.agent/**`, hooks, lifecycle scripts, baseline process docs | `ArchonVII/repo-template`    | New and updated repos consume through template or snapshots.               |
 | Integrator        | Snapshots, onboarding, feature registry, audit/update catalog             | `ArchonVII/archon-setup`     | Refresh snapshots after provider changes; do not edit snapshots as source. |
-| Shared skills     | Skill source, skill loading policy, repair targets                        | `ArchonVII/jma-skill-review` | Repair skill source first; do not copy runtime cache files into repos.     |
+| Shared skills     | Skill source, skill loading policy, repair targets                        | `ArchonVII/jma-skills-data`  | Repair skill source first; do not copy runtime cache files into repos.     |
 
 Edit the narrowest source of truth first, then propagate through the normal snapshot or
 consumer update path.
@@ -41,9 +50,9 @@ consumer update path.
 | `AGENTS.md`                                | How do agents work here?                                     | ecosystem             | 300 lines             | Read-first list, Start Map, workflow guardrails            | Tool quirks, full specs, project vision                |
 | `CLAUDE.md` / `GEMINI.md`                  | What diverges for this tool only?                            | ecosystem             | 25 lines              | Pointer back to `AGENTS.md` plus any tool-specific delta   | Universal rules, repo truth, duplicate workflow policy |
 | `VISION.md`                                | What experience are we building, and what is out of scope?   | human                 | 120 lines             | Experience, north star, scope, explicitly-not section      | Implementation detail, task lists, status logs         |
-| `docs/decisions/decision-log.md`           | What did the owner decide, when?                             | human, agent-appended | append-only           | Newest decision first with date, lane, one-line why        | Rationale essays, technical ADR content                |
+| `docs/decisions/decision-log.md`           | Which durable owner scope choices matter, and why?           | human, agent-appended | curated through PR    | Newest decision first with date, lane, one-line why        | Transcripts, inferred policy, rationale essays, technical ADR content |
 | `CHANGELOG.md` (release-class)             | What shipped for users?                                      | `docs:changelog`      | folded at release-cut | Conventional Commit history rendered into `[Unreleased]`   | Operational update notes, internal-only maintenance    |
-| `docs/STATUS.md` (planned under #124 — not yet generated; `docs/repo-update-log.md` stays the frozen archive meanwhile) | What changed operationally / is in flight? | `docs:status` | rendered on demand | Open PRs/issues, roadmap %, doc-health summary | User-facing release notes |
+| `docs/STATUS.md` (when `docs:status` is installed; otherwise use the repo-selected status surface) | What changed operationally / is in flight? | `docs:status` | rendered on demand | Open PRs/issues, roadmap %, doc-health summary | User-facing release notes |
 | `ARCHITECTURE.md` / `docs/architecture/**` | Where do subsystems live and what boundaries matter?         | agents                | as needed             | System map and boundary rules before rationale             | Per-file documentation, transient plans                |
 | `docs/plans/**`                            | What implementation plan is active or historical?            | agents                | as needed             | Status, owner, source issue, next action, closeout state   | Project vision, ADR replacement, stale active guidance |
 | `projects/<slug>/PLAN.md`                  | What is the front door for one feature?                      | agents                | as needed             | Current state, next safe action, blocker, invariants       | Duplicate specs, code, generated artifacts             |
@@ -56,11 +65,11 @@ consumer update path.
 When a repo has not adopted a future document yet, the charter still defines where that
 document belongs once introduced.
 
-The `docs:changelog` and `docs:status` commands named in the table above run through
-`package.json` scripts, and (like the sibling `docs:render` and `pr:contract` commands) a
-repo has them only when it installs the agent-lifecycle feature. A repo onboarded without
-that feature has no `npm run`, so it folds the changelog and renders status another way or
-not at all.
+The `docs:render` and `docs:status` commands named above run through `package.json`
+scripts installed by the documentation-system capability. The same runtime provides
+`docs:changelog`, which is usable when the changelog capability installs `CHANGELOG.md`.
+`pr:contract` and the agent close/worktree commands require the agent-lifecycle capability.
+A repo without the corresponding capability uses its own repo-local process or skips that operation.
 
 ## Owner Intent Layer
 
@@ -80,11 +89,36 @@ Keep the file focused on experience, north star, scope, explicitly-not, current 
 drift tripwires; implementation detail, task lists, and status logs belong elsewhere.
 `Last reviewed` is stale after 90 days unless a repo-local policy sets a different cadence.
 
-`docs/decisions/decision-log.md` is the append-only owner-intent ledger, newest first.
-Entries stay to the title plus `Decision`, `Lane`, and `Why` one-liners. Use it for owner
-scope decisions, not technical ADR rationale. When a lane produces an owner scope decision,
-append it at closeout and record `Owner decisions this lane: appended` in the PR body;
-otherwise record `Owner decisions this lane: none`.
+`docs/decisions/decision-log.md` records explicit, durable owner scope choices that
+affect future work. Brainstorming, rejected proposals, temporary preferences, and
+verbatim owner speech do not automatically qualify. Preserve the actual scope,
+conditions, and source; a rejected feature is not a general prohibition.
+
+Keep newest entries first, with a title and `Decision`, `Lane`, and `Why` one-liners.
+The lane links to evidence when available; never invent attribution. Record a
+qualifying new decision at closeout and use `Owner decisions this lane: appended`
+in the PR body; otherwise use `none`. Correct, supersede, or remove unsupported,
+obsolete, and unnecessary entries through normal PR review. Git preserves history;
+an entry cannot make itself immune to review or removal.
+
+## Necessity Review
+
+Apply this to existing content as well as additions. Identify the reader and the
+action, decision, concrete error, or required historical question the passage serves.
+If removing it loses nothing needed, remove it within the authorized cleanup scope.
+Owner authorship, length, age, a passing budget, and prior agent assurances do not
+establish necessity or current correctness.
+
+Keep the shortest sufficient rule, rationale, or example that prevents a specific
+mistake. Preserve meaningful physical constraints, units, compatibility consequences,
+and necessary history; remove repeated justification and transcript-like narration.
+Neither all prose nor bare rules is the default. Use one canonical location and
+existing Git/issue history instead of creating an archive of every cut.
+
+Trace material claims to available sources. Label unsupported attribution as uncertain;
+do not treat it as settled owner intent. Escalate only unresolved choices that change
+current work, with the evidence and a specific question, after completing independent
+authorized cleanup. Counts and automated checks cannot decide semantic necessity.
 
 ## Lifecycle States
 

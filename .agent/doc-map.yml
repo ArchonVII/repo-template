@@ -76,7 +76,7 @@ human:
   - path: VISION.md
     heal_when: []                 # owner intent only; never inferred or rewritten
   - path: docs/decisions/decision-log.md
-    heal_when: []                 # append-only owner ledger; existence/format checked only
+    heal_when: []                 # owner decision ledger; edits require authorial review, never auto-heal
   - path: docs/guides/**
     heal_when: ["scripts/**"]
   - path: docs/architecture/**

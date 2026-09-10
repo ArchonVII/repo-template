@@ -156,8 +156,12 @@ Claims err toward over-blocking. Align with the `.agent/coordination/claims/` li
 task's branch — no separate claim file needed. `expiresAt` derives from
 `lastActivityAt` (refreshed by every `close:dod` capture) or `createdAt` plus a 24h
 TTL (`TASK_CLAIM_TTL_MS`). Live → skip (the lane's in-flight docs are never recovered
-out from under it); past TTL → the claim reads as **expired**, which is exactly the
-positive death signal D8 requires to make an abandoned lane's docs eligible.
+out from under it). Past the clock TTL the claim reads as **expired** — D8's positive
+death signal — only with **abandonment corroboration** (rt#174): the branch's PRs are
+all merged/closed and none open (`branchAbandoned`, gh-backed by default). Without
+that evidence (no PR at all, gh unavailable) the claim is held live: `lastActivityAt`
+is written only at closeout, so a live lane routinely outlives the TTL, and clock
+expiry alone must never make its docs harvestable.
 
 ### 4.4 Review gate (D5 / D10)
 

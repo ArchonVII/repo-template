@@ -7,7 +7,7 @@ owner_maintenance_subject() {
     [[ "${subject}" =~ ^(docs|chore)\(owner\)!?:[[:space:]].+ ]]
 }
 
-# Append-log ledgers: agent-local note files and owner-intent ledgers that
+# Append-log ledgers: agent-local note files that
 # standing conventions tell agents or owners to write to frequently, so a full
 # issue->PR lane (or an audited bypass) for each one-line update is friction
 # with no safety benefit.
@@ -21,8 +21,6 @@ owner_maintenance_subject() {
 #                        session)
 #   .claude/friction.md — per-repo structured friction ledger (non-bug workflow
 #                         hiccups; one table row per event)
-#   docs/decisions/decision-log.md — append-only owner-intent ledger (newest
-#                                    decision first)
 #
 # Source: ArchonVII owner conventions; repo-template#50 (page-gm incident
 # gm-20260605-113318 — flushing .claude/noticed.md required a double bypass:
@@ -30,7 +28,7 @@ owner_maintenance_subject() {
 owner_maintenance_is_append_log() {
     local path="${1:-}"
     case "${path}" in
-        .claude/noticed.md|.claude/napkin.md|.claude/friction.md|docs/decisions/decision-log.md)
+        .claude/noticed.md|.claude/napkin.md|.claude/friction.md)
             return 0
             ;;
     esac
@@ -81,7 +79,7 @@ owner_maintenance_path_safe() {
     # would otherwise match a broad safe pattern, such as an image under
     # .github/.
     case "${path}" in
-        README.md|AGENTS.md|CLAUDE.md|GEMINI.md|package.json|package-lock.json)
+        README.md|AGENTS.md|CLAUDE.md|GEMINI.md|package.json|package-lock.json|docs/decisions/decision-log.md)
             return 1
             ;;
         .github/*|.githooks/*|.claude/*|.agent/schema/*|src/*|scripts/*|docs/process/*|docs/architecture/*)

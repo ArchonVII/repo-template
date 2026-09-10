@@ -28,6 +28,10 @@ export function validateCapabilitySnapshot(snapshot) {
     throw new Error('capability snapshot profile must match effectiveProfile and declare features[]');
   }
   if (!Array.isArray(snapshot.features)) throw new Error('capability snapshot features must be an array');
+  if (snapshot.providerRequired !== undefined && !Array.isArray(snapshot.providerRequired)) {
+    throw new Error('providerRequired must be an array');
+  }
+  for (const path of snapshot.providerRequired || []) assertString(path, 'provider required path');
 
   const selected = new Set(snapshot.profile.features);
   if (selected.size !== snapshot.profile.features.length) throw new Error('capability snapshot profile features must be unique');
@@ -72,7 +76,7 @@ export function deriveExpectedDirectories(required) {
 export function generateStartupBaseline({ docMap, capabilities }) {
   validateCapabilitySnapshot(capabilities);
   const selected = new Set(capabilities.profile.features);
-  const required = new Set(docMap.required?.base || []);
+  const required = new Set([...(docMap.required?.base || []), ...(capabilities.providerRequired || [])]);
   for (const feature of capabilities.features) {
     if (!selected.has(feature.id)) continue;
     for (const install of feature.installs) required.add(install.path);

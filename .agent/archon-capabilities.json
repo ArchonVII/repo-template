@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "source": {
     "repository": "ArchonVII/archon-setup",
-    "commit": "7e9ea5a0ddee047a22b7eedf23f337846e005812",
+    "commit": "2dfb2f45cafee9a39cecb74143b1a5f8e821b19b",
     "featuresPath": "src/registry/features.json",
     "profilesPath": "src/registry/profiles.json"
   },
@@ -14,6 +14,7 @@
       "foundation.license",
       "foundation.gitignore",
       "foundation.agents",
+      "foundation.doc-system",
       "foundation.claude-md",
       "foundation.gemini-md",
       "foundation.coordination",
@@ -29,31 +30,71 @@
       "foundation.hooks"
     ]
   },
+  "providerRequired": [
+    "docs/agent-process/message-protocol.md"
+  ],
   "features": [
-    { "id": "foundation.readme", "installs": [] },
-    { "id": "foundation.license", "installs": [] },
-    { "id": "foundation.gitignore", "installs": [] },
+    {
+      "id": "foundation.readme",
+      "installs": []
+    },
+    {
+      "id": "foundation.license",
+      "installs": []
+    },
+    {
+      "id": "foundation.gitignore",
+      "installs": []
+    },
     {
       "id": "foundation.agents",
       "installs": [
         { "path": "AGENTS.md", "kind": "file", "contract": "required" },
-        { "path": "docs/plans/README.md", "kind": "file", "contract": "required" },
-        { "path": "docs/agent-process/document-policy.md", "kind": "file", "contract": "required" }
+        { "path": "docs/plans/README.md", "kind": "file", "contract": "required" }
       ]
     },
-    { "id": "foundation.claude-md", "installs": [] },
-    { "id": "foundation.gemini-md", "installs": [] },
+    {
+      "id": "foundation.doc-system",
+      "installs": [
+        { "path": ".agent/doc-map.yml", "kind": "file", "contract": "required" },
+        { "path": "docs/CANON.md", "kind": "file", "contract": "required" },
+        { "path": "docs/INDEX.md", "kind": "file", "contract": "required" },
+        { "path": "docs/agent-process/doc-system.md", "kind": "file", "contract": "required" },
+        { "path": "scripts/docs/lib.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/docs/index.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/docs/nav.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/docs/render.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/docs/status.mjs", "kind": "file", "contract": "required" },
+        { "path": "scripts/docs/changelog.mjs", "kind": "file", "contract": "required" },
+        { "path": "package.json", "kind": "merge", "contract": "required" }
+      ]
+    },
+    {
+      "id": "foundation.claude-md",
+      "installs": []
+    },
+    {
+      "id": "foundation.gemini-md",
+      "installs": []
+    },
     {
       "id": "foundation.coordination",
       "installs": [
         { "path": ".agent/coordination/README.md", "kind": "file", "contract": "required" }
       ]
     },
-    { "id": "foundation.gitattributes", "installs": [] },
-    { "id": "foundation.git-init", "installs": [] },
+    {
+      "id": "foundation.gitattributes",
+      "installs": []
+    },
+    {
+      "id": "foundation.git-init",
+      "installs": []
+    },
     {
       "id": "agent-lifecycle.baseline",
       "installs": [
+        { "path": "scripts/agent/carry.mjs", "kind": "file", "contract": "required" },
         { "path": "scripts/agent/lib.mjs", "kind": "file", "contract": "required" },
         { "path": "scripts/agent/start-task.mjs", "kind": "file", "contract": "required" },
         { "path": "scripts/agent/status.mjs", "kind": "file", "contract": "required" },
@@ -94,7 +135,8 @@
       "installs": [
         { "path": "scripts/doc-health/lib.mjs", "kind": "file", "contract": "required" },
         { "path": "scripts/doc-health/health.mjs", "kind": "file", "contract": "required" },
-        { "path": "docs/agent-process/doc-health.md", "kind": "file", "contract": "required" }
+        { "path": "docs/agent-process/doc-health.md", "kind": "file", "contract": "required" },
+        { "path": "docs/agent-process/document-policy.md", "kind": "file", "contract": "required" }
       ]
     },
     {
@@ -103,7 +145,13 @@
         { "path": ".github/PULL_REQUEST_TEMPLATE.md", "kind": "file", "contract": "required" }
       ]
     },
-    { "id": "workflow.required-gate", "installs": [] },
-    { "id": "foundation.hooks", "installs": [] }
+    {
+      "id": "workflow.required-gate",
+      "installs": []
+    },
+    {
+      "id": "foundation.hooks",
+      "installs": []
+    }
   ]
 }

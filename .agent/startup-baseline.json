@@ -1,5 +1,5 @@
 {
-  "version": "2026-07-15-c3-generated+03e2fa55a773",
+  "version": "2026-07-15-c3-generated+bc9c3111c42e",
   "required": [
     ".agent/check-map.yml",
     ".agent/coordination/README.md",
@@ -13,10 +13,12 @@
     "docs/agent-process/doc-sweep.md",
     "docs/agent-process/doc-system.md",
     "docs/agent-process/document-policy.md",
+    "docs/agent-process/message-protocol.md",
     "docs/plans/README.md",
     "package.json",
     "scripts/agent-close-preflight.mjs",
     "scripts/agent-pr-ready.mjs",
+    "scripts/agent/carry.mjs",
     "scripts/agent/lib.mjs",
     "scripts/agent/pr-body.mjs",
     "scripts/agent/prune.mjs",
@@ -30,6 +32,12 @@
     "scripts/doc-sweep/git.mjs",
     "scripts/doc-sweep/lib.mjs",
     "scripts/doc-sweep/sweep.mjs",
+    "scripts/docs/changelog.mjs",
+    "scripts/docs/index.mjs",
+    "scripts/docs/lib.mjs",
+    "scripts/docs/nav.mjs",
+    "scripts/docs/render.mjs",
+    "scripts/docs/status.mjs",
     "scripts/pr-contract.mjs"
   ],
   "expectedDirectories": [
@@ -38,7 +46,8 @@
     "scripts/agent/",
     "scripts/close/",
     "scripts/doc-health/",
-    "scripts/doc-sweep/"
+    "scripts/doc-sweep/",
+    "scripts/docs/"
   ],
   "legacy": [
     "docs/superpowers/plans/"
