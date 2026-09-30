@@ -24,6 +24,23 @@ All durable coordination state for this repo lives under `.agent/coordination/`:
 `README.md` is the only file guaranteed to exist. Everything else is created on demand,
 when this repo actually needs active coordination.
 
+## Claim lifetime
+
+A claim reserves files for active editing, not for the lifetime of a branch or PR.
+Release it before pausing, bookmarking, handing off, or ending a session. Reacquire
+before resumed edits. Keep unfinished code and the PR; release only the reservation.
+
+Claims have a maximum 24-hour lease, renewed only by the working agent. Claim tools
+must enforce expiry during claim/check/prune and show the deadline in status.
+Timestamped legacy claims expire 24 hours after their last claim/renewal; an undated
+claim is unverified, never indefinite ownership. A linked worktree, dirty files or
+an open PR alone do not establish a live competing writer.
+
+Prune expired reservations before reporting a conflict to the owner. No additional
+owner approval is needed solely to release an expired reservation. A live competing
+writer or unresolved liveness still requires coordination before overlapping edits.
+Expiry is not permission to delete, reset, commit or overwrite someone else's work;
+automatic artifact recovery retains its separate, conservative safety checks.
 ## Enabling an active board
 
 If multiple agents (or people) work this repo concurrently, create or keep `board.md`
