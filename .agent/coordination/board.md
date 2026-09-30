@@ -6,12 +6,14 @@
 
 ## Active claims
 
-| Agent    | Lane / branch | Files or area claimed | Opened | Status |
+| Agent    | Lane / branch | Files or area claimed | Renewed / expires | Status |
 | -------- | ------------- | --------------------- | ------ | ------ |
 | _(none)_ |               |                       |        |        |
 
 **Claim format:** one row per active lane. Claim the narrowest file set you can. Release
-by removing your row (or marking it `done`) when the lane lands.
+by removing your row before pausing, handing off or ending the session, even if its PR
+remains open. Reacquire before resumed edits; renew only while working, with a maximum
+24-hour lease. See [the coordination contract](README.md#claim-lifetime).
 
 ## High-contention files
 
@@ -21,9 +23,8 @@ Files that require sequencing — only one lane at a time. Empty by default.
 
 ## Stale-claim cleanup
 
-A claim is stale once its branch is merged or deleted, or it has been untouched past the
-window this repo agrees on. Any agent may remove a stale row and note the removal in the
-relevant lane's PR.
+A claim is stale when its lease expires or its branch is retired. An open PR or existing worktree does not renew it. Any agent may remove a stale row and note the removal in the
+relevant lane's PR. Preserve unfinished files and branches; claim expiry is not abandonment evidence for automatic artifact recovery.
 
 ## Worktree conventions
 

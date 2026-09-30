@@ -12,6 +12,11 @@ Append owner intent decisions below, newest first. Keep entries short: one decis
 one lane reference, and one why line. Apply the [document policy](../agent-process/document-policy.md#owner-intent-layer)
 before adding or retaining an entry; use normal PR review to correct or remove entries.
 
+## 2026-09-30 - Claims reserve active editing only
+
+- **Decision:** Fix stale claims across repos; a dormant agent must not keep a project document reserved because its PR or worktree remains.
+- **Lane:** https://github.com/ArchonVII/repo-template/issues/225
+- **Why:** An indefinite claim blocked a Pigafetta status refresh. The 24-hour renewable lease is the implementation choice; release at session boundaries is independent of PR lifetime.
 ## 2026-09-10 - Review documentation for necessity
 
 - **Decision:** This pilot must assess whether content deserves retention; owner authorship alone does not justify keeping it.
