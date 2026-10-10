@@ -15,6 +15,18 @@ by removing your row before pausing, handing off or ending the session, even if 
 remains open. Reacquire before resumed edits; renew only while working, with a maximum
 24-hour lease. See [the coordination contract](README.md#claim-lifetime).
 
+## Handoff routing
+
+Use this section only if this board is the repo's existing status entry point;
+otherwise link to the designated status document or workstream issue instead.
+
+| Scope | Workstream issue / PR | Branch | Checkpoint revision | Canonical handoff |
+| ----- | --------------------- | ------ | ------------------- | ----------------- |
+| _(none)_ | | | | |
+
+Replace a scope's pointer when superseded; do not append competing current instructions.
+Claims above are temporary editing reservations, not the list of open workstreams.
+
 ## High-contention files
 
 Files that require sequencing — only one lane at a time. Empty by default.

@@ -48,6 +48,23 @@ here and record: claim format, high-contention files that need sequencing, stale
 cleanup rules, and worktree conventions. A starter template ships via the archon-setup
 `coordination-board` feature; you can also write your own.
 
+## Handoff authority
+
+Use this repo's existing board, status document or workstream issue to route readers
+to the authoritative handoff for each scope. Include its canonical path/link, branch
+and checkpoint revision, plus the issue/PR that shows current lane status. Do not
+create a second competing project-status ledger or choose a handoff by filename date.
+
+Each worktree's handoff covers only that lane. Project-wide current truth stays in
+the repo's designated current-truth documents. Keep plans and handoffs durable through
+normal repository delivery even when live claims and locks are untracked. Viewing
+copies identify their canonical source; a localhost link alone cannot route a remote
+agent to this repo.
+
+Write only after the reported state has settled, and replace obsolete next steps in
+active records. Before resuming, check the referenced revision and the lane's current
+issue/PR state. See [document policy](../../docs/agent-process/document-policy.md#handoffs-and-plans).
+
 ## Tracked vs. untracked
 
 This repo owns the **contract** (`README.md`). Whether live coordination state

@@ -12,6 +12,12 @@ Append owner intent decisions below, newest first. Keep entries short: one decis
 one lane reference, and one why line. Apply the [document policy](../agent-process/document-policy.md#owner-intent-layer)
 before adding or retaining an entry; use normal PR review to correct or remove entries.
 
+## 2026-10-10 - Durable settled handoffs across repositories
+
+- **Decision:** Apply the handoff readiness and durable plan/handoff rules to all repositories; share and localhost remain viewing transport, with scoped authority across worktrees.
+- **Lane:** https://github.com/ArchonVII/repo-template/issues/228
+- **Why:** The owner found handoffs written before results settled, records stranded outside their projects, and conflicting instructions between worktrees.
+
 ## 2026-09-30 - Claims reserve active editing only
 
 - **Decision:** Fix stale claims across repos; a dormant agent must not keep a project document reserved because its PR or worktree remains.

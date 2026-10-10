@@ -4,7 +4,7 @@
 > **Owner:** ecosystem
 > **Scope:** repo-local document control
 > **Source of truth:** yes
-> **Last reviewed:** 2026-09-10
+> **Last reviewed:** 2026-10-10
 > **Supersedes:** none
 > **Superseded by:** none
 
@@ -205,6 +205,42 @@ doc-health only reports:
 
 Reports become issues, PR findings, or maintenance status. They do not auto-rewrite
 documents.
+
+## Handoffs And Plans
+
+A handoff is a settled checkpoint, not a live progress log. Do not draft, write or
+publish a cross-session handoff until all relevant changes, owner input, agent/tool
+results and calls have landed. Let authorized operations finish or reach an authorized
+clean stop; do not interrupt them just to write a handoff. Preserve outputs and
+reconcile failures or uncertain external results, including charges, before writing.
+Do not rerun an operation to make the record look complete.
+
+Immediately before writing, verify the revision, tracked and untracked file state,
+outstanding questions and process/call state. Unfinished tasks and unmerged PRs may
+remain, but no operation may still be changing the checkpoint being reported.
+
+Store plans and handoffs in the owning project's canonical locations through its
+normal version-control and delivery policy. This scaffold uses `docs/plans/` and
+`.agent/coordination/handoffs/`; an existing consumer's documented homes take priority.
+Work without a repository needs an explicitly identified durable project home.
+Do not accumulate unrelated project records in a machine-global folder.
+
+`C:\Users\josep\share` and its `http://127.0.0.1:8790/` URLs are viewing/transport
+copies, swept after two weeks, never the authoritative or sole durable record.
+Identify the canonical repository/path and checkpoint revision in each viewing copy.
+Give the owner a clickable pushed GitHub record or a localhost viewing link.
+
+Use the project's existing coordination/status entry point to identify the
+authoritative handoff for each scope, branch and revision. A lane handoff describes
+only that lane, not project-wide current state. Identify replacements and rewrite
+active records to remove superseded next steps instead of appending contradictory
+history. Git preserves the old text. Before resuming, verify the referenced revision
+and current lane status; use a commit-pinned link for the settled snapshot and the
+existing workstream issue/PR for current routing.
+
+Keep the handoff sufficient to resume safely: scope and checkpoint, canonical sources,
+completed work with evidence, remaining work and blockers, unresolved owner questions,
+and the next safe action with any constraints. Separate observed results from assumptions.
 
 ## Closeout
 
